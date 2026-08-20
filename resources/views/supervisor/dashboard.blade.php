@@ -46,8 +46,14 @@
                             <p class="text-xs font-mono font-bold text-indigo-600" x-text="'Ext: ' + agent.extension"></p>
                         </div>
                         <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase"
-                              :class="{ 'bg-green-100 text-green-700': agent.status === 'online', 'bg-yellow-100 text-yellow-700': agent.status === 'break', 'bg-red-100 text-red-700': agent.status === 'offline' }"
-                              x-text="agent.status"></span>
+      :class="{ 
+          'bg-green-100 text-green-700': agent.status === 'online', 
+          'bg-amber-100 text-amber-700': agent.status === 'prayer', 
+          'bg-yellow-100 text-yellow-700': agent.status === 'break', 
+          'bg-purple-100 text-purple-700': agent.status === 'lunch', 
+          'bg-red-100 text-red-700': agent.status === 'offline' 
+      }"
+      x-text="agent.status"></span>
                     </div>
                     
                     <!-- Kotak Notifikasi Calling: Teks dan Warna berubah mengikuti Ringing / Connected -->
@@ -100,73 +106,84 @@
             stats: { online: 0, break: 0, offline: 0 },
             
             init() {
-    this.fetchAgents();
+                // Beri jeda 300ms agar session stabil setelah login redirect
+                setTimeout(() => {
+                    this.fetchAgents();
+                }, 300);
 
-    // Gunakan SATU channel untuk semua event
-    window.Echo.channel('supervisor.dashboard')
-        
-        // 1. Listener Status (Online/Break/Offline)
-        .listen('.agent.status.updated', (e) => {
-            console.log("🔥 STATUS UPDATE MASUK:", e);
-            let index = this.agents.findIndex(a => a.id === e.agent.id);
-            if(index !== -1) {
-                this.agents[index].status = e.agent.status;
-                this.updateStats();
-            }
-        })
-
-        // 2. Listener Call Activity (Ringing / Connected / Ended)
-        .listen('.agent.call.activity', (e) => {
-            console.log("🔥 EVENT CALL ACTIVITY MASUK:", e);
-            let index = this.agents.findIndex(a => a.extension == e.agent.extension);
-            
-            if(index !== -1) {
-                if (e.status === 'ended') {
-                    // Matikan kartu jika event 'ended' masuk
-                    this.agents[index] = {
-                        ...this.agents[index],
-                        is_calling: false,
-                        call_status: null,
-                        current_destination: null
-                    };
-                } else {
-                    // Nyalakan kartu, warna diatur otomatis oleh HTML Alpine
-                    this.agents[index] = {
-                        ...this.agents[index],
-                        is_calling: true,
-                        call_status: e.status, // Isinya: 'ringing' atau 'connected'
-                        current_destination: e.destination
-                    };
-                }
-            }
-        });
-},
-
-            fetchAgents() {
-                fetch('/api/supervisor/agents')
-                    .then(res => res.json())
-                    .then(data => {
-                        if(data.status === 'success') {
-                            this.agents = data.agents.map(agent => ({
-                                ...agent,
-                                is_calling: false,
-                                call_status: null, // Properti tambahan untuk membedakan Ringing / Connected
-                                current_destination: null
-                            }));
+                // Gunakan SATU channel untuk semua event real-time Reverb
+                window.Echo.channel('supervisor.dashboard')
+                    
+                    // 1. Listener Status (Online/Break/Offline)
+                    .listen('.agent.status.updated', (e) => {
+                        console.log("🔥 STATUS UPDATE MASUK:", e);
+                        let index = this.agents.findIndex(a => a.id === e.agent.id);
+                        if(index !== -1) {
+                            this.agents[index].status = e.agent.status;
                             this.updateStats();
                         }
                     })
-                    .catch(err => console.error("Gagal mengambil data agen:", err));
+
+                    // 2. Listener Call Activity (Ringing / Connected / Ended)
+                    .listen('.agent.call.activity', (e) => {
+                        console.log("🔥 EVENT CALL ACTIVITY MASUK:", e);
+                        let index = this.agents.findIndex(a => a.extension == e.agent.extension);
+                        
+                        if(index !== -1) {
+                            if (e.status === 'ended') {
+                                this.agents[index] = {
+                                    ...this.agents[index],
+                                    is_calling: false,
+                                    call_status: null,
+                                    current_destination: null
+                                };
+                            } else {
+                                this.agents[index] = {
+                                    ...this.agents[index],
+                                    is_calling: true,
+                                    call_status: e.status, // 'ringing' atau 'connected'
+                                    current_destination: e.destination
+                                };
+                            }
+                        }
+                    });
+            },
+
+            fetchAgents() {
+                // Disesuaikan dengan rute bersih kita: /supervisor/agents (tanpa /api/)
+                fetch('/supervisor/agents', {
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                    }
+                })
+                .then(res => res.json())
+                .then(data => {
+                    // Mengantisipasi apakah response berupa array langsung atau object wrapper
+                    let agentList = Array.isArray(data) ? data : (data.agents || []);
+                    
+                    this.agents = agentList.map(agent => ({
+                        ...agent,
+                        is_calling: false,
+                        call_status: null,
+                        current_destination: null
+                    }));
+                    this.updateStats();
+                })
+                .catch(err => console.error("Gagal mengambil data agen:", err));
             },
 
             updateStats() {
                 this.stats.online = this.agents.filter(a => a.status === 'online').length;
-                this.stats.break = this.agents.filter(a => a.status === 'break').length;
+                
+                // Gabungkan Prayer, Break, dan Lunch ke kategori 'Break / Non-Ready'
+                this.stats.break = this.agents.filter(a => ['prayer', 'break', 'lunch'].includes(a.status)).length;
+                
                 this.stats.offline = this.agents.filter(a => a.status === 'offline').length;
             },
 
             triggerSpy(agentExt, mode) {
-                fetch('/api/supervisor/spy', {
+                fetch('/supervisor/spy', {
                     method: 'POST',
                     headers: { 
                         'Content-Type': 'application/json', 

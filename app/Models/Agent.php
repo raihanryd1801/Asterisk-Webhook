@@ -17,4 +17,8 @@ class Agent extends Model
         'workgroup',
         'status',
     ];
+    public function group()
+    {
+        return $this->belongsTo(Group::class);
+    }
 }

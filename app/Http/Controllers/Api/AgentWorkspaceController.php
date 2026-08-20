@@ -30,20 +30,24 @@ class AgentWorkspaceController extends Controller
      * Update status agen (Online, Break, Offline)
      */
     public function updateStatus(Request $request, $extension)
-    {
-        $request->validate(['status' => 'required|in:online,break,offline']);
+{
+    // Pastikan 'prayer' dan 'lunch' masuk ke dalam daftar validasi 'in:...'
+    $request->validate([
+        'status' => 'required|in:online,prayer,break,lunch,offline'
+    ]);
 
-        $agent = Agent::where('extension', $extension)->firstOrFail();
-        $agent->update(['status' => $request->status]);
+    $agent = Agent::where('extension', $extension)->firstOrFail();
+    $agent->status = $request->status;
+    $agent->save();
 
-        // 🚀 Trigger Broadcast ke Reverb
-        broadcast(new \App\Events\AgentStatusUpdated($agent));
+    // Broadcast status terbaru ke Dashboard Supervisor
+    broadcast(new \App\Events\AgentStatusUpdated($agent));
 
-        return response()->json([
-            'status' => 'success',
-            'message' => "Status agen {$extension} diubah menjadi {$request->status}"
-        ]);
-    }
+    return response()->json([
+        'status' => 'success',
+        'message' => "Status berhasil diubah menjadi {$agent->status}"
+    ]);
+}
 
     /**
      * Tombol Click-to-Dial dari Workspace Agent

@@ -163,4 +163,23 @@ class SupervisorMonitoringController extends Controller
             ], 500);
         }
     }  
+
+    public function updateStatus(Request $request, $extension)
+{
+    $request->validate([
+        'status' => 'required|in:online,prayer,break,lunch,offline'
+    ]);
+
+    $agent = Agent::where('extension', $extension)->firstOrFail();
+    $agent->status = $request->status;
+    $agent->save();
+
+    // Broadcast perubahan status agar langsung terlihat di Dashboard Supervisor
+    broadcast(new \App\Events\AgentStatusUpdated($agent));
+
+    return response()->json([
+        'status' => 'success',
+        'message' => "Status berhasil diubah menjadi {$agent->status}"
+    ]);
+}
 }

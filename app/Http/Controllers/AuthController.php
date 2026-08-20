@@ -46,7 +46,14 @@ class AuthController extends Controller
 
         if ($agent && $agent->secret === $request->password) {
             session(['agent_extension' => $agent->extension]);
-            $agent->update(['status' => 'online']);
+            
+            // 🚀 Ubah status jadi online dan save secara model agar instance-nya aktif
+            $agent->status = 'online';
+            $agent->save();
+
+            // 🚀 KIRIM BROADCAST KE REVERB SAAT LOGIN
+            broadcast(new \App\Events\AgentStatusUpdated($agent));
+
             return redirect('/agent/' . $agent->extension);
         }
 
@@ -57,7 +64,14 @@ class AuthController extends Controller
     public function logout(Request $request)
     {
         if (session()->has('agent_extension')) {
-            Agent::where('extension', session('agent_extension'))->update(['status' => 'offline']);
+            $agent = Agent::where('extension', session('agent_extension'))->first();
+            if ($agent) {
+                $agent->status = 'offline';
+                $agent->save();
+
+                // 🚀 KIRIM BROADCAST SAAT LOGOUT
+                broadcast(new \App\Events\AgentStatusUpdated($agent));
+            }
             session()->forget('agent_extension');
         }
 
@@ -66,5 +80,25 @@ class AuthController extends Controller
         $request->session()->regenerateToken();
         
         return redirect('/login');
+    }
+
+    public function agentLogout(Request $request)
+    {
+        if (session()->has('agent_extension')) {
+            $agent = Agent::where('extension', session('agent_extension'))->first();
+            if ($agent) {
+                $agent->status = 'offline';
+                $agent->save();
+
+                // 🚀 KIRIM BROADCAST SAAT AGENT LOGOUT
+                broadcast(new \App\Events\AgentStatusUpdated($agent));
+            }
+            session()->forget('agent_extension');
+        }
+
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+        
+        return redirect('/agent/login');
     }
 }

@@ -14,7 +14,10 @@ return Application::configure(basePath: dirname(__DIR__))
         api: __DIR__.'/../routes/api.php', // <-- TAMBAHKAN BARIS INI AGAR ROUTES/API.PHP DIBACA
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        /// 🚀 DAFTARKAN ALIAS DI SINI
+        $middleware->alias([
+            'role' => \App\Http\Middleware\CheckRole::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
