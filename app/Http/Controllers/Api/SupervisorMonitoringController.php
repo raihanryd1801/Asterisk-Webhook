@@ -55,6 +55,17 @@ class SupervisorMonitoringController extends Controller
         'stats'  => $stats,
         'agents' => $agents
     ]);
+    $user = auth()->user();
+
+    if ($user->role === 'admin') {
+        // Admin melihat semua agen
+        $agents = Agent::all(); 
+    } else {
+        // Supervisor HANYA melihat agen di dalam grupnya
+        $agents = Agent::where('supervisor_id', $user->id)->get();
+    }
+
+    return response()->json(['status' => 'success', 'data' => $agents]);
 }
 
     /**

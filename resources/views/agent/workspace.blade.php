@@ -1,132 +1,173 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Agent Workspace - Ext: {{ $extension }}</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    @vite(['resources/js/app.js'])
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-</head>
+@extends('layouts.app')
 
-<body class="bg-slate-100 min-h-screen flex flex-col" x-data="agentWorkspace(@js($extension))">
+@section('title', 'Agent Workspace - Ext: ' . $extension)
 
-    <!-- Header -->
-    <header class="bg-white shadow p-4 flex flex-col md:flex-row justify-between items-center gap-4">
+@section('content')
+<div x-data="agentWorkspace(@js($extension))" class="space-y-6 relative max-w-7xl mx-auto">
+
+    <!-- Screen Pop Modal (Panggilan Masuk) -->
+    <div x-show="showPopup" x-transition.opacity class="absolute inset-0 bg-slate-900/40 z-50 rounded-2xl flex items-center justify-center backdrop-blur-sm" style="display: none;" @click.outside="closePopup()">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 flex flex-col items-center text-center max-w-sm w-full border-t-4 border-emerald-500">
+            <div class="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center text-2xl mb-4 relative">
+                <i class="fa-solid fa-phone-volume"></i>
+                <span class="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping"></span>
+            </div>
+            <h3 class="text-lg font-bold text-slate-800">📞 Panggilan Masuk!</h3>
+            <div class="bg-slate-50 p-4 rounded-xl space-y-2 my-4 text-sm border border-slate-200 w-full">
+                <div class="flex justify-between"><span class="text-slate-500">Dari:</span><span class="font-bold text-brand-600 font-mono" x-text="callInfo.caller || '-'"></span></div>
+                <div class="flex justify-between"><span class="text-slate-500">Ke Ext:</span><span class="font-semibold text-slate-700 font-mono" x-text="callInfo.extension || extension"></span></div>
+            </div>
+            <button @click="closePopup()" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-medium py-2.5 rounded-xl transition-colors">Tutup / Catat</button>
+        </div>
+    </div>
+
+    <!-- Header Workspace -->
+    <div class="bg-brand-50 border border-brand-100 rounded-2xl p-5 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
         <div>
-            <h1 class="text-xl font-bold text-slate-800">
-                Agent Workspace 
-                <span class="text-blue-600">Ext: {{ $extension }}</span>
+            <h1 class="text-xl font-semibold text-slate-800 flex items-center gap-2">
+                <i class="fa-solid fa-headset text-brand-600"></i> Agent Workspace <span class="text-brand-600 font-mono font-bold">Ext: {{ $extension }}</span>
             </h1>
+            <p class="text-sm text-slate-500 mt-0.5">Control Panel & Click-to-Call (MicroSIP Ready)</p>
         </div>
-        <div class="flex items-center gap-2">
-            <span class="text-sm text-slate-500">Status:</span>
-            <span class="px-3 py-1 rounded text-white text-xs font-bold uppercase shadow-sm transition-colors"
-                  :class="{
-                      'bg-green-500': status==='online',
-                      'bg-amber-600': status==='prayer',
-                      'bg-yellow-500': status==='break',
-                      'bg-purple-600': status==='lunch',
-                      'bg-slate-500': status==='offline'
-                  }"
-                  x-text="status"></span>
+        <div class="flex items-center gap-4">
+            <span class="inline-flex items-center gap-2 text-xs font-medium bg-white border border-slate-200 rounded-full px-4 py-2 shadow-sm">
+                <span class="text-slate-400">Status:</span>
+                <span class="px-2.5 py-0.5 rounded-full text-white text-[10px] font-bold uppercase tracking-wider shadow-sm transition-colors"
+                      :class="{
+                          'bg-emerald-500': status==='online',
+                          'bg-amber-600': status==='prayer',
+                          'bg-yellow-500': status==='break',
+                          'bg-purple-600': status==='lunch',
+                          'bg-slate-500': status==='offline'
+                      }"
+                      x-text="status"></span>
+            </span>
         </div>
-    </header>
+    </div>
 
     <!-- Main Content -->
-    <main class="p-6 max-w-5xl mx-auto w-full grid grid-cols-1 md:grid-cols-2 gap-6 flex-1">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         
         <!-- Panel Status Kehadiran -->
-        <!-- Panel Status Kehadiran -->
-<section class="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
-    <h2 class="font-semibold text-lg mb-4 text-slate-700">Ubah Status Kehadiran</h2>
-    <div class="grid grid-cols-2 gap-2">
-        <button @click="changeStatus('online')" class="bg-green-600 hover:bg-green-700 text-white py-2 rounded font-bold transition">Online (Ready)</button>
-        <button @click="changeStatus('prayer')" class="bg-amber-600 hover:bg-amber-700 text-white py-2 rounded font-bold transition">Prayer</button>
-        <button @click="changeStatus('break')" class="bg-yellow-600 hover:bg-yellow-700 text-white py-2 rounded font-bold transition">Break</button>
-        <button @click="changeStatus('lunch')" class="bg-purple-600 hover:bg-purple-700 text-white py-2 rounded font-bold transition">Lunch</button>
-        
-        <!-- Tombol Logout yang benar -->
-        <form action="{{ url('/agent/logout') }}" method="POST" class="col-span-2">
-            @csrf
-            <button type="submit" class="w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded font-bold transition">
-                Logout / Keluar Sesi
-            </button>
-        </form>
-    </div>
-</section>
-
-        <!-- Panel Click to Call -->
-        <section class="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
-            <h2 class="font-semibold text-lg mb-4 text-slate-700">Panggilan Cepat</h2>
-            <div class="space-y-4">
-                <input type="text" x-model="phoneNumber" @keydown.enter="makeCall()" placeholder="Nomor tujuan..." 
-                       class="w-full border border-slate-300 p-3 text-center text-2xl rounded-lg font-bold outline-none focus:ring-2 focus:ring-blue-500 text-slate-700 tracking-wider">
-                
-                <div class="grid grid-cols-3 gap-2">
-                    <template x-for="n in [1,2,3,4,5,6,7,8,9,'*',0,'#']" :key="n">
-                        <button @click="appendDigit(n)" x-text="n" class="bg-slate-50 border border-slate-200 hover:bg-slate-100 p-3 rounded-lg font-bold text-lg text-slate-600 transition"></button>
-                    </template>
-                </div>
-
-                <div class="flex gap-2">
-                    <button @click="makeCall()" :disabled="isCalling" class="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white p-3 rounded-lg font-bold flex items-center justify-center gap-2 transition">
-                        <span x-text="isCalling ? '...' : 'Hubungi Sekarang'"></span>
-                    </button>
-                    <button @click="phoneNumber = ''" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 rounded-lg font-bold transition">Clear</button>
+        <section class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+            <div>
+                <h2 class="font-semibold text-base mb-1 text-slate-800">Ubah Status Kehadiran</h2>
+                <p class="text-xs text-slate-400 mb-5">Pilih status ketersediaan Anda saat ini</p>
+                <div class="grid grid-cols-2 gap-3">
+                    <button @click="changeStatus('online')" class="bg-emerald-600 hover:bg-emerald-700 text-white py-3 px-4 rounded-xl font-semibold text-sm transition shadow-sm flex items-center justify-center gap-2"><i class="fa-solid fa-check text-xs"></i> Online (Ready)</button>
+                    <button @click="changeStatus('prayer')" class="bg-amber-600 hover:bg-amber-700 text-white py-3 px-4 rounded-xl font-semibold text-sm transition shadow-sm flex items-center justify-center gap-2"><i class="fa-solid fa-person-praying text-xs"></i> Prayer</button>
+                    <button @click="changeStatus('break')" class="bg-yellow-500 hover:bg-yellow-600 text-white py-3 px-4 rounded-xl font-semibold text-sm transition shadow-sm flex items-center justify-center gap-2"><i class="fa-solid fa-mug-hot text-xs"></i> Break</button>
+                    <button @click="changeStatus('lunch')" class="bg-purple-600 hover:bg-purple-700 text-white py-3 px-4 rounded-xl font-semibold text-sm transition shadow-sm flex items-center justify-center gap-2"><i class="fa-solid fa-utensils text-xs"></i> Lunch</button>
+                    <button @click="changeStatus('offline')" class="bg-slate-600 hover:bg-slate-700 text-white py-3 px-4 rounded-xl font-semibold text-sm transition shadow-sm col-span-2 flex items-center justify-center gap-2"><i class="fa-solid fa-power-off text-xs"></i> Offline</button>
                 </div>
             </div>
         </section>
-    </main>
 
-    <script>
-        function agentWorkspace(extension) {
-            return {
-                extension,
-                status: 'offline',
-                phoneNumber: '',
-                isCalling: false,
+        <!-- Panel Click to Call (Dialpad) -->
+        <section class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+            <div>
+                <div class="flex justify-between mb-1">
+                    <h2 class="font-semibold text-base text-slate-800">Click to Call</h2>
+                </div>
+                <p class="text-xs text-slate-400 mb-5">Dial outbound via SIP softphone</p>
+                
+                <div class="space-y-4 max-w-xs mx-auto">
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-center relative group">
+                        <input type="text" x-model="phoneNumber" @keydown.enter="makeCall()" placeholder="Nomor tujuan..." class="w-full bg-transparent text-xl font-semibold text-slate-800 num tracking-wide text-center outline-none">
+                        <button @click="phoneNumber = ''" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><i class="fa-solid fa-circle-xmark"></i></button>
+                    </div>
+                    
+                    <!-- Perbaikan Ukuran Tombol Dialpad agar Compact & Proporsional -->
+                    <div class="grid grid-cols-3 gap-2">
+                        <template x-for="n in [1,2,3,4,5,6,7,8,9,'*',0,'#']" :key="n">
+                            <button @click="appendDigit(n)" x-text="n" class="w-14 h-14 mx-auto rounded-full border border-slate-200 text-slate-700 font-medium hover:bg-slate-50 active:scale-95 transition-all num text-base flex items-center justify-center shadow-sm"></button>
+                        </template>
+                    </div>
 
-                init() {
-                    this.loadAgentStatus();
-                },
+                    <div class="flex gap-2 pt-2">
+                        <button @click="makeCall()" class="flex-1 bg-brand-600 hover:bg-brand-700 text-white py-2.5 px-4 rounded-xl font-medium transition shadow-sm flex items-center justify-center gap-2 text-sm">
+                            <i class="fa-solid fa-phone"></i> Panggil via MicroSIP
+                        </button>
+                        <button @click="phoneNumber = ''" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 rounded-xl font-medium transition text-sm">Clear</button>
+                    </div>
 
-                loadAgentStatus() {
-                    fetch(`/api/agent/${encodeURIComponent(this.extension)}`)
-                        .then(r => r.json())
-                        .then(d => { if(d.status === 'success') this.status = d.data.status ?? 'offline'; })
-                },
+                    <div class="text-xs bg-slate-50 rounded-xl p-3 border border-slate-200">
+                        <div class="flex justify-between"><span class="text-slate-400">Info:</span><span class="font-semibold text-slate-700" x-text="logMessage">Ready</span></div>
+                    </div>
+                </div>
+            </div>
+        </section>
 
-                changeStatus(newStatus) {
-                    fetch(`/api/agent/${encodeURIComponent(this.extension)}/status`, {
-                        method: 'POST',
-                        headers: { 
-                            'Content-Type': 'application/json', 
-                            'X-CSRF-TOKEN': @js(csrf_token()) 
-                        },
-                        body: JSON.stringify({ status: newStatus })
-                    })
+    </div>
+
+</div>
+@endsection
+
+@section('scripts')
+<script>
+    function agentWorkspace(extension) {
+        return {
+            extension, 
+            status: 'offline',
+            phoneNumber: '',
+            logMessage: 'Standby',
+            showPopup: false, 
+            callInfo: { caller: '', extension: '' },
+
+            init() {
+                this.loadAgentStatus();
+                this.initEcho();
+            },
+
+            loadAgentStatus() {
+                fetch(`/api/agent/${encodeURIComponent(this.extension)}`)
                     .then(r => r.json())
-                    .then(d => { 
-                        if(d.status === 'success') this.status = newStatus; 
-                    });
-                },
+                    .then(d => { if(d.status === 'success') this.status = d.data.status ?? 'offline'; });
+            },
 
-                appendDigit(digit) { this.phoneNumber += String(digit); },
+            initEcho() {
+                if (!window.Echo) return;
+                window.Echo.private(`agent.${this.extension}`).listen('.incoming.call', event => {
+                    this.callInfo = event.callData ?? { caller: '', extension: this.extension };
+                    this.showPopup = true;
+                    new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3').play().catch(e => console.log('Audio diblokir', e));
+                });
+            },
 
-                makeCall() {
-                    // Logic call sama seperti sebelumnya...
-                    this.isCalling = true;
-                    fetch(`/api/agent/${encodeURIComponent(this.extension)}/call`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': @js(csrf_token()) },
-                        body: JSON.stringify({ destination: this.phoneNumber })
-                    })
-                    .then(r => r.json())
-                    .finally(() => { this.isCalling = false; this.phoneNumber = ''; });
-                }
-            }
-        }
-    </script>
-</body>
-</html>
+            changeStatus(newStatus) {
+                fetch(`/api/agent/${encodeURIComponent(this.extension)}/status`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                    body: JSON.stringify({ status: newStatus })
+                }).then(r => r.json()).then(d => { if(d.status === 'success') this.status = newStatus; });
+            },
+
+            appendDigit(digit) { this.phoneNumber += String(digit); },
+
+            makeCall() {
+                const number = this.phoneNumber.replace(/[^0-9*#]/g, '');
+                if (!number) return alert('Masukkan nomor tujuan.');
+
+                this.logMessage = 'Memproses panggilan...';
+
+                fetch(`/api/agent/${encodeURIComponent(this.extension)}/call`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                    body: JSON.stringify({ destination: number })
+                })
+                .then(r => r.json())
+                .then(d => {
+                    this.logMessage = 'MikroSIP akan berdering...';
+                    this.phoneNumber = '';
+                })
+                .catch(err => {
+                    this.logMessage = 'Gagal memanggil';
+                    console.error(err);
+                });
+            },
+
+            closePopup() { this.showPopup = false; }
+        };
+    }
+</script>
+@endsection

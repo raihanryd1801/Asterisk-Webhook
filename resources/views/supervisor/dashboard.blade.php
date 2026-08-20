@@ -1,85 +1,121 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="max-w-7xl mx-auto space-y-6" x-data="supervisorDashboard()">
+<div class="space-y-6" x-data="supervisorDashboard()">
     
     <!-- Header Title & Deskripsi -->
-    <div class="flex justify-between items-center">
+    <div class="bg-brand-50 border border-brand-100 rounded-2xl p-5 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
         <div>
-            <h1 class="text-2xl font-bold text-slate-900">Live Agents Monitoring</h1>
-            <p class="text-xs text-slate-500 mt-1">Siapa yang sedang bekerja, dan panggilan apa yang sedang aktif saat ini secara real-time.</p>
+            <h1 class="text-xl font-semibold text-slate-800 flex items-center gap-2">
+                <i class="fa-solid fa-chart-pie text-brand-600"></i> Live Agents Monitoring
+            </h1>
+            <p class="text-sm text-slate-500 mt-0.5">Siapa yang sedang bekerja, dan panggilan apa yang sedang aktif saat ini secara real-time.</p>
         </div>
     </div>
 
     <!-- Kotak Statistik Ringkas -->
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-            <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Online Agents</p>
-            <p class="text-3xl font-black text-green-600 mt-2" x-text="stats.online">0</p>
+        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-4">
+            <div class="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-user-check"></i></div>
+            <div>
+                <p class="text-2xl font-bold text-slate-800 num" x-text="stats.online">0</p>
+                <p class="text-xs text-slate-500 font-medium">Online Agents</p>
+            </div>
         </div>
-        <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-            <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">On Break</p>
-            <p class="text-3xl font-black text-yellow-600 mt-2" x-text="stats.break">0</p>
+        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-4">
+            <div class="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-mug-hot"></i></div>
+            <div>
+                <p class="text-2xl font-bold text-slate-800 num" x-text="stats.break">0</p>
+                <p class="text-xs text-slate-500 font-medium">On Break</p>
+            </div>
         </div>
-        <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-            <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Offline</p>
-            <p class="text-3xl font-black text-red-600 mt-2" x-text="stats.offline">0</p>
+        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-4">
+            <div class="w-11 h-11 rounded-xl bg-red-50 text-red-600 flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-user-slash"></i></div>
+            <div>
+                <p class="text-2xl font-bold text-slate-800 num" x-text="stats.offline">0</p>
+                <p class="text-xs text-slate-500 font-medium">Offline</p>
+            </div>
         </div>
-        <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-            <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Agents</p>
-            <p class="text-3xl font-black text-slate-800 mt-2" x-text="agents.length">0</p>
+        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-4">
+            <div class="w-11 h-11 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-users"></i></div>
+            <div>
+                <p class="text-2xl font-bold text-slate-800 num" x-text="agents.length">0</p>
+                <p class="text-xs text-slate-500 font-medium">Total Agents</p>
+            </div>
         </div>
     </div>
 
     <!-- GRID CARD AGEN -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         <template x-for="agent in agents" :key="agent.id">
-            <!-- 🚀 KARTU AGEN: Warnanya berubah dinamis mengikuti agent.call_status -->
-            <div class="bg-white rounded-xl shadow-sm border p-5 flex flex-col justify-between transition duration-300 hover:shadow-md"
+            <div class="bg-white rounded-2xl shadow-sm border p-5 flex flex-col justify-between transition-all duration-300 hover:shadow-md relative overflow-hidden"
                  :class="{
                      'border-slate-200': !agent.is_calling,
-                     'border-amber-400 ring-2 ring-amber-100 bg-amber-50/30': agent.call_status === 'ringing',
-                     'border-emerald-400 ring-2 ring-emerald-100 bg-emerald-50/30': agent.call_status === 'connected'
+                     'border-amber-400 ring-2 ring-amber-500/20 bg-amber-50/10': agent.call_status === 'ringing',
+                     'border-emerald-400 ring-2 ring-emerald-500/20 bg-emerald-50/10': agent.call_status === 'connected'
                  }">
-                <div>
-                    <div class="flex justify-between items-start mb-2">
-                        <div>
-                            <h3 class="font-bold text-slate-800 text-sm" x-text="agent.name"></h3>
-                            <p class="text-xs font-mono font-bold text-indigo-600" x-text="'Ext: ' + agent.extension"></p>
+                 
+                <!-- Animated pulse background for connected -->
+                <div x-show="agent.call_status === 'connected'" class="absolute inset-0 bg-emerald-400/5 animate-pulse z-0 pointer-events-none"></div>
+
+                <div class="relative z-10">
+                    <div class="flex justify-between items-start mb-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-sm font-bold shadow-sm border border-slate-200">
+                                <i class="fa-solid fa-user"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold text-slate-800 text-sm" x-text="agent.name"></h3>
+                                <p class="text-xs font-mono font-medium text-slate-500" x-text="'Ext: ' + agent.extension"></p>
+                            </div>
                         </div>
-                        <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase"
-      :class="{ 
-          'bg-green-100 text-green-700': agent.status === 'online', 
-          'bg-amber-100 text-amber-700': agent.status === 'prayer', 
-          'bg-yellow-100 text-yellow-700': agent.status === 'break', 
-          'bg-purple-100 text-purple-700': agent.status === 'lunch', 
-          'bg-red-100 text-red-700': agent.status === 'offline' 
-      }"
-      x-text="agent.status"></span>
+                        <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border"
+                            :class="{ 
+                                'bg-emerald-50 text-emerald-600 border-emerald-200': agent.status === 'online', 
+                                'bg-amber-50 text-amber-600 border-amber-200': agent.status === 'prayer', 
+                                'bg-yellow-50 text-yellow-600 border-yellow-200': agent.status === 'break', 
+                                'bg-purple-50 text-purple-600 border-purple-200': agent.status === 'lunch', 
+                                'bg-slate-50 text-slate-500 border-slate-200': agent.status === 'offline' 
+                            }">
+                            <span class="w-1.5 h-1.5 rounded-full inline-block mr-1" 
+                                  :class="{ 'bg-emerald-500': agent.status === 'online', 'bg-amber-500': agent.status === 'prayer', 'bg-yellow-500': agent.status === 'break', 'bg-purple-500': agent.status === 'lunch', 'bg-slate-400': agent.status === 'offline' }"></span>
+                            <span x-text="agent.status"></span>
+                        </span>
                     </div>
                     
-                    <!-- Kotak Notifikasi Calling: Teks dan Warna berubah mengikuti Ringing / Connected -->
-                    <div class="mt-4 p-3 rounded-lg border shadow-sm transition-colors" 
+                    <!-- Kotak Notifikasi Calling -->
+                    <div class="mt-4 p-3.5 rounded-xl border shadow-sm transition-all duration-300" 
                          x-show="agent.is_calling" style="display: none;"
-                         :class="agent.call_status === 'connected' ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-amber-200'">
+                         x-transition:enter="transition ease-out duration-300"
+                         x-transition:enter-start="opacity-0 translate-y-2"
+                         x-transition:enter-end="opacity-100 translate-y-0"
+                         :class="agent.call_status === 'connected' ? 'bg-emerald-50/80 border-emerald-200' : 'bg-white border-amber-200'">
                         
-                        <div class="flex justify-between items-center text-[10px] mb-1">
-                            <span class="font-bold uppercase tracking-wider"
-                                  :class="agent.call_status === 'connected' ? 'text-emerald-700' : 'text-amber-600'"
-                                  x-text="agent.call_status === 'connected' ? 'Sedang Bicara' : 'Calling...'"></span>
-                            <span class="font-semibold animate-pulse"
-                                  :class="agent.call_status === 'connected' ? 'text-emerald-600' : 'text-red-500'">● live</span>
+                        <div class="flex justify-between items-center text-[10px] mb-1.5">
+                            <span class="font-bold uppercase tracking-wider flex items-center gap-1.5"
+                                  :class="agent.call_status === 'connected' ? 'text-emerald-700' : 'text-amber-600'">
+                                  <i class="fa-solid" :class="agent.call_status === 'connected' ? 'fa-phone-volume' : 'fa-phone-flip animate-bounce'"></i>
+                                  <span x-text="agent.call_status === 'connected' ? 'Sedang Bicara' : 'Calling...'"></span>
+                            </span>
+                            <span class="font-semibold px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wide"
+                                  :class="agent.call_status === 'connected' ? 'bg-emerald-200/50 text-emerald-700 animate-pulse' : 'bg-red-100 text-red-600 animate-pulse'">● live</span>
                         </div>
-                        <p class="text-xs font-bold font-mono text-slate-700" x-text="agent.current_destination ?? 'No Destination'"></p>
+                        <p class="text-sm font-bold font-mono text-slate-800 tracking-tight" x-text="agent.current_destination ?? 'No Destination'"></p>
                     </div>
                 </div>
 
                 <!-- Tombol Intervensi ChanSpy -->
-                <div class="mt-6 pt-3 border-t grid grid-cols-3 gap-2"
+                <div class="mt-5 pt-4 border-t relative z-10 grid grid-cols-3 gap-2"
                      :class="agent.is_calling ? (agent.call_status === 'connected' ? 'border-emerald-200' : 'border-amber-200') : 'border-slate-100'">
-                    <button @click="triggerSpy(agent.extension, '')" class="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 py-1.5 px-1 rounded-lg text-[11px] font-semibold flex flex-col items-center gap-1 transition shadow-sm" title="Dengarkan percakapan">Listen</button>
-                    <button @click="triggerSpy(agent.extension, 'w')" class="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 py-1.5 px-1 rounded-lg text-[11px] font-semibold flex flex-col items-center gap-1 transition shadow-sm" title="Berbisik ke agen">Whisper</button>
-                    <button @click="triggerSpy(agent.extension, 'B')" class="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 py-1.5 px-1 rounded-lg text-[11px] font-semibold flex flex-col items-center gap-1 transition shadow-sm" title="Gabung panggilan">Merge</button>
+                    <button @click="triggerSpy(agent.extension, '')" class="bg-white hover:bg-brand-50 border border-slate-200 hover:border-brand-200 text-slate-600 hover:text-brand-600 py-2 px-1 rounded-xl text-[11px] font-semibold flex flex-col items-center gap-1.5 transition-all shadow-sm active:scale-95" title="Dengarkan percakapan">
+                        <i class="fa-solid fa-headphones"></i> Listen
+                    </button>
+                    <button @click="triggerSpy(agent.extension, 'w')" class="bg-white hover:bg-brand-50 border border-slate-200 hover:border-brand-200 text-slate-600 hover:text-brand-600 py-2 px-1 rounded-xl text-[11px] font-semibold flex flex-col items-center gap-1.5 transition-all shadow-sm active:scale-95" title="Berbisik ke agen">
+                        <i class="fa-solid fa-microphone-lines"></i> Whisper
+                    </button>
+                    <button @click="triggerSpy(agent.extension, 'B')" class="bg-white hover:bg-brand-50 border border-slate-200 hover:border-brand-200 text-slate-600 hover:text-brand-600 py-2 px-1 rounded-xl text-[11px] font-semibold flex flex-col items-center gap-1.5 transition-all shadow-sm active:scale-95" title="Gabung panggilan">
+                        <i class="fa-solid fa-arrows-down-to-people"></i> Merge
+                    </button>
                 </div>
             </div>
         </template>
@@ -157,7 +193,6 @@
                 .then(data => {
                     let agentList = Array.isArray(data) ? data : (data.agents || []);
                     
-                    // 🚀 DIPERBAIKI DI SINI: Ambil dari backend (Cache), jangan dipaksa false/null lagi
                     this.agents = agentList.map(agent => ({
                         ...agent,
                         is_calling: agent.is_calling ?? false,
