@@ -1,0 +1,10 @@
+[90m= [39m[34;4mApp\Models\Agent[39;24m {#8340
+    [34mid[39m: [35m1[39m,
+    [34mname[39m: [32m"[39m[32mAgent Budi[39m[32m"[39m,
+    [34mextension[39m: [32m"[39m[32m101[39m[32m"[39m,
+    [34msecret[39m: [32m"[39m[32mrahasia123[39m[32m"[39m,
+    [34mworkgroup[39m: [32m"[39m[32mSupport[39m[32m"[39m,
+    [34mstatus[39m: [32m"[39m[32monline[39m[32m"[39m,
+    [34mcreated_at[39m: [32m"[39m[32m2026-08-19 06:33:30[39m[32m"[39m,
+    [34mupdated_at[39m: [32m"[39m[32m2026-08-20 03:25:32[39m[32m"[39m,
+  }
