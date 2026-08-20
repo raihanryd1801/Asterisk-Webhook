@@ -45,6 +45,7 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->group(function () {
     // Agent Management (CRUD)
     Route::get('/agents', [AgentController::class, 'index'])->name('admin.agents.index');
     Route::post('/agents/store', [AgentController::class, 'store'])->name('admin.agents.store');
+    Route::put('/agents/{id}', [AgentController::class, 'update'])->name('admin.agents.update'); // 🚀 Tambahan rute update
     Route::delete('/agents/{id}', [AgentController::class, 'destroy'])->name('admin.agents.destroy');
 });
 
