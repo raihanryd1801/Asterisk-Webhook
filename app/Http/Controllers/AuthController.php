@@ -23,12 +23,21 @@ class AuthController extends Controller
 
         if (Auth::attempt($credentials)) {
             $request->session()->regenerate();
-            return redirect('/supervisor/dashboard');
+            
+            // Ambil data user yang sedang login
+            $user = Auth::user();
+
+            // PENGALIHAN OTOMATIS BERDASARKAN ROLE
+            if (isset($user->role) && $user->role === 'supervisor') {
+                return redirect()->route('supervisor.dashboard');
+            }
+
+            // Jika dia Admin biasa / Manager, arahkan ke manajemen agent
+            return redirect('/admin/agents');
         }
 
         return back()->with('error', 'Email atau password salah!')->onlyInput('email');
     }
-
     // ================= AGENT LOGIN (PORTAL AGENT) =================
     public function showAgentLogin()
     {
@@ -45,13 +54,26 @@ class AuthController extends Controller
         $agent = Agent::where('extension', $request->extension)->first();
 
         if ($agent && $agent->secret === $request->password) {
+            
+            // 1. JIKA YANG LOGIN ADALAH SUPERVISOR
+            if (isset($agent->role) && $agent->role === 'supervisor') {
+                // Buat session khusus supervisor
+                session(['supervisor_extension' => $agent->extension]);
+                
+                $agent->status = 'online';
+                $agent->save();
+
+                // Arahkan ke Dashboard Supervisor
+                return redirect('/supervisor/dashboard');
+            }
+
+            // 2. JIKA YANG LOGIN ADALAH AGEN BIASA (CS)
             session(['agent_extension' => $agent->extension]);
             
-            // 🚀 Ubah status jadi online dan save secara model agar instance-nya aktif
             $agent->status = 'online';
             $agent->save();
 
-            // 🚀 KIRIM BROADCAST KE REVERB SAAT LOGIN
+            // Kirim broadcast status online
             broadcast(new \App\Events\AgentStatusUpdated($agent));
 
             return redirect('/agent/' . $agent->extension);
@@ -94,6 +116,23 @@ class AuthController extends Controller
                 broadcast(new \App\Events\AgentStatusUpdated($agent));
             }
             session()->forget('agent_extension');
+        }
+
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+        
+        return redirect('/agent/login');
+    }
+
+    public function supervisorLogout(Request $request)
+    {
+        if (session()->has('supervisor_extension')) {
+            $supervisor = Agent::where('extension', session('supervisor_extension'))->first();
+            if ($supervisor) {
+                $supervisor->status = 'offline';
+                $supervisor->save();
+            }
+            session()->forget('supervisor_extension');
         }
 
         $request->session()->invalidate();

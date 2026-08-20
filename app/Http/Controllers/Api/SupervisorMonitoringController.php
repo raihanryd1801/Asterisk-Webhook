@@ -9,6 +9,7 @@ use App\Models\Agent;
 use App\Models\Cdr;
 use App\Services\Asterisk\OriginateService;
 use App\Services\Asterisk\ProvisionerService;
+use Illuminate\Support\Facades\Cache;
 
 class SupervisorMonitoringController extends Controller
 {
@@ -26,23 +27,35 @@ class SupervisorMonitoringController extends Controller
      * List semua agen dan statusnya untuk Dashboard Supervisor
      */
     public function agentsList()
-    {
-        $agents = Agent::all();
+{
+    $agents = Agent::all()->map(function ($agent) {
+        // Cek cache panggilan aktif berdasarkan ekstensi agen
+        $callState = Cache::get('active_call_' . $agent->extension);
 
-        // Hitung statistik ringkas di atas dashboard (Online, Offline, dll)
-        $stats = [
-            'total'   => $agents->count(),
-            'online'  => $agents->where('status', 'online')->count(),
-            'break'   => $agents->where('status', 'break')->count(),
-            'offline' => $agents->where('status', 'offline')->count(),
-        ];
+        // Ubah model ke array agar properti tambahan ikut terkirim ke JSON
+        $data = $agent->toArray();
+        
+        $data['is_calling']          = $callState['is_calling'] ?? false;
+        $data['call_status']         = $callState['call_status'] ?? null;
+        $data['current_destination'] = $callState['destination'] ?? null;
 
-        return response()->json([
-            'status' => 'success',
-            'stats'  => $stats,
-            'agents' => $agents
-        ]);
-    }
+        return $data;
+    });
+
+    // Hitung statistik ringkas
+    $stats = [
+        'total'   => $agents->count(),
+        'online'  => $agents->where('status', 'online')->count(),
+        'break'   => $agents->where('status', 'break')->count(),
+        'offline' => $agents->where('status', 'offline')->count(),
+    ];
+
+    return response()->json([
+        'status' => 'success',
+        'stats'  => $stats,
+        'agents' => $agents
+    ]);
+}
 
     /**
      * Tombol Supervisor Action (Listen / Whisper / Barge)

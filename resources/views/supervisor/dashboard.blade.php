@@ -4,9 +4,11 @@
 <div class="max-w-7xl mx-auto space-y-6" x-data="supervisorDashboard()">
     
     <!-- Header Title & Deskripsi -->
-    <div>
-        <h1 class="text-2xl font-bold text-slate-900">Live Agents</h1>
-        <p class="text-xs text-slate-500 mt-1">Siapa yang sedang bekerja, dan panggilan apa yang sedang aktif saat ini.</p>
+    <div class="flex justify-between items-center">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-900">Live Agents Monitoring</h1>
+            <p class="text-xs text-slate-500 mt-1">Siapa yang sedang bekerja, dan panggilan apa yang sedang aktif saat ini secara real-time.</p>
+        </div>
     </div>
 
     <!-- Kotak Statistik Ringkas -->
@@ -33,9 +35,9 @@
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         <template x-for="agent in agents" :key="agent.id">
             <!-- 🚀 KARTU AGEN: Warnanya berubah dinamis mengikuti agent.call_status -->
-            <div class="rounded-xl shadow-sm border p-5 flex flex-col justify-between transition duration-300 hover:shadow-md"
+            <div class="bg-white rounded-xl shadow-sm border p-5 flex flex-col justify-between transition duration-300 hover:shadow-md"
                  :class="{
-                     'bg-white border-slate-200': !agent.is_calling,
+                     'border-slate-200': !agent.is_calling,
                      'border-amber-400 ring-2 ring-amber-100 bg-amber-50/30': agent.call_status === 'ringing',
                      'border-emerald-400 ring-2 ring-emerald-100 bg-emerald-50/30': agent.call_status === 'connected'
                  }">
@@ -72,11 +74,12 @@
                     </div>
                 </div>
 
+                <!-- Tombol Intervensi ChanSpy -->
                 <div class="mt-6 pt-3 border-t grid grid-cols-3 gap-2"
                      :class="agent.is_calling ? (agent.call_status === 'connected' ? 'border-emerald-200' : 'border-amber-200') : 'border-slate-100'">
-                    <button @click="triggerSpy(agent.extension, '')" class="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 py-1.5 px-2 rounded-lg text-xs font-semibold flex flex-col items-center gap-1 transition shadow-sm">Listen Agent</button>
-                    <button @click="triggerSpy(agent.extension, 'w')" class="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 py-1.5 px-2 rounded-lg text-xs font-semibold flex flex-col items-center gap-1 transition shadow-sm">Whisper to Agent</button>
-                    <button @click="triggerSpy(agent.extension, 'B')" class="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 py-1.5 px-2 rounded-lg text-xs font-semibold flex flex-col items-center gap-1 transition shadow-sm">Merge Call</button>
+                    <button @click="triggerSpy(agent.extension, '')" class="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 py-1.5 px-1 rounded-lg text-[11px] font-semibold flex flex-col items-center gap-1 transition shadow-sm" title="Dengarkan percakapan">Listen</button>
+                    <button @click="triggerSpy(agent.extension, 'w')" class="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 py-1.5 px-1 rounded-lg text-[11px] font-semibold flex flex-col items-center gap-1 transition shadow-sm" title="Berbisik ke agen">Whisper</button>
+                    <button @click="triggerSpy(agent.extension, 'B')" class="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 py-1.5 px-1 rounded-lg text-[11px] font-semibold flex flex-col items-center gap-1 transition shadow-sm" title="Gabung panggilan">Merge</button>
                 </div>
             </div>
         </template>
@@ -106,15 +109,11 @@
             stats: { online: 0, break: 0, offline: 0 },
             
             init() {
-                // Beri jeda 300ms agar session stabil setelah login redirect
                 setTimeout(() => {
                     this.fetchAgents();
                 }, 300);
 
-                // Gunakan SATU channel untuk semua event real-time Reverb
                 window.Echo.channel('supervisor.dashboard')
-                    
-                    // 1. Listener Status (Online/Break/Offline)
                     .listen('.agent.status.updated', (e) => {
                         console.log("🔥 STATUS UPDATE MASUK:", e);
                         let index = this.agents.findIndex(a => a.id === e.agent.id);
@@ -123,8 +122,6 @@
                             this.updateStats();
                         }
                     })
-
-                    // 2. Listener Call Activity (Ringing / Connected / Ended)
                     .listen('.agent.call.activity', (e) => {
                         console.log("🔥 EVENT CALL ACTIVITY MASUK:", e);
                         let index = this.agents.findIndex(a => a.extension == e.agent.extension);
@@ -141,7 +138,7 @@
                                 this.agents[index] = {
                                     ...this.agents[index],
                                     is_calling: true,
-                                    call_status: e.status, // 'ringing' atau 'connected'
+                                    call_status: e.status, 
                                     current_destination: e.destination
                                 };
                             }
@@ -150,7 +147,6 @@
             },
 
             fetchAgents() {
-                // Disesuaikan dengan rute bersih kita: /supervisor/agents (tanpa /api/)
                 fetch('/supervisor/agents', {
                     headers: {
                         'Accept': 'application/json',
@@ -159,15 +155,16 @@
                 })
                 .then(res => res.json())
                 .then(data => {
-                    // Mengantisipasi apakah response berupa array langsung atau object wrapper
                     let agentList = Array.isArray(data) ? data : (data.agents || []);
                     
+                    // 🚀 DIPERBAIKI DI SINI: Ambil dari backend (Cache), jangan dipaksa false/null lagi
                     this.agents = agentList.map(agent => ({
                         ...agent,
-                        is_calling: false,
-                        call_status: null,
-                        current_destination: null
+                        is_calling: agent.is_calling ?? false,
+                        call_status: agent.call_status ?? null,
+                        current_destination: agent.current_destination ?? null
                     }));
+                    
                     this.updateStats();
                 })
                 .catch(err => console.error("Gagal mengambil data agen:", err));
@@ -175,10 +172,7 @@
 
             updateStats() {
                 this.stats.online = this.agents.filter(a => a.status === 'online').length;
-                
-                // Gabungkan Prayer, Break, dan Lunch ke kategori 'Break / Non-Ready'
                 this.stats.break = this.agents.filter(a => ['prayer', 'break', 'lunch'].includes(a.status)).length;
-                
                 this.stats.offline = this.agents.filter(a => a.status === 'offline').length;
             },
 

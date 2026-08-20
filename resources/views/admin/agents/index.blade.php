@@ -6,21 +6,22 @@
     <!-- Header Title -->
     <div class="flex justify-between items-center">
         <div>
-            <h1 class="text-2xl font-bold text-slate-900">Agent Management</h1>
-            <p class="text-xs text-slate-500 mt-1">Kelola data agen, ekstensi, dan grup antrian sistem.</p>
+            <h1 class="text-2xl font-bold text-slate-900">Agent & Supervisor Management</h1>
+            <p class="text-xs text-slate-500 mt-1">Kelola data agen, supervisor, ekstensi, dan grup antrian sistem.</p>
         </div>
         <button @click="openCreateModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold text-sm shadow-sm transition">
-            + Tambah Agen Baru
+            + Tambah Pengguna Baru
         </button>
     </div>
 
-    <!-- Tabel Data Agen -->
+    <!-- Tabel Data Agen & Supervisor -->
     <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <table class="w-full text-left">
             <thead class="bg-slate-50 border-b">
                 <tr class="text-xs font-bold text-slate-500 uppercase">
-                    <th class="p-4">Nama Agen</th>
+                    <th class="p-4">Nama</th>
                     <th class="p-4">Extension</th>
+                    <th class="p-4">Jabatan</th>
                     <th class="p-4">Group</th>
                     <th class="p-4">Status</th>
                     <th class="p-4">Aksi</th>
@@ -31,6 +32,12 @@
                 <tr class="hover:bg-slate-50 transition">
                     <td class="p-4 font-semibold text-slate-800">{{ $agent->name }}</td>
                     <td class="p-4 text-slate-600 font-mono">{{ $agent->extension }}</td>
+                    <td class="p-4">
+                        <span class="px-2.5 py-1 text-[11px] font-bold rounded-full uppercase 
+                            {{ ($agent->role ?? 'agent') === 'supervisor' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700' }}">
+                            {{ $agent->role ?? 'Agent' }}
+                        </span>
+                    </td>
                     <td class="p-4 text-slate-600">{{ $agent->group->name ?? 'Tanpa Grup' }}</td>
                     <td class="p-4">
                         <span class="px-2.5 py-1 text-xs font-bold rounded-full uppercase 
@@ -51,27 +58,40 @@
     <!-- MODAL FORM (TAMBAH / EDIT) -->
     <div x-show="openModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" style="display: none;">
         <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md" @click.outside="openModal = false">
-            <h3 class="text-lg font-bold text-slate-800 mb-4" x-text="isEdit ? 'Edit Data Agen' : 'Tambah Ekstensi Agen Baru'"></h3>
+            <h3 class="text-lg font-bold text-slate-800 mb-4" x-text="isEdit ? 'Edit Data Pengguna' : 'Tambah Ekstensi Baru'"></h3>
             
             <form @submit.prevent="submitForm()">
                 <div class="space-y-4">
                     <div>
-                        <label class="block text-sm font-semibold text-slate-700 mb-1">Nama Agen</label>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">Nama Lengkap</label>
                         <input type="text" x-model="form.name" required placeholder="Contoh: Budi Santoso" 
                                class="w-full border border-slate-300 p-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
                     </div>
+
                     <div>
                         <label class="block text-sm font-semibold text-slate-700 mb-1">Nomor Ekstensi</label>
                         <input type="text" x-model="form.extension" required placeholder="Contoh: 105" 
-                               class="w-full border border-slate-300 p-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                               :readonly="isEdit" 
+                               :class="isEdit ? 'bg-slate-100 cursor-not-allowed text-slate-500' : 'bg-white'"
+                               class="w-full border border-slate-300 p-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 font-mono">
                     </div>
+
+                    <!-- Pilihan Jabatan / Role -->
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">Jabatan / Role</label>
+                        <select x-model="form.role" class="w-full border border-slate-300 p-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white" required>
+                            <option value="agent">Agent (CS)</option>
+                            <option value="supervisor">Supervisor</option>
+                        </select>
+                    </div>
+
                     <!-- Input Password SIP -->
-<div>
-    <label class="block text-sm font-semibold text-slate-700 mb-1">Password SIP (Opsional)</label>
-    <input type="text" x-model="form.secret" placeholder="Kosongkan untuk generate otomatis" 
-           class="w-full border border-slate-300 p-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 font-mono">
-    <p class="text-[11px] text-slate-400 mt-1">Jika dikosongkan, sistem akan membuatkan password acak yang aman.</p>
-</div>
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">Password SIP (Opsional)</label>
+                        <input type="text" x-model="form.secret" placeholder="Kosongkan untuk generate otomatis" 
+                               class="w-full border border-slate-300 p-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 font-mono">
+                        <p class="text-[11px] text-slate-400 mt-1">Jika dikosongkan saat tambah, sistem membuatkan password acak.</p>
+                    </div>
 
                     <div>
                         <label class="block text-sm font-semibold text-slate-700 mb-1">Grup Antrian</label>
@@ -85,7 +105,7 @@
                 </div>
 
                 <div class="flex gap-2 mt-6">
-                    <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-lg font-bold text-sm transition" x-text="isEdit ? 'Simpan Perubahan' : 'Simpan Agen'"></button>
+                    <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-lg font-bold text-sm transition" x-text="isEdit ? 'Simpan Perubahan' : 'Simpan Data'"></button>
                     <button type="button" @click="openModal = false" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2.5 rounded-lg font-bold text-sm transition">Batal</button>
                 </div>
             </form>
@@ -105,14 +125,16 @@ function agentManagement() {
             id: null,
             name: '',
             extension: '',
+            secret: '',
+            role: 'agent',
             group_id: ''
         },
 
         openCreateModal() {
-    this.isEdit = false;
-    this.form = { id: null, name: '', extension: '', group_id: '', secret: '' };
-    this.openModal = true;
-},
+            this.isEdit = false;
+            this.form = { id: null, name: '', extension: '', secret: '', role: 'agent', group_id: '' };
+            this.openModal = true;
+        },
 
         openEditModal(agent) {
             this.isEdit = true;
@@ -120,6 +142,8 @@ function agentManagement() {
                 id: agent.id,
                 name: agent.name,
                 extension: agent.extension,
+                secret: '', // Kosongkan agar tidak overwrite password lama jika tidak diisi
+                role: agent.role || 'agent',
                 group_id: agent.group_id || ''
             };
             this.openModal = true;
@@ -142,7 +166,7 @@ function agentManagement() {
             .then(data => {
                 if(data.status === 'success') {
                     alert(data.message);
-                    location.reload(); // Refresh halaman untuk melihat data terbaru
+                    location.reload();
                 } else {
                     alert('Gagal: ' + (data.message || 'Periksa kembali inputan.'));
                 }
@@ -151,7 +175,7 @@ function agentManagement() {
         },
 
         deleteAgent(id) {
-            if(!confirm('Apakah Abang yakin ingin menghapus agen ini dari sistem?')) return;
+            if(!confirm('Apakah Abang yakin ingin menghapus pengguna ini dari sistem?')) return;
 
             fetch(`/admin/agents/${id}`, {
                 method: 'DELETE',
@@ -166,7 +190,7 @@ function agentManagement() {
                     alert(data.message);
                     location.reload();
                 } else {
-                    alert('Gagal menghapus agen.');
+                    alert('Gagal menghapus pengguna.');
                 }
             })
             .catch(err => console.error('Error:', err));

@@ -6,6 +6,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\AgentController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\Api\SupervisorMonitoringController;
+use App\Http\Controllers\SupervisorController;
 
 // ==========================================
 // 1. AUTHENTICATION ROUTES
@@ -45,24 +46,32 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->group(function () {
     // Agent Management (CRUD)
     Route::get('/agents', [AgentController::class, 'index'])->name('admin.agents.index');
     Route::post('/agents/store', [AgentController::class, 'store'])->name('admin.agents.store');
-    Route::put('/agents/{id}', [AgentController::class, 'update'])->name('admin.agents.update'); // 🚀 Tambahan rute update
+    Route::put('/agents/{id}', [AgentController::class, 'update'])->name('admin.agents.update'); 
     Route::delete('/agents/{id}', [AgentController::class, 'destroy'])->name('admin.agents.destroy');
 });
 
 // ==========================================
-// 4. SUPERVISOR & ADMIN AREA (Dashboard & Monitoring)
+// 4. SUPERVISOR AREA (Dashboard & Monitoring)
 // ==========================================
-Route::middleware(['auth', 'role:supervisor,admin'])->prefix('supervisor')->group(function () {
+Route::prefix('supervisor')->group(function () {
     
     // Halaman Utama Dashboard Supervisor
-    Route::get('/dashboard', function () {
-        return view('supervisor.dashboard');
-    })->name('supervisor.dashboard');
+    Route::get('/dashboard', [SupervisorController::class, 'dashboard'])->name('supervisor.dashboard');
 
     // Halaman Call History
-    Route::get('/call-history', function () {
-        return view('supervisor.call-history');
-    })->name('supervisor.call-history');
+    // Halaman Call History
+Route::get('/call-history', function () {
+    $isSupervisor = session()->has('supervisor_extension');
+    $isAdmin = auth()->check();
+
+    if (!$isSupervisor && !$isAdmin) {
+        return redirect('/agent/login')->with('error', 'Silakan login terlebih dahulu.');
+    }
+
+    return view('supervisor.call-history');
+})->name('supervisor.call-history');
+    // Logout Khusus Supervisor
+    Route::post('/logout', [AuthController::class, 'supervisorLogout'])->name('supervisor.logout');
 
     // API / Monitoring Endpoints untuk SPV
     Route::get('/agents', [SupervisorMonitoringController::class, 'agentsList']);

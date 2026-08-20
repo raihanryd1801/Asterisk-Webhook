@@ -28,23 +28,25 @@ class AgentController extends Controller
     public function store(Request $request)
 {
     $request->validate([
-        'name'      => 'required|string|max:255',
-        'extension' => 'required|string|unique:agents,extension',
-        'group_id'  => 'nullable|exists:groups,id',
-        'secret'    => 'nullable|string|min:4'
-    ]);
+    'name'      => 'required|string|max:255',
+    'extension' => 'required|string|unique:agents,extension',
+    'group_id'  => 'nullable|exists:groups,id',
+    'secret'    => 'nullable|string|min:4',
+    'role'      => 'required|in:agent,supervisor' // Tambahkan ini
+]);
 
     // Jika admin mengisi password, gunakan itu. Jika kosong, generate random.
     $sipSecret = $request->filled('secret') ? $request->secret : Str::random(12);
 
     // 1. Simpan ke database lokal Laravel
     $agent = Agent::create([
-        'name'      => $request->name,
-        'extension' => $request->extension,
-        'secret'    => $sipSecret,
-        'group_id'  => $request->group_id,
-        'status'    => 'offline',
-    ]);
+    'name'      => $request->name,
+    'extension' => $request->extension,
+    'secret'    => $sipSecret,
+    'role'      => $request->role, // Tambahkan ini
+    'group_id'  => $request->group_id,
+    'status'    => 'offline',
+]);
 
     // 2. Eksekusi Provisioning ke FreePBX
     try {
@@ -71,11 +73,13 @@ class AgentController extends Controller
     public function update(Request $request, $id)
     {
         // Validasi input
-        $request->validate([
-            'name'      => 'required|string|max:255',
-            'group_id'  => 'nullable|exists:groups,id',
-            'secret'    => 'nullable|string|min:4' // Opsional
-        ]);
+       $request->validate([
+    'name'      => 'required|string|max:255',
+    'group_id'  => 'nullable|exists:groups,id',
+    'secret'    => 'nullable|string|min:4',
+    'role'      => 'required|in:agent,supervisor' // Tambahkan ini
+]);
+
 
         try {
             // PENCARIAN EKSPLISIT: Cari agen di database berdasarkan ID
@@ -85,6 +89,7 @@ class AgentController extends Controller
             
             $agent->name = $request->name;
             $agent->group_id = $request->group_id;
+            $agent->role = $request->role;
 
             if ($request->filled('secret')) {
                 $agent->secret = $request->secret;

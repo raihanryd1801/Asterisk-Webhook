@@ -11,12 +11,13 @@ class Agent extends Model
 
     // Tambahkan baris ini untuk mengizinkan kolom-kolom tersebut diisi secara massal
     protected $fillable = [
-        'name',
-        'extension',
-        'secret',
-        'workgroup',
-        'status',
-    ];
+    'name', 
+    'extension', 
+    'secret', 
+    'role', // Tambahkan baris ini
+    'group_id', 
+    'status'
+];
     public function group()
     {
         return $this->belongsTo(Group::class);
