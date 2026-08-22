@@ -10,86 +10,114 @@ use App\Models\Cdr;
 use App\Services\Asterisk\OriginateService;
 use App\Services\Asterisk\ProvisionerService;
 use Illuminate\Support\Facades\Cache;
+use App\Exports\CallLogsExport;
+use Maatwebsite\Excel\Facades\Excel;
+use App\Jobs\ProvisionAsteriskAgent;
 
 class SupervisorMonitoringController extends Controller
 {
     protected $originateService;
-    protected $provisioner; // <--- Deklarasikan properti di sini
+    protected $provisioner; 
 
-    // Inject kedua service (Originate & Provisioner) ke dalam construct
     public function __construct(OriginateService $originateService, ProvisionerService $provisioner)
     {
         $this->originateService = $originateService;
         $this->provisioner = $provisioner;
     }
 
-    /**
-     * List semua agen dan statusnya untuk Dashboard Supervisor
-     */
     public function agentsList()
-{
-    $agents = Agent::all()->map(function ($agent) {
-        // Cek cache panggilan aktif berdasarkan ekstensi agen
-        $callState = Cache::get('active_call_' . $agent->extension);
+    {
+        $rawAgents = collect(); 
 
-        // Ubah model ke array agar properti tambahan ikut terkirim ke JSON
-        $data = $agent->toArray();
-        
-        $data['is_calling']          = $callState['is_calling'] ?? false;
-        $data['call_status']         = $callState['call_status'] ?? null;
-        $data['current_destination'] = $callState['destination'] ?? null;
+        if (auth()->check()) {
+            $rawAgents = Agent::all(); 
+        } 
+        elseif (session()->has('supervisor_extension')) {
+            $spvExt = session('supervisor_extension');
+            $spv = Agent::where('extension', $spvExt)->first();
+            
+            if ($spv) {
+                $rawAgents = Agent::where('supervisor_id', $spv->id)
+                                  ->orWhere('id', $spv->id) 
+                                  ->get();
+            }
+        } 
+        else {
+            $rawAgents = Agent::all();
+        }
 
-        return $data;
-    });
+        $agents = $rawAgents->map(function ($agent) {
+            $callState = Cache::get('active_call_' . $agent->extension);
 
-    // Hitung statistik ringkas
-    $stats = [
-        'total'   => $agents->count(),
-        'online'  => $agents->where('status', 'online')->count(),
-        'break'   => $agents->where('status', 'break')->count(),
-        'offline' => $agents->where('status', 'offline')->count(),
-    ];
+            $data = $agent->toArray();
+            $data['is_calling']          = $callState['is_calling'] ?? false;
+            $data['call_status']         = $callState['call_status'] ?? null;
+            $data['current_destination'] = $callState['destination'] ?? null;
 
-    return response()->json([
-        'status' => 'success',
-        'stats'  => $stats,
-        'agents' => $agents
-    ]);
-    $user = auth()->user();
+            return $data;
+        });
 
-    if ($user->role === 'admin') {
-        // Admin melihat semua agen
-        $agents = Agent::all(); 
-    } else {
-        // Supervisor HANYA melihat agen di dalam grupnya
-        $agents = Agent::where('supervisor_id', $user->id)->get();
+        $stats = [
+            'total'   => $agents->count(),
+            'online'  => $agents->where('status', 'online')->count(),
+            'break'   => $agents->where('status', 'break')->count(),
+            'offline' => $agents->where('status', 'offline')->count(),
+        ];
+
+        return response()->json([
+            'status' => 'success',
+            'stats'  => $stats,
+            'agents' => $agents->values() 
+        ]);
     }
 
-    return response()->json(['status' => 'success', 'data' => $agents]);
-}
-
-    /**
-     * Tombol Supervisor Action (Listen / Whisper / Barge)
-     */
     public function spyAction(Request $request)
     {
         $request->validate([
-            'supervisor_ext'  => 'required|string', // Ekstensi supervisor (misal: 201)
-            'target_channel'  => 'required|string', // Channel agen yang mau di-spy (misal: PJSIP/101)
-            'mode'            => 'nullable|in:w,B'  // Kosong = Listen, 'w' = Whisper, 'B' = Barge
+            'target_channel'  => 'required|string', 
+            'mode'            => 'nullable|in:w,B'  
         ]);
+
+        $supervisorExt = null;
+
+        if (session()->has('supervisor_extension')) {
+            $supervisorExt = session('supervisor_extension');
+        } 
+        elseif (auth()->check()) {
+            $agentExt = str_replace('PJSIP/', '', $request->target_channel);
+            $agent = Agent::where('extension', $agentExt)->first();
+
+            if ($agent && $agent->supervisor_id) {
+                $spvUser = Agent::find($agent->supervisor_id);
+                if ($spvUser) {
+                    $supervisorExt = $spvUser->extension;
+                }
+            }
+
+            if (!$supervisorExt) {
+                $fallbackSpv = Agent::where('role', 'supervisor')->first();
+                $supervisorExt = $fallbackSpv ? $fallbackSpv->extension : '201'; 
+            }
+        }
+
+        if (!$supervisorExt) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ekstensi tujuan Supervisor (MicroSIP) tidak ditemukan.'
+            ], 400);
+        }
 
         try {
             $mode = $request->mode ?? '';
             $response = $this->originateService->supervisorAction(
-                $request->supervisor_ext, 
+                $supervisorExt, 
                 $request->target_channel, 
                 $mode
             );
 
             return response()->json([
                 'status' => 'success',
-                'message' => "Aksi supervisor berhasil dikirim ke channel {$request->target_channel}",
+                'message' => "Aksi berhasil! Menghubungkan ke MicroSIP SPV (Ext: {$supervisorExt})",
                 'asterisk_response' => trim($response)
             ]);
 
@@ -101,24 +129,103 @@ class SupervisorMonitoringController extends Controller
         }
     }
 
-    public function callLogs()
+    public function callLogs(Request $request)
     {
-        // Ambil 50 riwayat panggilan terakhir
-        $logs = Cdr::orderBy('calldate', 'desc')
-                    ->limit(50)
-                    ->get(['calldate', 'src', 'dst', 'duration', 'disposition', 'recordingfile']);
+        // 1. Inisialisasi Query dasar (tanpa get() atau all())
+        $query = \App\Models\Cdr::orderBy('calldate', 'desc');
 
-        // Koreksi tampilan data jika terjadi "self-call" akibat Click-to-Dial
-        $formattedLogs = $logs->map(function ($log) {
+        // 2. Filter hak akses Supervisor/Agent (dieksekusi oleh MySQL)
+        if (session()->has('supervisor_extension')) {
+            $spvExt = session('supervisor_extension');
+            $spv = \App\Models\Agent::where('extension', $spvExt)->first();
+
+            if ($spv) {
+                $managedExtensions = \App\Models\Agent::where('supervisor_id', $spv->id)
+                                          ->orWhere('id', $spv->id)
+                                          ->pluck('extension')
+                                          ->toArray();
+
+                $query->where(function($q) use ($managedExtensions) {
+                    $q->whereIn('src', $managedExtensions)->orWhereIn('dst', $managedExtensions);
+                });
+            } else {
+                $query->whereRaw('1 = 0');
+            }
+        }
+
+        // Filter jika dipilih via dropdown (oleh Supervisor/Admin)
+     if ($request->filled('agent_extension')) {
+         $ext = $request->agent_extension;
+         $query->where(function($q) use ($ext) {
+             $q->where('src', $ext)->orWhere('dst', $ext);
+         });
+     }
+
+     // Filter jika yang login murni Agent (berdasarkan session)
+     elseif (session()->has('agent_extension')) {
+         $extension = session('agent_extension');
+         $query->where(function($q) use ($extension) {
+             $q->where('src', $extension)->orWhere('dst', $extension);
+         });
+     }
+
+        // 3. Filter berdasarkan pencarian keyword (DIPROSES DI MYSQL)
+        if ($request->filled('search')) {
+            $keyword = $request->search;
+            $query->where(function($q) use ($keyword) {
+                $q->where('src', 'like', "%{$keyword}%")
+                  ->orWhere('dst', 'like', "%{$keyword}%")
+                  ->orWhere('cnam', 'like', "%{$keyword}%")
+                  ->orWhere('cnum', 'like', "%{$keyword}%");
+            });
+        }
+
+        // 4. Filter berdasarkan rentang tanggal (DIPROSES DI MYSQL)
+        // Jika user tidak memilih tanggal, default tampilkan 7 hari terakhir agar ringan
+        if (!$request->filled('start_date') && !$request->filled('end_date')) {
+            $query->whereDate('calldate', '>=', now()->subDays(7));
+        } else {
+            if ($request->filled('start_date')) {
+                $query->whereDate('calldate', '>=', $request->start_date);
+            }
+            if ($request->filled('end_date')) {
+                $query->whereDate('calldate', '<=', $request->end_date);
+            }
+        }
+
+        // 5. Eksekusi Pagination (Misal 15 data per halaman)
+        $perPage = $request->query('per_page', 15);
+        $paginatedLogs = $query->paginate($perPage);
+
+        // Transform data ringan jika diperlukan
+        $paginatedLogs->getCollection()->transform(function ($log) {
             if ($log->src === $log->dst && strlen($log->src) > 5) {
-                $log->src = 'Ext 101 / Agent'; 
+                $log->src = 'Ext / Agent'; 
             }
             return $log;
         });
 
         return response()->json([
             'status' => 'success',
-            'data' => $formattedLogs
+            'data'   => $paginatedLogs
+        ]);
+    }
+
+    public function updateStatus(Request $request, $extension)
+    {
+        $request->validate([
+            'status' => 'required|in:online,prayer,break,lunch,offline'
+        ]);
+
+        $agent = Agent::where('extension', $extension)->firstOrFail();
+        $agent->status = $request->status;
+        $agent->save();
+
+        broadcast(new \App\Events\AgentStatusUpdated($agent));
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "Status berhasil diubah menjadi {$agent->status}"
         ]);
     }
 
@@ -141,69 +248,86 @@ class SupervisorMonitoringController extends Controller
             $publicAudioUrl = "http://192.168.99.73/monitor/{$filename}";
         }
 
-        return redirect($publicAudioUrl);
+        try {
+            $audioContent = @file_get_contents($publicAudioUrl);
+            
+            if ($audioContent === false) {
+                return response()->json(['error' => 'File rekaman tidak ditemukan di server FreePBX.'], 404);
+            }
+
+            $extension = pathinfo($filename, PATHINFO_EXTENSION);
+            $contentType = $extension === 'mp3' ? 'audio/mpeg' : 'audio/wav';
+
+            return response($audioContent, 200)
+                ->header('Content-Type', $contentType)
+                ->header('Accept-Ranges', 'bytes');
+
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Gagal memuat rekaman: ' . $e->getMessage()], 500);
+        }
+    }
+
+    public function exportExcel(Request $request)
+    {
+        $filename = 'call-history-' . date('Y-m-d_H-i-s') . '.xlsx';
+        return Excel::download(new CallLogsExport($request), $filename);
     }
 
     /**
-     * Membuat Agent Baru & Sinkronisasi ke FreePBX
+     * Aksi Click-to-Call dari Agent Workspace ke Nomor Tujuan
      */
-    public function createAgent(Request $request)
+    public function agentClickToCall(Request $request)
     {
-        // 1. Validasi Input dari form SPV
         $request->validate([
-            'extension' => 'required|numeric|unique:agents,extension',
-            'name'      => 'required|string|max:255',
+            'extension'   => 'required',
+            'destination' => 'required'
         ]);
 
+        $extension = $request->extension;
+        $destination = $request->destination;
+
+        // 1. Cek status di tabel agents (Tombol Web)
+        $agent = Agent::where('extension', $extension)->first();
+
+        if (!$agent || $agent->status !== 'online') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Panggilan ditolak! Status Anda saat ini bukan Online.'
+            ], 403);
+        }
+
+        // 2. CEK REGISTRASI PJSIP DENGAN AMAN (Mencegah Error 500 jika beda database)
         try {
-            // 2. Generate secret SIP yang kuat (bukan buatan user)
-            $sipSecret = Str::random(12);
+            $isMicroSIPOnline = \DB::table('ps_contacts')
+                ->where('endpoint', $extension)
+                ->exists();
 
-            // 3. Simpan data Agent ke Database Laravel
-            $agent = new Agent();
-            $agent->extension = $request->extension;
-            $agent->name      = $request->name;
-            $agent->secret    = $sipSecret;
-            $agent->status    = 'offline';
-            $agent->save();
+            if (!$isMicroSIPOnline) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Panggilan ditolak! Aplikasi MicroSIP Ext ' . $extension . ' sedang Offline / Belum Terdaftar.'
+                ], 403);
+            }
+        } catch (\Exception $e) {
+            // Jika tabel ps_contacts tidak ada di database default, 
+            // lewati pengecekan ini agar tidak memicu error 500
+        }
 
-            // 4. Tembak Server Asterisk (SFTP & SSH Bulk Import)
-            $output = $this->provisioner->provision($agent);
+        try {
+            // 3. Jalankan perintah Click-to-Dial via service
+            $response = $this->originateService->clickToDial($extension, $destination);
 
             return response()->json([
-                'status'  => 'success',
-                'message' => "Agent {$agent->name} (Ext: {$agent->extension}) berhasil dibuat dan disinkronisasi ke PABX.",
-                'data'    => [
-                    'extension' => $agent->extension,
-                    'secret'    => $agent->secret 
-                ],
-                'asterisk_log' => trim($output)
+                'status' => 'success',
+                'message' => 'MicroSIP Ext ' . $extension . ' berdering, menghubungkan ke ' . $destination . '...',
+                'response' => trim($response)
             ]);
 
         } catch (\Exception $e) {
             return response()->json([
-                'status'  => 'error',
-                'message' => 'Gagal membuat agent: ' . $e->getMessage()
+                'status' => 'error',
+                'message' => 'Gagal Memanggil: ' . $e->getMessage()
             ], 500);
         }
-    }  
-
-    public function updateStatus(Request $request, $extension)
-{
-    $request->validate([
-        'status' => 'required|in:online,prayer,break,lunch,offline'
-    ]);
-
-    $agent = Agent::where('extension', $extension)->firstOrFail();
-    $agent->status = $request->status;
-    $agent->save();
-
-    // Broadcast perubahan status agar langsung terlihat di Dashboard Supervisor
-    broadcast(new \App\Events\AgentStatusUpdated($agent));
-
-    return response()->json([
-        'status' => 'success',
-        'message' => "Status berhasil diubah menjadi {$agent->status}"
-    ]);
-}
+    }
 }

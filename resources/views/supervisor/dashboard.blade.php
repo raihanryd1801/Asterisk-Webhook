@@ -218,7 +218,8 @@
                         'Content-Type': 'application/json', 
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content') 
                     },
-                    body: JSON.stringify({ supervisor_ext: '201', target_channel: `PJSIP/${agentExt}`, mode: mode })
+                    // 🚀 PERUBAHAN DI SINI: "supervisor_ext" dihapus, biarkan backend yang mencari tahu siapa SPV-nya
+                    body: JSON.stringify({ target_channel: `PJSIP/${agentExt}`, mode: mode })
                 })
                 .then(res => res.json())
                 .then(data => alert(data.message))

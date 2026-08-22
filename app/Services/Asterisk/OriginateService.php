@@ -88,4 +88,35 @@ class OriginateService
             throw new Exception("Gagal mengeksekusi Supervisor Action: " . $e->getMessage());
         }
     }
+    /**
+     * Cek apakah ekstensi PJSIP benar-benar terdaftar (Online/Registered) di Asterisk
+     */
+    public function isExtensionRegistered($extension)
+    {
+        try {
+            $this->ami->connect();
+
+            $parameters = [
+                'Endpoint' => $extension
+            ];
+
+            $this->ami->sendAction('PJSIPShowEndpoint', $parameters);
+            $response = $this->ami->readResponse();
+            
+            $this->ami->disconnect();
+
+            // Jika endpoint ditemukan dan memiliki status kontak aktif/Unavailable/Ringing (artinya ada config-nya)
+            // Kita bisa cek apakah ada string "Status: Avail" atau informasi kontak aktif di respons AMI
+            if (strpos($response, 'Status: Avail') !== false || strpos($response, 'Contact:') !== false) {
+                // Pastikan ada kontak aktif (tidak kosong)
+                if (strpos($response, 'Avail') !== false) {
+                    return true;
+                }
+            }
+
+            return false;
+        } catch (Exception $e) {
+            return false; // Jika gagal konek AMI, anggap offline untuk keamanan
+        }
+    }
 }

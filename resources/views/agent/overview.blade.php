@@ -15,6 +15,32 @@
             Today Report
         </div>
     </div>
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+    <div>
+        <h1 class="text-2xl font-bold text-gray-900">Overview</h1>
+        <p class="text-sm text-gray-500">How your team is performing.</p>
+    </div>
+
+    <!-- 🚀 TOMBOL FILTER WAKTU (DINAMIS) -->
+    <div class="mt-4 md:mt-0 flex items-center space-x-1 bg-white p-1 rounded-lg border border-gray-200 shadow-sm">
+        <a href="{{ url('/agent/overview?range=today') }}" 
+           class="px-3 py-1.5 text-xs font-medium rounded-md transition {{ ($range ?? '') === 'today' ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100' }}">
+           Today
+        </a>
+        <a href="{{ url('/agent/overview?range=7_days') }}" 
+           class="px-3 py-1.5 text-xs font-medium rounded-md transition {{ ($range ?? '') === '7_days' ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100' }}">
+           7 Days
+        </a>
+        <a href="{{ url('/agent/overview?range=this_month') }}" 
+           class="px-3 py-1.5 text-xs font-medium rounded-md transition {{ ($range ?? 'this_month') === 'this_month' ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100' }}">
+           This Month
+        </a>
+        <a href="{{ url('/agent/overview?range=all_time') }}" 
+           class="px-3 py-1.5 text-xs font-medium rounded-md transition {{ ($range ?? '') === 'all_time' ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100' }}">
+           All Time
+        </a>
+    </div>
+</div>
 
     <!-- Today's Stats Grid -->
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">

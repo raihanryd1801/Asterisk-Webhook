@@ -6,15 +6,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class Cdr extends Model
 {
-    // Arahkan ke koneksi yang baru kita buat
-    protected $connection = 'asterisk_cdr';
+    // 🚀 1. Arahkan koneksi ke database LOKAL (bukan asterisk_cdr)
+    protected $connection = 'mysql'; 
     
-    // Arahkan ke tabel cdr milik FreePBX
-    protected $table = 'cdr';
+    // 🚀 2. Arahkan ke tabel LOKAL yang isinya super ringan
+    protected $table = 'cdr_live';   
 
-    // Karena tabel cdr FreePBX tidak pakai created_at/updated_at bawaan Laravel
     public $timestamps = false;
+    protected $primaryKey = 'uniqueid';
+    public $incrementing = false;
+    protected $keyType = 'string';
 
-    // Field apa saja yang boleh kita baca
     protected $guarded = [];
 }
