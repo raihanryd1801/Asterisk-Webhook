@@ -10,6 +10,7 @@ use App\Models\Cdr;
 use App\Services\Asterisk\OriginateService;
 use App\Services\Asterisk\ProvisionerService;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use App\Exports\CallLogsExport;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Jobs\ProvisionAsteriskAgent;
@@ -27,48 +28,187 @@ class SupervisorMonitoringController extends Controller
 
     public function agentsList()
     {
-        $rawAgents = collect(); 
+        try {
+            $rawAgents = collect(); 
 
-        if (auth()->check()) {
-            $rawAgents = Agent::all(); 
-        } 
-        elseif (session()->has('supervisor_extension')) {
-            $spvExt = session('supervisor_extension');
-            $spv = Agent::where('extension', $spvExt)->first();
-            
-            if ($spv) {
-                $rawAgents = Agent::where('supervisor_id', $spv->id)
-                                  ->orWhere('id', $spv->id) 
-                                  ->get();
+            // 1. Ambil data agent berdasarkan hak akses session/auth
+            if (auth()->check()) {
+                $rawAgents = Agent::all(); 
+            } 
+            elseif (session()->has('supervisor_extension')) {
+                $spvExt = session('supervisor_extension');
+                $spv = Agent::where('extension', $spvExt)->first();
+                
+                if ($spv) {
+                    $rawAgents = Agent::where('supervisor_id', $spv->id)
+                                    ->orWhere('id', $spv->id) 
+                                    ->get();
+                }
+            } 
+            else {
+                $rawAgents = Agent::all();
             }
-        } 
-        else {
-            $rawAgents = Agent::all();
+
+            // 2. Mapping data ringan
+            $agents = $rawAgents->map(function ($agent) {
+                $callState = Cache::get('active_call_' . $agent->extension);
+
+                $data = $agent->toArray();
+                
+                $data['microsip_online']     = ($agent->status === 'online');
+                $data['ami_device_state']    = $agent->status === 'online' ? 'NOT_INUSE' : 'UNAVAILABLE'; 
+                $data['is_calling']          = $callState['is_calling'] ?? false;
+                $data['call_status']         = $callState['call_status'] ?? null;
+                $data['current_destination'] = $callState['destination'] ?? null;
+            
+                return $data;
+            }); 
+
+            // 3. Hitung statistik dashboard
+            $stats = [
+                'total'   => $agents->count(),
+                'online'  => $agents->where('status', 'online')->count(),
+                'break'   => $agents->where('status', 'break')->count(),
+                'offline' => $agents->where('status', 'offline')->count(),
+            ];
+
+            return response()->json([
+                'status' => 'success',
+                'stats'  => $stats,
+                'agents' => $agents->values() 
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("Error agentsList: " . $e->getMessage());
+
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage(),
+                'stats'  => ['total' => 0, 'online' => 0, 'break' => 0, 'offline' => 0],
+                'agents' => []
+            ], 200); 
         }
+    }
 
-        $agents = $rawAgents->map(function ($agent) {
-            $callState = Cache::get('active_call_' . $agent->extension);
-
-            $data = $agent->toArray();
-            $data['is_calling']          = $callState['is_calling'] ?? false;
-            $data['call_status']         = $callState['call_status'] ?? null;
-            $data['current_destination'] = $callState['destination'] ?? null;
-
-            return $data;
-        });
-
-        $stats = [
-            'total'   => $agents->count(),
-            'online'  => $agents->where('status', 'online')->count(),
-            'break'   => $agents->where('status', 'break')->count(),
-            'offline' => $agents->where('status', 'offline')->count(),
-        ];
-
-        return response()->json([
-            'status' => 'success',
-            'stats'  => $stats,
-            'agents' => $agents->values() 
+    /**
+     * 🚀 FUNGSI CREATE AGENT YANG SEBELUMNYA HILANG
+     */
+    public function createAgent(Request $request)
+    {
+        $request->validate([
+            'name'      => 'required|string|max:255',
+            'extension' => 'required|string|unique:agents,extension',
+            'secret'    => 'required|string',
         ]);
+
+        try {
+            $agent = Agent::create([
+                'name'          => $request->name,
+                'extension'     => $request->extension,
+                'secret'        => $request->secret,
+                'status'        => 'offline',
+                'supervisor_id' => $request->supervisor_id ?? null,
+            ]);
+
+            // Dispatch job provisioning ke Asterisk jika ada
+            if (class_exists(ProvisionAsteriskAgent::class)) {
+                ProvisionAsteriskAgent::dispatch($agent);
+            }
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'Agent berhasil ditambahkan dan diprovisi.',
+                'agent'   => $agent
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("Error createAgent: " . $e->getMessage());
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Gagal menambah agen: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * 🚀 FUNGSI UPDATE AGENT
+     */
+    public function update(Request $request, $id)
+    {
+        $request->validate([
+            'name'          => 'required|string|max:255',
+            'supervisor_id' => 'nullable|exists:agents,id', 
+            'secret'        => 'nullable|string|min:4',
+            'role'          => 'required|in:agent,supervisor'
+        ]);
+
+        try {
+            $agent = Agent::findOrFail($id);
+            $oldSecret = $agent->secret;
+            
+            $agent->name          = $request->name;
+            $agent->supervisor_id = $request->supervisor_id;
+            $agent->role          = $request->role;
+
+            $secretChanged = false;
+            if ($request->filled('secret')) {
+                $agent->secret = $request->secret;
+                $secretChanged = ($request->secret !== $oldSecret);
+            }
+
+            // 1. Simpan perubahan ke database lokal
+            $agent->save();
+
+            // 2. Lempar proses update FreePBX ke background queue
+            if (class_exists(ProvisionAsteriskAgent::class)) {
+                ProvisionAsteriskAgent::dispatch($agent, 'update', $secretChanged);
+            }
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => "Data agen {$agent->name} berhasil diperbarui!"
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("Error updateAgent: " . $e->getMessage());
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Gagal memperbarui agen: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * 🚀 FUNGSI DELETE / DESTROY AGENT
+     */
+    public function destroy($id)
+    {
+        try {
+            $agent = Agent::findOrFail($id);
+            
+            // Buat snapshot data agent sebelum dihapus dari database lokal
+            $agentSnapshot = clone $agent;
+
+            // 1. Hapus dari database lokal secepat kilat
+            $agent->delete();
+
+            // 2. Lempar proses pembersihan FreePBX ke background queue
+            if (class_exists(ProvisionAsteriskAgent::class)) {
+                ProvisionAsteriskAgent::dispatch($agentSnapshot, 'delete');
+            }
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'Agen berhasil dihapus dari sistem!'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("Error destroyAgent: " . $e->getMessage());
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Gagal menghapus agen: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     public function spyAction(Request $request)
@@ -131,16 +271,17 @@ class SupervisorMonitoringController extends Controller
 
     public function callLogs(Request $request)
     {
-        // 1. Inisialisasi Query dasar (tanpa get() atau all())
-        $query = \App\Models\Cdr::orderBy('calldate', 'desc');
+        $query = Cdr::select([
+            'calldate', 'src', 'dst', 'duration', 
+            'billsec', 'disposition', 'recordingfile', 'cnam', 'cnum'
+        ])->orderBy('calldate', 'desc');
 
-        // 2. Filter hak akses Supervisor/Agent (dieksekusi oleh MySQL)
         if (session()->has('supervisor_extension')) {
             $spvExt = session('supervisor_extension');
-            $spv = \App\Models\Agent::where('extension', $spvExt)->first();
+            $spv = Agent::where('extension', $spvExt)->first();
 
             if ($spv) {
-                $managedExtensions = \App\Models\Agent::where('supervisor_id', $spv->id)
+                $managedExtensions = Agent::where('supervisor_id', $spv->id)
                                           ->orWhere('id', $spv->id)
                                           ->pluck('extension')
                                           ->toArray();
@@ -153,23 +294,19 @@ class SupervisorMonitoringController extends Controller
             }
         }
 
-        // Filter jika dipilih via dropdown (oleh Supervisor/Admin)
-     if ($request->filled('agent_extension')) {
-         $ext = $request->agent_extension;
-         $query->where(function($q) use ($ext) {
-             $q->where('src', $ext)->orWhere('dst', $ext);
-         });
-     }
+        if ($request->filled('agent_extension')) {
+            $ext = $request->agent_extension;
+            $query->where(function($q) use ($ext) {
+                $q->where('src', $ext)->orWhere('dst', $ext);
+            });
+        }
+        elseif (session()->has('agent_extension')) {
+            $extension = session('agent_extension');
+            $query->where(function($q) use ($extension) {
+                $q->where('src', $extension)->orWhere('dst', $extension);
+            });
+        }
 
-     // Filter jika yang login murni Agent (berdasarkan session)
-     elseif (session()->has('agent_extension')) {
-         $extension = session('agent_extension');
-         $query->where(function($q) use ($extension) {
-             $q->where('src', $extension)->orWhere('dst', $extension);
-         });
-     }
-
-        // 3. Filter berdasarkan pencarian keyword (DIPROSES DI MYSQL)
         if ($request->filled('search')) {
             $keyword = $request->search;
             $query->where(function($q) use ($keyword) {
@@ -180,8 +317,6 @@ class SupervisorMonitoringController extends Controller
             });
         }
 
-        // 4. Filter berdasarkan rentang tanggal (DIPROSES DI MYSQL)
-        // Jika user tidak memilih tanggal, default tampilkan 7 hari terakhir agar ringan
         if (!$request->filled('start_date') && !$request->filled('end_date')) {
             $query->whereDate('calldate', '>=', now()->subDays(7));
         } else {
@@ -193,11 +328,10 @@ class SupervisorMonitoringController extends Controller
             }
         }
 
-        // 5. Eksekusi Pagination (Misal 15 data per halaman)
         $perPage = $request->query('per_page', 15);
-        $paginatedLogs = $query->paginate($perPage);
+        $paginatedLogs = $query->simplePaginate($perPage);
+        $paginatedLogs->appends($request->except('page'));
 
-        // Transform data ringan jika diperlukan
         $paginatedLogs->getCollection()->transform(function ($log) {
             if ($log->src === $log->dst && strlen($log->src) > 5) {
                 $log->src = 'Ext / Agent'; 
@@ -273,9 +407,6 @@ class SupervisorMonitoringController extends Controller
         return Excel::download(new CallLogsExport($request), $filename);
     }
 
-    /**
-     * Aksi Click-to-Call dari Agent Workspace ke Nomor Tujuan
-     */
     public function agentClickToCall(Request $request)
     {
         $request->validate([
@@ -286,7 +417,6 @@ class SupervisorMonitoringController extends Controller
         $extension = $request->extension;
         $destination = $request->destination;
 
-        // 1. Cek status di tabel agents (Tombol Web)
         $agent = Agent::where('extension', $extension)->first();
 
         if (!$agent || $agent->status !== 'online') {
@@ -296,7 +426,6 @@ class SupervisorMonitoringController extends Controller
             ], 403);
         }
 
-        // 2. CEK REGISTRASI PJSIP DENGAN AMAN (Mencegah Error 500 jika beda database)
         try {
             $isMicroSIPOnline = \DB::table('ps_contacts')
                 ->where('endpoint', $extension)
@@ -309,12 +438,10 @@ class SupervisorMonitoringController extends Controller
                 ], 403);
             }
         } catch (\Exception $e) {
-            // Jika tabel ps_contacts tidak ada di database default, 
-            // lewati pengecekan ini agar tidak memicu error 500
+            // Lewati jika tabel ps_contacts beda database
         }
 
         try {
-            // 3. Jalankan perintah Click-to-Dial via service
             $response = $this->originateService->clickToDial($extension, $destination);
 
             return response()->json([

@@ -4,10 +4,13 @@ namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use App\Services\Asterisk\AmiClient;
+use App\Models\Agent;
+use App\Events\AgentCallActivity;
+use App\Events\AgentStatusUpdated;
+use Illuminate\Support\Facades\Cache;
 
 class AmiListenCommand extends Command
 {
-    // Command ini akan kita biarkan jalan terus di background nantinya
     protected $signature = 'ami:listen';
     protected $description = 'Daemon untuk mendengarkan event Asterisk secara realtime';
 
@@ -17,33 +20,31 @@ class AmiListenCommand extends Command
 
         try {
             $ami->connect();
-            $this->info("✅ Berhasil login, siap mendengarkan event dari FreePBX...");
+            $this->info("Berhasil terhubung ke AMI! Memantau panggilan secara real-time...");
 
-            // Infinite loop untuk menangkap aliran data terus-menerus
+            $activeCalls = [];
+
             while (true) {
                 $response = $ami->readResponse();
                 
                 if (empty(trim($response))) {
-                    continue; // Skip kalau kosong (timeout socket)
+                    continue; 
                 }
 
-                // Ubah string balasan AMI menjadi Array agar mudah difilter
                 $eventData = $this->parseEvent($response);
 
-                // Kita hanya tertarik mem-filter Event (mengabaikan Response sukses/gagal biasa)
                 if (isset($eventData['Event'])) {
-                    $this->processEvent($eventData);
+                    $this->processEvent($eventData, $activeCalls);
                 }
             }
 
         } catch (\Exception $e) {
             $this->error("❌ Koneksi terputus: " . $e->getMessage());
+            sleep(5);
+            $this->call('ami:listen');
         }
     }
 
-    /**
-     * Helper untuk mengubah format teks AMI menjadi Associative Array
-     */
     private function parseEvent($response)
     {
         $lines = explode("\r\n", trim($response));
@@ -59,36 +60,97 @@ class AmiListenCommand extends Command
         return $data;
     }
 
-    /**
-     * Filter dan proses event yang relevan untuk CRM
-     */
-    private function processEvent($event)
+    private function processEvent($event, &$activeCalls)
     {
-        $watchedEvents = ['Newchannel', 'DialBegin', 'DialEnd', 'Hangup', 'BridgeEnter'];
+        $eventName = $event['Event'] ?? '';
 
-        if (in_array($event['Event'], $watchedEvents)) {
-            $this->line("🔔 Event Masuk: <fg=green>{$event['Event']}</>");
-            
-            $channel  = $event['Channel'] ?? $event['DestChannel'] ?? 'N/A';
-            $callerId = $event['CallerIDNum'] ?? $event['ConnectedLineNum'] ?? 'N/A';
-            $target   = $event['Exten'] ?? $event['DestExten'] ?? $event['DialString'] ?? 'N/A';
+        // ==========================================
+        // 1. DETEKSI STATUS PERANGKAT (ONLINE / OFFLINE)
+        // ==========================================
+        if ($eventName === 'DeviceStateChange') {
+            $device = $event['Device'] ?? ''; 
+            $state  = $event['State'] ?? '';   
 
-            $payload = [
-                'event'     => $event['Event'],
-                'channel'   => $channel,
-                'caller_id' => $callerId,
-                'target'    => $target,
-                'timestamp' => now()->toDateTimeString()
-            ];
+            if (preg_match('/(PJSIP|SIP)\/(\d+)/', $device, $matches)) {
+                $extension = $matches[2];
+                $agent = Agent::where('extension', $extension)->first();
 
-            // 🚀 Broadcast data event panggilan secara real-time via Reverb
-            broadcast(new \App\Events\CallStatusUpdated($payload));
+                if ($agent) {
+                    $isOnline = !in_array($state, ['UNAVAILABLE', 'INVALID', 'UNKNOWN']);
+                    $newStatus = $isOnline ? 'online' : 'offline';
 
-            $this->comment("   Channel   : {$channel}");
-            $this->comment("   Caller ID : {$callerId}");
-            $this->comment("   Target    : {$target}");
-            $this->line("-------------------------------------------------");
+                    if ($agent->status !== $newStatus) {
+                        $agent->status = $newStatus;
+                        $agent->save();
+
+                        $this->line("🔄 Agen Ext {$extension} berubah status menjadi: <fg=cyan>{$newStatus}</> (State: {$state})");
+                        broadcast(new AgentStatusUpdated($agent));
+                    }
+                }
+            }
+            return;
         }
-    
+
+        // ==========================================
+        // 2. DETEKSI AKTIVITAS TELEPON (PERSIS FORMAT LAMA)
+        // ==========================================
+        $channel = $event['Channel'] ?? '';
+
+        if (preg_match('/(PJSIP|SIP)\/(\d+)-/', $channel, $matches)) {
+            $extension = $matches[2];
+            $agent = Agent::where('extension', $extension)->first();
+            
+            if ($agent) {
+                // A. Deteksi Nomor Tujuan & Trigger RINGING[cite: 2]
+                if ($eventName === 'Newexten' || $eventName === 'OriginateResponse') {
+                    $exten = $event['Exten'] ?? '';
+                    
+                    if (strlen($exten) > 3 && is_numeric($exten)) {
+                        $currentState = $activeCalls[$extension]['state'] ?? '';
+                        
+                        if ($currentState !== 'ringing' && $currentState !== 'connected') {
+                            $activeCalls[$extension] = ['dest' => $exten, 'state' => 'ringing'];
+                            
+                            $this->line("🔔 Agen Ext {$extension} RINGING ke tujuan: {$exten}");
+                            broadcast(new AgentCallActivity($agent, $exten, 'ringing'));
+
+                            Cache::put('active_call_' . $extension, [
+                                'is_calling'  => true,
+                                'call_status' => 'ringing',
+                                'destination' => $exten
+                            ], now()->addHours(2));
+                        }
+                    }
+                }
+
+                // B. Deteksi saat Panggilan Diangkat / TERSAMBUNG[cite: 2]
+                if ($eventName === 'BridgeEnter') {
+                    if (isset($activeCalls[$extension])) {
+                        $dest = $activeCalls[$extension]['dest'];
+                        $activeCalls[$extension]['state'] = 'connected';
+                        
+                        $this->line("📞 Agen Ext {$extension} CONNECTED dengan: {$dest}");
+                        broadcast(new AgentCallActivity($agent, $dest, 'connected'));
+
+                        Cache::put('active_call_' . $extension, [
+                            'is_calling'  => true,
+                            'call_status' => 'connected',
+                            'destination' => $dest
+                        ], now()->addHours(2));
+                    }
+                }
+
+                // C. Deteksi saat Panggilan DITUTUP[cite: 2]
+                if ($eventName === 'HangupRequest' || $eventName === 'SoftHangupRequest' || $eventName === 'Hangup') {
+                    if (isset($activeCalls[$extension])) {
+                        $this->line("❌ Agen Ext {$extension} PANGGILAN SELESAI (Ended)");
+                        broadcast(new AgentCallActivity($agent, null, 'ended'));
+                        
+                        Cache::forget('active_call_' . $extension);
+                        unset($activeCalls[$extension]);
+                    }
+                }
+            }
+        }
     }
 }

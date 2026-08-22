@@ -35,6 +35,7 @@
         [x-cloak] { display: none !important; }
     </style>
     @yield('styles')
+    
 </head>
 <body class="bg-[#f1f5f9] flex h-screen overflow-hidden text-slate-800 font-sans antialiased">
     

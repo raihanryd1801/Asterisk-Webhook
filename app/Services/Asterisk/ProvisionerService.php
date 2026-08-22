@@ -6,6 +6,7 @@ use App\Models\Agent;
 use phpseclib3\Net\SSH2;
 use phpseclib3\Net\SFTP;
 use Exception;
+use Illuminate\Support\Facades\Log;
 
 class ProvisionerService
 {
@@ -15,107 +16,44 @@ class ProvisionerService
 
     public function __construct()
     {
-        // Sesuaikan dengan IP dan root password FreePBX Abang (.env)
-        $this->host = env('ASTERISK_SSH_HOST', '192.168.99.73'); 
-        $this->user = env('ASTERISK_SSH_USER', 'root');
-        $this->pass = env('ASTERISK_SSH_PASS', 'fid1234');
+        $this->host = env('ASTERISK_SSH_HOST', env('FREEPBX_SSH_HOST', '192.168.99.73')); 
+        $this->user = env('ASTERISK_SSH_USER', env('FREEPBX_SSH_USER', 'root'));
+        $this->pass = env('ASTERISK_SSH_PASS', env('FREEPBX_SSH_PASS', 'fid1234'));
     }
 
-    public function provision(Agent $agent)
+    public function provision($agent)
     {
-        \Log::info("=== [PROVISIONING] Menambahkan ekstensi: {$agent->extension} dengan Auto Recording (AstDB) ===");
-
-        try {
-            // 1. Buat CSV Bulk Import standar FreePBX
-            $csvContent = "action,extension,name,tech,secret\n";
-            $csvContent .= "add,{$agent->extension},\"{$agent->name}\",pjsip,{$agent->secret}\n";
-
-            $remoteCsvPath = "/tmp/ext_{$agent->extension}.csv";
-
-            $sftp = new SFTP($this->host);
-            if (!$sftp->login($this->user, $this->pass)) {
-                throw new Exception("Gagal login SFTP ke FreePBX");
-            }
-            $sftp->put($remoteCsvPath, $csvContent);
-
-            $ssh = new SSH2($this->host);
-            if (!$ssh->login($this->user, $this->pass)) {
-                throw new Exception("Gagal login SSH ke FreePBX");
-            }
-
-            // 2. Jalankan Bulk Import ekstensi baru
-            $importCommand = "fwconsole bulkimport --type=extensions {$remoteCsvPath}";
-            $importOutput = $ssh->exec($importCommand);
-            \Log::info("[PROVISION] Import Output: " . trim($importOutput));
-
-            // 3. JURUS SAKTI ASTDB (Hasil Debugging Abang)
-            \Log::info("[PROVISION] Mengeksekusi AstDB Recording untuk ekstensi {$agent->extension}...");
-            $ext = $agent->extension;
-            
-            $ssh->exec("asterisk -rx 'database put AMPUSER {$ext}/recording/in/external yes'");
-            $ssh->exec("asterisk -rx 'database put AMPUSER {$ext}/recording/out/external yes'");
-            $ssh->exec("asterisk -rx 'database put AMPUSER {$ext}/recording/in/internal yes'");
-            $ssh->exec("asterisk -rx 'database put AMPUSER {$ext}/recording/out/internal yes'");
-            $ssh->exec("asterisk -rx 'database put AMPUSER {$ext}/recording/ondemand enabled'");
-            $ssh->exec("asterisk -rx 'database put AMPUSER {$ext}/recording/priority 10'");
-
-            // 4. Reload FreePBX agar sinkron
-            $reloadOutput = $ssh->exec("fwconsole reload");
-            \Log::info("[PROVISION] Reload Output: " . trim($reloadOutput));
-
-            // 5. Bersihkan file CSV sementara
-            $sftp->delete($remoteCsvPath);
-
-            return "Provisioning & Recording Setup Success";
-
-        } catch (Exception $e) {
-            \Log::error("[PROVISIONING EXCEPTION] " . $e->getMessage());
-            throw new Exception("Error Provisioning: " . $e->getMessage());
-        }
+        $ext = is_object($agent) ? $agent->extension : $agent;
+        Log::info("=== [PROVISIONING] Menambahkan ekstensi: {$ext} ===");
+        return $this->executeBulkAction($agent, 'add');
     }
 
-   public function remove(Agent $agent)
+    public function modify($agent, $secretChanged = false)
     {
-        \Log::info("=== [DELETE PABX] Memulai pembersihan total ekstensi: {$agent->extension} ==px");
+        $ext = is_object($agent) ? $agent->extension : $agent;
+        Log::info("=== [UPDATE PABX] Mengupdate ekstensi: {$ext} ===");
+        return $this->executeBulkAction($agent, 'edit');
+    }
 
+    public function remove($agent)
+    {
+        $ext = is_object($agent) ? $agent->extension : $agent;
+        Log::info("=== [DELETE PABX] Menghapus ekstensi: {$ext} ===");
+        
         try {
-            $sftp = new SFTP($this->host);
-            if (!$sftp->login($this->user, $this->pass)) {
-                throw new Exception("Gagal login SFTP ke FreePBX saat delete");
-            }
-
-            $ssh = new SSH2($this->host);
-            if (!$ssh->login($this->user, $this->pass)) {
-                throw new Exception("Gagal login SSH ke FreePBX saat delete");
-            }
-
-            $ext = $agent->extension;
-
-            // 1. Buat script PHP untuk menghapus dari FreePBX Core & Database MySQL
             $phpScriptContent = "<?php
             include('/etc/freepbx.conf');
-            global \$amp_conf;
             try {
+                \$bmo = \FreePBX::Create();
+                \$core = \$bmo->Core;
                 \$ext = '{$ext}';
                 
-                if (class_exists('FreePBX')) {
-                    \$core = FreePBX::Core();
-                    if (method_exists(\$core, 'delDevice')) { \$core->delDevice(\$ext); }
-                    if (method_exists(\$core, 'delUser')) { \$core->delUser(\$ext); }
+                if (method_exists(\$core, 'delDevice')) { 
+                    \$core->delDevice(\$ext); 
                 }
-
-                \$dsn = \"mysql:host=\" . \$amp_conf['AMPDBHOST'] . \";dbname=\" . \$amp_conf['AMPDBNAME'] . \";charset=utf8\";
-                \$pdo = new PDO(\$dsn, \$amp_conf['AMPDBUSER'], \$amp_conf['AMPDBPASS']);
-                
-                // Hapus dari tabel relasi utama FreePBX & PJSIP
-                \$tables = ['users', 'devices', 'ps_endpoints', 'ps_auths', 'ps_aors'];
-                foreach (\$tables as \$table) {
-                    \$stmt = \$pdo->prepare(\"DELETE FROM `\$table` WHERE id = ? OR extension = ?\");
-                    \$stmt->execute([\$ext, \$ext]);
+                if (method_exists(\$core, 'delUser')) { 
+                    \$core->delUser(\$ext); 
                 }
-                
-                \$stmt = \$pdo->prepare(\"DELETE FROM ps_contacts WHERE id LIKE ?\");
-                \$stmt->execute([\$ext . '%']);
                 
                 echo 'SUCCESS_DELETED';
             } catch (Exception \$e) {
@@ -123,122 +61,97 @@ class ProvisionerService
             }
             ";
 
-            $remoteScriptPath = "/tmp/cleanup_ext_{$ext}.php";
-            $sftp->put($remoteScriptPath, $phpScriptContent);
+            $output = $this->runRemotePhp($phpScriptContent, "delete_{$ext}");
+            Log::info("[DELETE PABX] BMO Output: " . trim($output));
 
-            // 2. Eksekusi script PHP pembersihan MySQL & Core
-            \Log::info("[DELETE PABX] Menjalankan script PHP pembersihan database...");
-            $output = $ssh->exec("php {$remoteScriptPath}");
-            \Log::info("[DELETE PABX] Output Script: " . trim($output));
+            if (str_contains($output, 'ERROR')) {
+                throw new Exception("FreePBX Delete Error: " . $output);
+            }
 
-            // 3. KRUSIAL: Bersihkan cache AstDB internal Asterisk agar tidak nyangkut di PABX
-            \Log::info("[DELETE PABX] Membersihkan AstDB cache Asterisk...");
+            $ssh = $this->connectSsh();
             $ssh->exec("asterisk -rx 'database deltree AMPUSER/{$ext}'");
             $ssh->exec("asterisk -rx 'database deltree DEVICE/{$ext}'");
             $ssh->exec("asterisk -rx 'database deltree PJSIP/endpoints/{$ext}'");
+            $ssh->exec("fwconsole reload");
 
-            // 4. Jalankan fwconsole reload untuk merefresh konfigurasi PABX secara total
-            \Log::info("[DELETE PABX] Menjalankan fwconsole reload...");
-            $reloadOutput = $ssh->exec("fwconsole reload");
-            \Log::info("[DELETE PABX] Output Reload: " . trim($reloadOutput));
-
-            // 5. Hapus file script sementara di FreePBX
-            $sftp->delete($remoteScriptPath);
-
-            if (str_contains($output, 'ERROR')) {
-                throw new Exception("FreePBX Cleanup Error: " . $output);
-            }
-
-            return "Delete & Cleanup Success";
+            return "Delete Success";
 
         } catch (Exception $e) {
-            \Log::error("[DELETE PABX EXCEPTION] " . $e->getMessage());
-            throw new Exception("Error Deletion Provisioning: " . $e->getMessage());
+            Log::error("[DELETE EXCEPTION] " . $e->getMessage());
+            throw new Exception("Gagal menghapus PABX: " . $e->getMessage());
         }
     }
 
-    public function modify(Agent $agent, $secretChanged = false)
+    private function executeBulkAction($agent, $action)
     {
-        \Log::info("=== [UPDATE PABX] Mengupdate ekstensi: {$agent->extension} ===");
-
         try {
-            $ssh = new SSH2($this->host);
-            if (!$ssh->login($this->user, $this->pass)) {
-                throw new Exception("Gagal login SSH ke FreePBX");
-            }
-            
+            $ext = is_object($agent) ? $agent->extension : $agent;
+            $name = (is_object($agent) && isset($agent->name)) ? $agent->name : 'Agent';
+            $secret = (is_object($agent) && isset($agent->secret)) ? $agent->secret : '123456';
+
+            // 1. Bulk import data dasar untuk mendaftarkan ekstensi & device
+            $csvContent = "action,extension,name,tech,secret\n";
+            $csvContent .= "{$action},{$ext},\"{$name}\",pjsip,{$secret}\n";
+
+            $remoteCsvPath = "/tmp/ext_{$ext}_{$action}.csv";
+
             $sftp = new SFTP($this->host);
             if (!$sftp->login($this->user, $this->pass)) {
                 throw new Exception("Gagal login SFTP ke FreePBX");
             }
+            $sftp->put($remoteCsvPath, $csvContent);
 
-            $ext = $agent->extension;
-            // Gunakan addslashes untuk mencegah error jika nama ada tanda kutip (misal: d'Arc)
-            $name = addslashes($agent->name);
-            $secret = addslashes($agent->secret ?? '');
-            $isSecretChanged = $secretChanged ? 'true' : 'false';
+            $ssh = $this->connectSsh();
+            $command = "fwconsole bulkimport --type=extensions --replace {$remoteCsvPath}";
+            $ssh->exec($command);
+            $sftp->delete($remoteCsvPath);
 
-            // 1. Script PHP Bypass Database untuk Update Nama & Password di MySQL FreePBX
-            $phpUpdateScript = "<?php
-            include('/etc/freepbx.conf');
-            global \$amp_conf;
-            try {
-                \$ext = '{$ext}';
-                \$name = '{$name}';
-                \$secret = '{$secret}';
-                \$secretChanged = {$isSecretChanged};
-                
-                \$dsn = \"mysql:host=\" . \$amp_conf['AMPDBHOST'] . \";dbname=\" . \$amp_conf['AMPDBNAME'] . \";charset=utf8\";
-                \$pdo = new PDO(\$dsn, \$amp_conf['AMPDBUSER'], \$amp_conf['AMPDBPASS']);
-                
-                // Update tabel users
-                \$stmt = \$pdo->prepare(\"UPDATE users SET name = ? WHERE extension = ?\");
-                \$stmt->execute([\$name, \$ext]);
-                
-                // Update tabel devices
-                \$stmt = \$pdo->prepare(\"UPDATE devices SET description = ? WHERE id = ?\");
-                \$stmt->execute([\$name, \$ext]);
-                
-                // Update callerid di PJSIP
-                \$callerid = \$name . ' <' . \$ext . '>';
-                \$stmt = \$pdo->prepare(\"UPDATE ps_endpoints SET callerid = ? WHERE id = ?\");
-                \$stmt->execute([\$callerid, \$ext]);
-                
-                // Update password (hanya dieksekusi jika form password diisi)
-                if (\$secretChanged && !empty(\$secret)) {
-                    \$stmt = \$pdo->prepare(\"UPDATE ps_auths SET password = ? WHERE id = ?\");
-                    \$stmt->execute([\$secret, \$ext]);
-                }
-                
-                echo 'DB_UPDATED_SUCCESS';
-            } catch (Exception \$e) {
-                echo 'ERROR: ' . \$e->getMessage();
+            if ($action !== 'del') {
+                // 2. Reload awal agar ekstensi terdaftar di memori FreePBX
+                $ssh->exec("fwconsole reload");
+
+                // 3. Set AstDB Recording langsung via Asterisk CLI (Jalur AstDB Asli)
+                $ssh->exec("asterisk -rx 'database put AMPUSER {$ext}/recording/in/external yes'");
+                $ssh->exec("asterisk -rx 'database put AMPUSER {$ext}/recording/out/external yes'");
+                $ssh->exec("asterisk -rx 'database put AMPUSER {$ext}/recording/in/internal yes'");
+                $ssh->exec("asterisk -rx 'database put AMPUSER {$ext}/recording/out/internal yes'");
+                $ssh->exec("asterisk -rx 'database put AMPUSER {$ext}/recording/ondemand enabled'");
+                $ssh->exec("asterisk -rx 'database put AMPUSER {$ext}/recording/priority 10'");
+
+                // 4. Finalisasi CallerID AstDB & Reload total
+                $ssh->exec("asterisk -rx 'database put AMPUSER {$ext}/cidname \"{$name}\"'");
+                $ssh->exec("fwconsole reload");
+                $ssh->exec("module reload res_pjsip.so");
             }
-            ";
 
-            $remoteScriptPath = "/tmp/update_ext_{$ext}.php";
-            $sftp->put($remoteScriptPath, $phpUpdateScript);
-            
-            // 2. Eksekusi Script PHP MySQL via SSH
-            $output = $ssh->exec("php {$remoteScriptPath}");
-            \Log::info("[UPDATE PABX] Database Output: " . trim($output));
-
-            // 3. JURUS ASTDB: Update Nama di Internal Memori Asterisk
-            \Log::info("[UPDATE PABX] Mengupdate AstDB cidname...");
-            $ssh->exec("asterisk -rx 'database put AMPUSER {$ext}/cidname \"{$name}\"'");
-
-            // 4. Reload FreePBX untuk sinkronisasi total
-            $reloadOutput = $ssh->exec("fwconsole reload");
-            \Log::info("[UPDATE PABX] Reload Output: " . trim($reloadOutput));
-            
-            // 5. Bersihkan script
-            $sftp->delete($remoteScriptPath);
-
-            return "Update Provisioning Success";
+            return "Bulk Action {$action} Success";
 
         } catch (Exception $e) {
-            \Log::error("[UPDATE PABX EXCEPTION] " . $e->getMessage());
-            throw new Exception("Error Update Provisioning: " . $e->getMessage());
+            Log::error("[BULK EXCEPTION] " . $e->getMessage());
+            throw new Exception("Gagal sinkronisasi PABX ({$action}): " . $e->getMessage());
         }
+    }
+
+    private function connectSsh()
+    {
+        $ssh = new SSH2($this->host);
+        if (!$ssh->login($this->user, $this->pass)) {
+            throw new Exception("Gagal login SSH ke FreePBX");
+        }
+        return $ssh;
+    }
+
+    private function runRemotePhp($phpContent, $tag)
+    {
+        $ssh = $this->connectSsh();
+        $remotePath = "/tmp/crm_{$tag}_" . time() . ".php";
+        
+        $escapedContent = base64_encode($phpContent);
+        $ssh->exec("echo '{$escapedContent}' | base64 -d > {$remotePath}");
+
+        $output = $ssh->exec("php {$remotePath}");
+        $ssh->exec("rm -f {$remotePath}");
+
+        return trim($output);
     }
 }

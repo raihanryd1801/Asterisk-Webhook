@@ -5,17 +5,11 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Agent;
 use Illuminate\Support\Str;
-use App\Services\Asterisk\ProvisionerService;
+use App\Jobs\ProvisionAsteriskAgent;
+use Illuminate\Support\Facades\Log;
 
 class AgentController extends Controller
 {
-    protected $provisioner;
-
-    public function __construct(ProvisionerService $provisioner)
-    {
-        $this->provisioner = $provisioner;
-    }
-
     public function index()
     {
         $agents = Agent::all();
@@ -45,22 +39,13 @@ class AgentController extends Controller
             'status'        => 'offline',
         ]);
 
-        try {
-            $output = $this->provisioner->provision($agent);
+        // Lempar ke background queue
+        ProvisionAsteriskAgent::dispatch($agent, 'create');
 
-            return response()->json([
-                'status'       => 'success',
-                'message'      => "Agen {$agent->name} (Ext: {$agent->extension}) berhasil dibuat!",
-                'asterisk_log' => trim($output)
-            ]);
-
-        } catch (\Exception $e) {
-            $agent->delete();
-            return response()->json([
-                'status'  => 'error',
-                'message' => 'Gagal sinkronisasi ke FreePBX: ' . $e->getMessage()
-            ], 500);
-        }
+        return response()->json([
+            'status'  => 'success',
+            'message' => "Agen {$agent->name} berhasil disimpan dan diproses di latar belakang!"
+        ]);
     }
 
     public function update(Request $request, $id)
@@ -72,54 +57,44 @@ class AgentController extends Controller
             'role'          => 'required|in:agent,supervisor'
         ]);
 
-        try {
-            $agent = Agent::findOrFail($id);
-            $secretChanged = false;
-            
-            $agent->name          = $request->name;
-            $agent->supervisor_id = $request->supervisor_id;
-            $agent->role          = $request->role;
+        $agent = Agent::findOrFail($id);
+        $oldSecret = $agent->secret;
+        
+        $agent->name          = $request->name;
+        $agent->supervisor_id = $request->supervisor_id;
+        $agent->role          = $request->role;
 
-            if ($request->filled('secret')) {
-                $agent->secret = $request->secret;
-                $secretChanged = true;
-            }
-
-            $agent->save();
-            $this->provisioner->modify($agent, $secretChanged);
-
-            return response()->json([
-                'status'  => 'success',
-                'message' => "Data agen {$agent->name} berhasil di-update!"
-            ]);
-
-        } catch (\Exception $e) {
-            return response()->json([
-                'status'  => 'error',
-                'message' => 'Gagal sinkronisasi ke FreePBX: ' . $e->getMessage()
-            ], 500);
+        $secretChanged = false;
+        if ($request->filled('secret')) {
+            $agent->secret = $request->secret;
+            $secretChanged = ($request->secret !== $oldSecret);
         }
+
+        $agent->save();
+
+        // Lempar proses update ke background queue
+        ProvisionAsteriskAgent::dispatch($agent, 'update', $secretChanged);
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => "Data agen {$agent->name} sedang diperbarui di latar belakang!"
+        ]);
     }
 
     public function destroy($id)
     {
         $agent = Agent::findOrFail($id);
+        $extension = $agent->extension;
 
-        try {
-            $output = $this->provisioner->remove($agent);
-            $agent->delete();
+        // Hapus dari database lokal
+        $agent->delete();
 
-            return response()->json([
-                'status'  => 'success',
-                'message' => 'Agen berhasil dihapus!',
-                'log'     => $output
-            ]);
+        // Lempar ekstensi string ke background queue
+        ProvisionAsteriskAgent::dispatch($extension, 'delete');
 
-        } catch (\Exception $e) {
-            return response()->json([
-                'status'  => 'error',
-                'message' => 'Gagal menghapus dari FreePBX: ' . $e->getMessage()
-            ], 500);
-        }
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Agen sedang dihapus dari sistem di latar belakang!'
+        ]);
     }
 }

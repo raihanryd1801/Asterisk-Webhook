@@ -119,4 +119,54 @@ class OriginateService
             return false; // Jika gagal konek AMI, anggap offline untuk keamanan
         }
     }
+
+    /**
+     * Cek status online/offline ekstensi PJSIP via AMI
+     */
+    
+    /**
+     * Cek status online/offline ekstensi PJSIP via AMI (Metode Paling Akurat)
+     */
+    /**
+     * Cek status online/offline ekstensi PJSIP/SIP via AMI (Metode Paling Akurat)
+     */
+    public function getExtensionState($extension)
+    {
+        try {
+            $this->ami->connect();
+
+            // 1. Coba tanya status sebagai ekstensi PJSIP
+            $parameters = [
+                'Variable' => "DEVICE_STATE(PJSIP/{$extension})"
+            ];
+            $this->ami->sendAction('Getvar', $parameters);
+            $response = $this->ami->readResponse();
+            
+            $state = 'UNKNOWN';
+
+            // Tangkap balasan Value: (misal Value: NOT_INUSE)
+            if (preg_match('/Value:\s*([^\r\n]+)/i', $response, $matches)) {
+                $state = strtoupper(trim($matches[1]));
+            }
+
+            // 2. Jika hasilnya INVALID (artinya bukan PJSIP), kita paksa tanya sebagai SIP biasa
+            if ($state === 'INVALID' || $state === 'UNKNOWN') {
+                $parametersSip = [
+                    'Variable' => "DEVICE_STATE(SIP/{$extension})"
+                ];
+                $this->ami->sendAction('Getvar', $parametersSip);
+                $responseSip = $this->ami->readResponse();
+                
+                if (preg_match('/Value:\s*([^\r\n]+)/i', $responseSip, $matchesSip)) {
+                    $state = strtoupper(trim($matchesSip[1]));
+                }
+            }
+
+            $this->ami->disconnect();
+            return $state;
+
+        } catch (\Exception $e) {
+            return 'ERROR'; 
+        }
+    }
 }

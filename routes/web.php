@@ -5,8 +5,8 @@ use App\Models\Agent;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\AgentController;
 use App\Http\Controllers\UserController;
-use App\Http\Controllers\Api\SupervisorMonitoringController;
 use App\Http\Controllers\SupervisorController;
+use App\Http\Controllers\Api\SupervisorMonitoringController;
 
 // ==========================================
 // 1. AUTHENTICATION ROUTES
@@ -25,6 +25,7 @@ Route::get('/', function () {
     return redirect('/login');
 });
 
+
 // ==========================================
 // 2. AGENT OVERVIEW (REAL-TIME DATA DARI TABEL CDR)
 // ==========================================
@@ -33,7 +34,7 @@ Route::get('/agent/overview', function (Illuminate\Http\Request $request) {
     // 1. Ambil parameter filter dari URL (default ke 'this_month' jika kosong)
     $range = $request->query('range', 'this_month');
 
-    // 2. Buat query dasar mengarah ke tabel lokal cdr_live
+    // 2. Buat query dasar
     $query = App\Models\Cdr::query();
 
     // 3. Terapkan filter tanggal di MySQL berdasarkan tombol yang dipilih user
@@ -70,16 +71,16 @@ Route::get('/agent/overview', function (Illuminate\Http\Request $request) {
 
         if ($spv) {
             $managedExtensions = App\Models\Agent::where('supervisor_id', $spv->id)
-                                      ->orWhere('id', $spv->id)
-                                      ->pluck('extension')
-                                      ->toArray();
+                                                ->orWhere('id', $spv->id)
+                                                ->pluck('extension')
+                                                ->toArray();
 
             $query->where(function($q) use ($managedExtensions) {
                 $q->whereIn('src', $managedExtensions)
                   ->orWhereIn('dst', $managedExtensions);
             });
         } else {
-            $query->whereRaw('1 = 0');
+            $query->whereRaw('1 = 0'); // Blokir akses jika supervisor tidak valid
         }
         $roleTitle = "Supervisor Group Overview";
     } 
@@ -90,26 +91,78 @@ Route::get('/agent/overview', function (Illuminate\Http\Request $request) {
         return redirect('/agent/login')->with('error', 'Silakan login terlebih dahulu.');
     }
 
-    // 5. Kalkulasi Statistik Cepat di Level MySQL
-    $todayQuery = (clone $query)->whereDate('calldate', today());
+    // =======================================================
+    // 🚀 5. KALKULASI STATISTIK SUPER CEPAT (1X QUERY SAJA) 🚀
+    // =======================================================
     
-    $total_calls  = (clone $query)->count();
-    $allAnswered  = (clone $query)->where('disposition', 'ANSWERED')->count();
+    $today = today()->toDateString();
+    
+    $statsData = (clone $query)->selectRaw("
+        COUNT(CASE WHEN DATE(calldate) = ? THEN 1 END) as today_calls,
+        COUNT(CASE WHEN DATE(calldate) = ? AND disposition = 'ANSWERED' THEN 1 END) as today_answered,
+        COUNT(CASE WHEN DATE(calldate) = ? AND disposition != 'ANSWERED' THEN 1 END) as today_unsuccessful,
+        COUNT(*) as total_calls,
+        COUNT(CASE WHEN disposition = 'ANSWERED' THEN 1 END) as all_answered
+    ", [$today, $today, $today])->first();
+
+    $total_calls  = $statsData->total_calls ?? 0;
+    $allAnswered  = $statsData->all_answered ?? 0;
     $success_rate = $total_calls > 0 ? round(($allAnswered / $total_calls) * 100, 1) : 0;
-    
+
     $stats = [
-        'today_calls'  => (clone $todayQuery)->count(),
-        'paid'         => (clone $todayQuery)->where('disposition', 'ANSWERED')->count(), 
-        'promised'     => 0,              
-        'unsuccessful' => (clone $todayQuery)->where('disposition', '!=', 'ANSWERED')->count(),
+        'today_calls'  => $statsData->today_calls ?? 0,
+        'paid'         => $statsData->today_answered ?? 0, 
+        'promised'     => 0,                     
+        'unsuccessful' => $statsData->today_unsuccessful ?? 0,
         'total_calls'  => $total_calls,
         'success_rate' => $success_rate,
-        'all_time_paid'=> $allAnswered,   
+        'all_time_paid'=> $allAnswered,    
         'all_time_prom'=> 0,
     ];
 
-    return view('agent.overview', compact('stats', 'roleTitle', 'range'));
+    // =======================================================
+    // 🚀 6. QUERY AGENT PERFORMANCE (Tabel Bawah) 🚀
+    // =======================================================
+    
+    $performanceQuery = clone $query;
+
+    $agentPerformanceRaw = $performanceQuery->selectRaw("
+        src as extension,
+        COUNT(*) as total_calls,
+        SUM(CASE WHEN disposition = 'ANSWERED' THEN 1 ELSE 0 END) as connected_calls,
+        SUM(billsec) as total_talk_time
+    ")
+    ->where('src', '!=', '')
+    ->groupBy('extension')
+    ->orderBy('total_calls', 'desc')
+    ->limit(50)
+    ->get();
+
+    $agentNames = \App\Models\Agent::whereIn('extension', $agentPerformanceRaw->pluck('extension'))
+                                   ->pluck('name', 'extension');
+
+    $agentPerformance = $agentPerformanceRaw->map(function($item) use ($agentNames) {
+        $name = $agentNames[$item->extension] ?? 'Unknown Agent';
+        $percentage = $item->total_calls > 0 ? round(($item->connected_calls / $item->total_calls) * 100) : 0;
+
+        $hours = floor($item->total_talk_time / 3600);
+        $minutes = floor(($item->total_talk_time % 3600) / 60);
+        $seconds = $item->total_talk_time % 60;
+        $formattedTalkTime = sprintf("%d:%02d:%02d", $hours, $minutes, $seconds);
+
+        return [
+            'name'            => $name,
+            'extension'       => $item->extension,
+            'total_calls'     => $item->total_calls,
+            'connected_calls' => $item->connected_calls,
+            'percentage'      => $percentage,
+            'talk_time'       => $formattedTalkTime
+        ];
+    });
+
+    return view('agent.overview', compact('stats', 'roleTitle', 'range', 'agentPerformance'));
 });
+
 // ==========================================
 // 3. AGENT WORKSPACE (DIAMANKAN)
 // ==========================================
@@ -172,6 +225,18 @@ Route::prefix('supervisor')->group(function () {
     Route::get('/play-recording', [SupervisorMonitoringController::class, 'playRecording']);
     Route::post('/agent/{extension}/status', [SupervisorMonitoringController::class, 'updateStatus']);
 
-    // 🚀 PERBAIKAN: Hapus kata 'supervisor' di depan agar url-nya pas /supervisor/agent/click-to-call
     Route::post('/agent/click-to-call', [SupervisorMonitoringController::class, 'agentClickToCall']);
+});
+
+Route::get('/test-ami/{ext}', function($ext) {
+    $amiService = app(\App\Services\Asterisk\OriginateService::class);
+    
+    $deviceState = $amiService->getExtensionState($ext);
+    $isRegistered = $amiService->isExtensionRegistered($ext);
+
+    return response()->json([
+        'ekstensi_yang_dicek' => $ext,
+        'hasil_dari_device_state' => $deviceState,
+        'hasil_dari_pjsip_show' => $isRegistered ? 'YES (Terdaftar)' : 'NO (Tidak Terdaftar)'
+    ]);
 });
