@@ -211,18 +211,41 @@
                 this.stats.offline = this.agents.filter(a => a.status === 'offline').length;
             },
 
-            triggerSpy(agentExt, mode) {
+            triggerSpy(agentExt, mode, spyExt = null) {
+                let payload = { 
+                    target_channel: 'PJSIP/' + agentExt, 
+                    mode: mode 
+                };
+                
+                // Tambahkan spy_ext ke request jika Admin mengisi prompt
+                if (spyExt) {
+                    payload.spy_ext = spyExt;
+                }
+
                 fetch('/supervisor/spy', {
                     method: 'POST',
                     headers: { 
                         'Content-Type': 'application/json', 
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content') 
                     },
-                    // 🚀 PERUBAHAN DI SINI: "supervisor_ext" dihapus, biarkan backend yang mencari tahu siapa SPV-nya
-                    body: JSON.stringify({ target_channel: `PJSIP/${agentExt}`, mode: mode })
+                    body: JSON.stringify(payload)
                 })
-                .then(res => res.json())
-                .then(data => alert(data.message))
+                .then(res => res.json().then(data => ({ status: res.status, body: data })))
+                .then(resData => {
+                    // Jika API membalas 400 (Ekstensi Admin tidak ditemukan), jalankan PROMPT
+                    if (resData.status === 400) {
+                        let adminExt = prompt(resData.body.message + "\n\nMasukkan nomor ekstensi softphone yang sedang Anda gunakan (Cth: 199):");
+                        
+                        // Jika Admin menekan OK dan memasukkan nomor, ulang eksekusi dengan nomor tersebut
+                        if (adminExt) {
+                            this.triggerSpy(agentExt, mode, adminExt);
+                        }
+                    } else if (resData.body.status === 'success') {
+                        alert(resData.body.message);
+                    } else {
+                        alert('Gagal: ' + (resData.body.message || 'Terjadi kesalahan sistem.'));
+                    }
+                })
                 .catch(err => console.error("Gagal mengeksekusi spy:", err));
             }
         }

@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AgentWorkspaceController;
 use App\Http\Controllers\Api\SupervisorMonitoringController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\CallLogController;
 
 Route::prefix('agent/{extension}')->group(function () {
     Route::get('/', [AgentWorkspaceController::class, 'profile']);
@@ -17,3 +18,5 @@ Route::prefix('supervisor')->group(function () {
     Route::get('/call-logs', [SupervisorMonitoringController::class, 'callLogs']);
     Route::get('/play-recording', [SupervisorMonitoringController::class, 'playRecording']);
 });
+
+Route::post('/call-logs/store', [CallLogController::class, 'store']);

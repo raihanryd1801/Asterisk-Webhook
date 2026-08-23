@@ -68,6 +68,10 @@
                         <th class="px-6 py-4">Asal (SRC)</th>
                         <th class="px-6 py-4">Tujuan (DST)</th>
                         <th class="px-6 py-4">Status</th>
+                        <!-- Kolom SIP Error Code -->
+                        <th class="px-6 py-4">SIP Error Code</th>
+                        <!-- Kolom Ditutup Oleh (BARU) -->
+                        <th class="px-6 py-4">Ditutup Oleh</th>
                         <th class="px-6 py-4">Durasi</th>
                         <th class="px-6 py-4">Rekaman</th>
                     </tr>
@@ -80,18 +84,43 @@
                             <td class="px-6 py-4 font-mono text-brand-600" x-text="log.dst"></td>
                             <td class="px-6 py-4">
                                 <span class="inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-full border uppercase"
-                                      :class="log.disposition === 'ANSWERED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100'">
+                                    :class="log.disposition === 'ANSWERED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100'">
                                     <span class="w-1.5 h-1.5 rounded-full" :class="log.disposition === 'ANSWERED' ? 'bg-emerald-500' : 'bg-red-500'"></span>
                                     <span x-text="log.disposition"></span>
                                 </span>
                             </td>
+
+                            <!-- Data Kolom SIP Error Code -->
+                            <!-- FIX: format sip_code sekarang "200 OK" / "487 Request Terminated"
+                                 dst (bukan "200" / "Normal Clearing" lagi), jadi pengecekan warna
+                                 badge pakai startsWith('200') supaya tetap akurat -->
+                            <td class="px-6 py-4 font-mono text-xs">
+                                <span class="px-2 py-1 rounded font-bold text-[11px]"
+                                    :class="(!log.sip_code || log.sip_code.startsWith('200')) ? 'bg-slate-100 text-slate-600' : 'bg-rose-50 text-rose-600 border border-rose-100'"
+                                    x-text="log.sip_code || '200 OK'">
+                                </span>
+                            </td>
+
+                            <!-- Data Kolom Ditutup Oleh (BARU) -->
+                            <td class="px-6 py-4 text-xs">
+                                <template x-if="log.terminated_by">
+                                    <span class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-semibold"
+                                        :class="log.terminated_by === 'Agent' ? 'bg-sky-50 text-sky-600 border border-sky-100' : 'bg-amber-50 text-amber-600 border border-amber-100'">
+                                        <i :class="log.terminated_by === 'Agent' ? 'fa-solid fa-headset' : 'fa-solid fa-phone-volume'" class="text-[9px]"></i>
+                                        <span x-text="log.terminated_by === 'Agent' ? 'Agent' : log.terminated_by"></span>
+                                    </span>
+                                </template>
+                                <template x-if="!log.terminated_by">
+                                    <span class="text-slate-300 italic">-</span>
+                                </template>
+                            </td>
+
                             <td class="px-6 py-4 text-slate-600 font-mono text-xs" x-text="log.billsec + ' dtk'"></td>
                             
                             <!-- Kolom Rekaman dengan Tombol Listen & Mini Player -->
                             <td class="px-6 py-4">
                                 <template x-if="log.recordingfile">
                                     <div class="flex items-center gap-2">
-                                        <!-- Tombol Listen & Download (Default) -->
                                         <template x-if="playingFile !== log.recordingfile">
                                             <div class="flex items-center gap-2">
                                                 <button @click="playAudio(log.recordingfile)" 
@@ -107,7 +136,6 @@
                                             </div>
                                         </template>
 
-                                        <!-- Mini Player (Saat audio sedang diputar) -->
                                         <template x-if="playingFile === log.recordingfile">
                                             <div class="flex items-center gap-2 bg-slate-100 px-3 py-1 rounded-full border border-slate-200">
                                                 <button @click="stopAudio()" class="text-slate-700 hover:text-red-600 transition" title="Stop">
@@ -138,14 +166,12 @@
             </span>
             
             <nav class="flex items-center gap-1">
-                <!-- Tombol Prev -->
                 <button @click="fetchLogs(pagination.current_page - 1)" 
                         :disabled="pagination.current_page === 1"
                         class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed">
                     <i class="fa-solid fa-chevron-left text-[10px]"></i>
                 </button>
 
-                <!-- Tombol Angka Dinamis -->
                 <template x-for="page in getPaginationPages()" :key="page">
                     <button @click="typeof page === 'number' ? fetchLogs(page) : null"
                             class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all border"
@@ -155,7 +181,6 @@
                     </button>
                 </template>
 
-                <!-- Tombol Next -->
                 <button @click="fetchLogs(pagination.current_page + 1)" 
                         :disabled="pagination.current_page === pagination.last_page"
                         class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed">

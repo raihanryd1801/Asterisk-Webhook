@@ -92,9 +92,17 @@
                 </div>
 
                 <div>
-                    <label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Password SIP (Opsional)</label>
-                    <input type="text" x-model="form.secret" placeholder="Kosongkan untuk generate otomatis" class="w-full border border-slate-200 p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50 font-mono">
-                </div>
+    <label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Password SIP (Secret)</label>
+    <div class="relative">
+        <input :type="showSecret ? 'text' : 'password'" x-model="form.secret" placeholder="Kosongkan untuk generate otomatis" class="w-full border border-slate-200 p-2.5 pr-10 rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50 font-mono">
+        
+        <!-- Tombol Toggle Show/Hide Password -->
+        <button @click="showSecret = !showSecret" type="button" class="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-600 focus:outline-none cursor-pointer">
+            <!-- Tambahkan pointer-events-none agar klik tembus ke tombol -->
+            <i :class="showSecret ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'" class="pointer-events-none text-sm"></i>
+        </button>
+    </div>
+</div>
 
                 <div>
                     <label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Assign ke Supervisor (Grup)</label>
@@ -128,23 +136,26 @@ function agentManagement() {
     return {
         openModal: false,
         isEdit: false,
-        isLoading: false,     // State loading untuk form submit
-        deletingId: null,     // Menyimpan ID baris yang sedang dihapus
+        isLoading: false,
+        deletingId: null,
+        showSecret: false,    // <-- State untuk toggle tampil/sembunyi password
         form: { id: null, name: '', extension: '', secret: '', role: 'agent', supervisor_id: '' },
 
         openCreateModal() {
             this.isEdit = false;
+            this.showSecret = false;
             this.form = { id: null, name: '', extension: '', secret: '', role: 'agent', supervisor_id: '' };
             this.openModal = true;
         },
 
         openEditModal(agent) {
             this.isEdit = true;
+            this.showSecret = false; // Reset jadi tersembunyi tiap buka modal edit
             this.form = {
                 id: agent.id,
                 name: agent.name,
                 extension: agent.extension,
-                secret: '',
+                secret: agent.secret || '', // <-- Masukkan password existing ke form
                 role: agent.role || 'agent',
                 supervisor_id: agent.supervisor_id || ''
             };
@@ -152,7 +163,7 @@ function agentManagement() {
         },
 
         submitForm() {
-            this.isLoading = true; // Aktifkan loading
+            this.isLoading = true;
             let url = this.isEdit ? `/admin/agents/${this.form.id}` : '/admin/agents/store';
             let method = this.isEdit ? 'PUT' : 'POST';
 
@@ -167,7 +178,7 @@ function agentManagement() {
             })
             .then(res => res.json())
             .then(data => {
-                this.isLoading = false; // Matikan loading
+                this.isLoading = false;
                 if(data.status === 'success') {
                     alert(data.message);
                     location.reload();
@@ -176,7 +187,7 @@ function agentManagement() {
                 }
             })
             .catch(err => {
-                this.isLoading = false; // Matikan loading jika error
+                this.isLoading = false;
                 console.error('Error:', err);
             });
         },
@@ -184,7 +195,7 @@ function agentManagement() {
         deleteAgent(id) {
             if(!confirm('Apakah Abang yakin ingin menghapus pengguna ini dari sistem?')) return;
             
-            this.deletingId = id; // Aktifkan loading khusus pada baris agen ini
+            this.deletingId = id;
 
             fetch(`/admin/agents/${id}`, {
                 method: 'DELETE',
@@ -195,7 +206,7 @@ function agentManagement() {
             })
             .then(res => res.json())
             .then(data => {
-                this.deletingId = null; // Matikan loading
+                this.deletingId = null;
                 if(data.status === 'success') {
                     alert(data.message);
                     location.reload();
@@ -204,7 +215,7 @@ function agentManagement() {
                 }
             })
             .catch(err => {
-                this.deletingId = null; // Matikan loading jika error
+                this.deletingId = null;
                 console.error('Error:', err);
             });
         }
