@@ -34,6 +34,6 @@ class SupervisorController extends Controller
         }
 
         // 3. Kirim variabel $agents dan $callLogs ke view supervisor.dashboard
-        return view('supervisor.dashboard', compact('agents', 'callLogs'));
+        return view('supervisor.live-monitoring', compact('agents', 'callLogs'));
     }
 }

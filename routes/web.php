@@ -81,30 +81,38 @@ Route::prefix('dashboard')->group(function () {
             return redirect('/agent/login')->with('error', 'Silakan login terlebih dahulu.');
         }
 
-        $today = today()->toDateString();
+        // ✅ INI KODE YANG BENAR (Pakai CURDATE & SUM supaya tidak bentrok parameter)
         $statsData = (clone $query)->selectRaw("
-            COUNT(CASE WHEN DATE(calldate) = ? THEN 1 END) as today_calls,
-            COUNT(CASE WHEN DATE(calldate) = ? AND disposition = 'ANSWERED' THEN 1 END) as today_answered,
-            COUNT(CASE WHEN DATE(calldate) = ? AND disposition != 'ANSWERED' THEN 1 END) as today_unsuccessful,
+            SUM(CASE WHEN DATE(calldate) = CURDATE() THEN 1 ELSE 0 END) as today_calls,
+            SUM(CASE WHEN DATE(calldate) = CURDATE() AND disposition = 'ANSWERED' THEN 1 ELSE 0 END) as today_answered,
             COUNT(*) as total_calls,
-            COUNT(CASE WHEN disposition = 'ANSWERED' THEN 1 END) as all_answered
-        ", [$today, $today, $today])->first();
+            SUM(CASE WHEN disposition = 'ANSWERED' THEN 1 ELSE 0 END) as all_answered
+        ")->first();
 
-        $total_calls  = $statsData->total_calls ?? 0;
-        $allAnswered  = $statsData->all_answered ?? 0;
-        $success_rate = $total_calls > 0 ? round(($allAnswered / $total_calls) * 100, 1) : 0;
+        // Hitung metrik HARI INI
+        $today_calls      = (int) ($statsData->today_calls ?? 0);
+        $today_answered   = (int) ($statsData->today_answered ?? 0);
+        $today_unanswered = $today_calls - $today_answered; // Hitung di PHP agar akurat
+        $today_rate       = $today_calls > 0 ? round(($today_answered / $today_calls) * 100, 1) : 0;
 
+        // Hitung metrik KESELURUHAN (Sesuai Filter Waktu)
+        $total_calls    = (int) ($statsData->total_calls ?? 0);
+        $all_answered   = (int) ($statsData->all_answered ?? 0);
+        $all_unanswered = $total_calls - $all_answered;
+        $all_time_rate  = $total_calls > 0 ? round(($all_answered / $total_calls) * 100, 1) : 0;
+
+        // Masukkan ke array $stats untuk dikirim ke Blade
         $stats = [
-            'today_calls'  => $statsData->today_calls ?? 0,
-            'paid'         => $statsData->today_answered ?? 0, 
-            'promised'     => 0,                     
-            'unsuccessful' => $statsData->today_unsuccessful ?? 0,
-            'total_calls'  => $total_calls,
-            'success_rate' => $success_rate,
-            'all_time_paid'=> $allAnswered,    
-            'all_time_prom'=> 0,
+            'today_calls'      => $today_calls,
+            'today_answered'   => $today_answered,
+            'today_unanswered' => $today_unanswered,
+            'today_rate'       => $today_rate,
+            
+            'total_calls'      => $total_calls,
+            'all_answered'     => $all_answered,
+            'all_unanswered'   => $all_unanswered,
+            'all_time_rate'    => $all_time_rate,
         ];
-
         $performanceQuery = clone $query;
         $agentPerformanceRaw = $performanceQuery->selectRaw("
             src as extension, COUNT(*) as total_calls, SUM(CASE WHEN disposition = 'ANSWERED' THEN 1 ELSE 0 END) as connected_calls, SUM(billsec) as total_talk_time

@@ -25,22 +25,22 @@
 
         <!-- 🚀 TOMBOL FILTER WAKTU (DENGAN TURBO ACTION REPLACE) -->
         <div class="mt-4 md:mt-0 flex items-center space-x-1 bg-white p-1 rounded-lg border border-gray-200 shadow-sm">
-            <a href="{{ url('/agent/overview?range=today') }}" 
+            <a href="{{ route('dashboard.overview', ['range' => 'today']) }}" 
                data-turbo-action="replace"
                class="px-3 py-1.5 text-xs font-medium rounded-md transition {{ ($range ?? '') === 'today' ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100' }}">
                Today
             </a>
-            <a href="{{ url('/agent/overview?range=7_days') }}" 
+            <a href="{{ route('dashboard.overview', ['range' => '7_days']) }}" 
                data-turbo-action="replace"
                class="px-3 py-1.5 text-xs font-medium rounded-md transition {{ ($range ?? '') === '7_days' ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100' }}">
                7 Days
             </a>
-            <a href="{{ url('/agent/overview?range=this_month') }}" 
+            <a href="{{ route('dashboard.overview', ['range' => 'this_month']) }}" 
                data-turbo-action="replace"
                class="px-3 py-1.5 text-xs font-medium rounded-md transition {{ ($range ?? 'this_month') === 'this_month' ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100' }}">
                This Month
             </a>
-            <a href="{{ url('/agent/overview?range=all_time') }}" 
+            <a href="{{ route('dashboard.overview', ['range' => 'all_time']) }}" 
                data-turbo-action="replace"
                class="px-3 py-1.5 text-xs font-medium rounded-md transition {{ ($range ?? '') === 'all_time' ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100' }}">
                All Time
@@ -58,24 +58,24 @@
             </div>
         </div>
         <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-4">
-            <div class="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-check-circle"></i></div>
+            <div class="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-phone-volume"></i></div>
             <div>
-                <p class="text-2xl font-bold text-emerald-600">{{ $stats['paid'] ?? 0 }}</p>
-                <p class="text-xs text-slate-500 font-medium">Paid</p>
+                <p class="text-2xl font-bold text-emerald-600">{{ $stats['today_answered'] ?? 0 }}</p>
+                <p class="text-xs text-slate-500 font-medium">Answered</p>
             </div>
         </div>
         <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-4">
-            <div class="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-handshake"></i></div>
+            <div class="w-11 h-11 rounded-xl bg-red-50 text-red-600 flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-phone-slash"></i></div>
             <div>
-                <p class="text-2xl font-bold text-blue-600">{{ $stats['promised'] ?? 0 }}</p>
-                <p class="text-xs text-slate-500 font-medium">Promised</p>
+                <p class="text-2xl font-bold text-red-600">{{ $stats['today_unanswered'] ?? 0 }}</p>
+                <p class="text-xs text-slate-500 font-medium">Unanswered</p>
             </div>
         </div>
         <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-4">
-            <div class="w-11 h-11 rounded-xl bg-red-50 text-red-600 flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-circle-xmark"></i></div>
+            <div class="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-percent"></i></div>
             <div>
-                <p class="text-2xl font-bold text-red-600">{{ $stats['unsuccessful'] ?? 0 }}</p>
-                <p class="text-xs text-slate-500 font-medium">Unsuccessful</p>
+                <p class="text-2xl font-bold text-blue-600">{{ $stats['today_rate'] ?? 0 }}%</p>
+                <p class="text-xs text-slate-500 font-medium">Answer Rate</p>
             </div>
         </div>
     </div>
@@ -84,43 +84,43 @@
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between">
             <div>
-                <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Total Calls</h2>
+                <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Total Filtered Calls</h2>
                 <div class="text-3xl font-extrabold text-slate-900">{{ $stats['total_calls'] ?? 0 }}</div>
             </div>
             <div class="w-12 h-12 rounded-xl bg-brand-50 flex items-center justify-center text-brand-600 text-xl">
-                <i class="fa-solid fa-phone-volume"></i>
+                <i class="fa-solid fa-headset"></i>
             </div>
         </div>
         <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between">
             <div>
-                <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Success Rate</h2>
-                <div class="text-3xl font-extrabold text-slate-900">{{ $stats['success_rate'] ?? 0 }}%</div>
+                <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Overall Answer Rate</h2>
+                <div class="text-3xl font-extrabold text-slate-900">{{ $stats['all_time_rate'] ?? 0 }}%</div>
             </div>
             <div class="w-12 h-12 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 text-xl">
-                <i class="fa-solid fa-chart-line"></i>
+                <i class="fa-solid fa-chart-pie"></i>
             </div>
         </div>
     </div>
 
-    <!-- All-Time Stats Card -->
+    <!-- All-Time Stats Card (Period Statistics Summary) -->
     <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-6 border-b border-slate-100 pb-4">All-Time Statistics</h2>
+        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-6 border-b border-slate-100 pb-4">Period Statistics Summary</h2>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
             <div class="space-y-1">
                 <p class="text-xs text-slate-400 uppercase">Total Calls</p>
                 <p class="text-xl font-bold text-slate-900">{{ $stats['total_calls'] ?? 0 }}</p>
             </div>
             <div class="space-y-1">
-                <p class="text-xs text-slate-400 uppercase">Paid</p>
-                <p class="text-xl font-bold text-emerald-600">{{ $stats['all_time_paid'] ?? 0 }}</p>
+                <p class="text-xs text-slate-400 uppercase">Answered</p>
+                <p class="text-xl font-bold text-emerald-600">{{ $stats['all_answered'] ?? 0 }}</p>
             </div>
             <div class="space-y-1">
-                <p class="text-xs text-slate-400 uppercase">Promised</p>
-                <p class="text-xl font-bold text-blue-600">{{ $stats['all_time_prom'] ?? 0 }}</p>
+                <p class="text-xs text-slate-400 uppercase">Unanswered / Failed</p>
+                <p class="text-xl font-bold text-red-600">{{ $stats['all_unanswered'] ?? 0 }}</p>
             </div>
             <div class="space-y-1">
-                <p class="text-xs text-slate-400 uppercase">Overall Rate</p>
-                <p class="text-xl font-bold text-red-600">{{ $stats['success_rate'] ?? 0 }}%</p>
+                <p class="text-xs text-slate-400 uppercase">Answer Rate</p>
+                <p class="text-xl font-bold text-blue-600">{{ $stats['all_time_rate'] ?? 0 }}%</p>
             </div>
         </div>
     </div>

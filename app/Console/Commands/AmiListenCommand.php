@@ -72,28 +72,24 @@ class AmiListenCommand extends Command
         $channel   = $event['Channel'] ?? '';
         $linkedId  = $event['Linkedid'] ?? '';
 
-        // 1. DETEKSI STATUS PERANGKAT (ONLINE / OFFLINE)
-        if ($eventName === 'DeviceStateChange') {
-            $device = $event['Device'] ?? '';
-            $state  = $event['State'] ?? '';
+        // 1. DETEKSI STATUS PERANGKAT (ONLINE / OFFLINE / LOGOUT MICROSIM)
+        if (in_array($eventName, ['DeviceStateChange', 'PeerStatus', 'ContactStatusChange'], true)) {
+            $target = $event['Device'] ?? $event['Peer'] ?? $event['Contact'] ?? '';
+            $state  = $event['State'] ?? $event['PeerStatus'] ?? $event['Status'] ?? '';
 
-            if (preg_match('/(PJSIP|SIP)\/(\d+)/', $device, $matches)) {
+            if (preg_match('/(PJSIP|SIP)\/(\d+)(-|$)/', $target, $matches)) {
                 $extension = $matches[2];
                 $agent = Agent::where('extension', $extension)->first();
 
                 if ($agent) {
-                    $isOnline = !in_array($state, ['UNAVAILABLE', 'INVALID', 'UNKNOWN']);
-                    
-                    // 🚀 LOGIKA BARU: 
-                    // Daemon AMI hanya berhak mengubah status jadi 'offline' jika perangkatnya benar-benar mati/unavailable.
-                    // Jika perangkatnya nyala (isOnline = true), kita JANGAN paksa ubah jadi online otomatis 
-                    // jika agen/supervisor sedang sengaja offline-kan diri (logout dari web). 
-                    // Status 'online' murni dipegang oleh aksi Login Web.
-                    if (!$isOnline && $agent->status !== 'offline') {
+                    // Cek apakah statusnya menandakan mati, unavailable, atau unregister (logout)
+                    $isOfflineState = in_array(strtoupper($state), ['UNAVAILABLE', 'INVALID', 'UNKNOWN', 'UNREGISTERED', 'REJECTED']);
+
+                    if ($isOfflineState && $agent->status !== 'offline') {
                         $agent->status = 'offline';
                         $agent->save();
 
-                        $this->line("🔄 Agen Ext {$extension} terdeteksi mati/unavailable -> Status diubah menjadi OFFLINE");
+                        $this->line("🔄 Agen Ext {$extension} terdeteksi logout/mati (State: {$state}) -> Status otomatis diubah menjadi OFFLINE");
                         broadcast(new AgentStatusUpdated($agent));
                     }
                 }
@@ -143,45 +139,46 @@ class AmiListenCommand extends Command
         }
 
         // 3. DETEKSI AKTIVITAS TELEPON BERDASARKAN EKSTENSI AGEN
-        if (preg_match('/(PJSIP|SIP)\/(\d+)-/', $channel, $matches)) {
+        if (preg_match('/(PJSIP|SIP)\/(\d+)(-|$)/', $channel, $matches)) {
             $extension = $matches[2];
             $agent = Agent::where('extension', $extension)->first();
 
             if ($agent) {
+                
+                // 🛑 PASTIKAN BAGIAN INI ADA DI SINI:
+                if ($agent->status === 'offline') {
+                    $agent->status = 'online';
+                    $agent->save();
+                    
+                    $this->line("🔄 Agen Ext {$extension} mulai beraktivitas -> Status otomatis diubah menjadi ONLINE");
+                    broadcast(new AgentStatusUpdated($agent));
+                }
+
                 // A. Deteksi Nomor Tujuan & Simpan Linkedid saat Ringing/Dial
                 if ($eventName === 'Newexten' || $eventName === 'OriginateResponse' || $eventName === 'DialBegin') {
                     $exten = $event['Exten'] ?? $event['DestChannel'] ?? '';
-
-                    // PENTING: abaikan ekstensi sistem/dialplan khusus seperti "h" (hangup
-                    // handler), "s" (start), "t" (timeout), "i" (invalid), dll. Context-context
-                    // ini ikut memicu Newexten pada channel yang sama SETELAH call sebenarnya
-                    // selesai, dan kalau tidak difilter akan kebaca sebagai "call baru" ke
-                    // tujuan palsu (mis. tujuan: "h"). Nomor tujuan asli selalu berupa digit.
                     $isRealDestination = $exten !== '' && preg_match('/^\+?[0-9]+$/', $exten);
 
                     if (!empty($linkedId) && $isRealDestination) {
-                        // Kalau linkedid sudah ada sebelumnya (retry/failover ke trunk lain),
-                        // pertahankan data 'dest' lama, cukup pastikan cause direset.
                         if (!isset($activeCalls[$extension]) || $activeCalls[$extension]['linkedid'] !== $linkedId) {
                             $activeCalls[$extension] = [
                                 'dest'          => $exten,
                                 'linkedid'      => $linkedId,
-                                'uniqueid'      => $event['Uniqueid'] ?? null, // buat update cdr_live langsung, tanpa nebak
-                                'cause'         => '16', // Default normal
+                                'uniqueid'      => $event['Uniqueid'] ?? null, 
+                                'cause'         => '16', 
                                 'cause_txt'     => 'Normal Clearing',
-                                'answered'      => false, // Belum tersambung/dijawab
-                                'terminated_by' => null,  // 'agent' atau 'tujuan'
+                                'answered'      => false, 
+                                'terminated_by' => null,  
                             ];
 
                             $this->line("🔔 Agen Ext {$extension} RINGING ke tujuan: {$exten} (Linkedid: {$linkedId})");
 
-                            // Broadcast supaya live monitoring langsung baca ada call baru + nomor tujuannya
                             broadcast(new AgentCallActivity($agent, $exten, 'ringing'));
                             Cache::put('active_call_' . $extension, [
-                            'is_calling'  => true,
-                            'call_status' => 'ringing',
-                            'destination' => $exten
-                        ], now()->addHours(2));
+                                'is_calling'  => true,
+                                'call_status' => 'ringing',
+                                'destination' => $exten
+                            ], now()->addHours(2));
                         }
                     }
                 }

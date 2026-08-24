@@ -10,13 +10,13 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     
-    <!-- 🚀 UPDATE 1: Ganti FontAwesome JS ke CSS supaya icon tidak nge-blink saat pindah menu -->
+    <!-- FontAwesome CSS -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     @vite(['resources/js/app.js'])
 
-    <!-- 🚀 UPDATE 2: TURBO HOTWIRE via CDN Resmi & Terstabil -->
+    <!-- TURBO HOTWIRE -->
     <script type="module" src="https://cdn.jsdelivr.net/npm/@hotwired/turbo@8.0.4/dist/turbo.es2017-esm.js"></script>
 
     <script>
@@ -39,14 +39,12 @@
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         [x-cloak] { display: none !important; }
         
-        /* Loading Bar Style untuk Turbo */
         .turbo-progress-bar {
             height: 4px;
             background-color: #14b8a6;
         }
     </style>
     @yield('styles')
-    
 </head>
 <body class="bg-[#f1f5f9] flex h-screen overflow-hidden text-slate-800 font-sans antialiased">
     
@@ -70,7 +68,6 @@
             @if($isAgent)
                 <p class="px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-3 mt-2">Contact Center</p>
                 
-                <!-- 🚀 UPDATE 3: Penambahan parameter "false" agar output linknya menjadi relative (/dashboard/...) -->
                 <a href="{{ route('dashboard.overview', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('dashboard.overview') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
                     <i class="fa-solid fa-layer-group w-5 text-center"></i> Overview
                 </a>
@@ -135,6 +132,28 @@
             @yield('content')
         </div>
     </main>
+
+    <!-- PUSTAKA GLOBAL ECHO & PUSHER -->
+    <!-- PUSTAKA GLOBAL ECHO & PUSHER -->
+    <script src="https://cdn.jsdelivr.net/npm/pusher-js@8.4.0/dist/web/pusher.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/laravel-echo@1.16.1/dist/echo.iife.js"></script>
+    
+    <script>
+        window.Pusher = Pusher;
+
+        // Pastikan window.Echo diubah dari Constructor menjadi Instance yang siap pakai
+        if (typeof window.Echo === 'function') {
+            window.Echo = new window.Echo({
+                broadcaster: 'reverb',
+                key: '{{ env("REVERB_APP_KEY") }}',
+                wsHost: window.location.hostname,
+                wsPort: 8080,
+                wssPort: 8080,
+                forceTLS: false,
+                enabledTransports: ['ws', 'wss'],
+            });
+        }
+    </script>
 
     @yield('scripts')
 </body>

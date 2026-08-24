@@ -216,38 +216,26 @@ class SupervisorMonitoringController extends Controller
     $request->validate([
         'target_channel'  => 'required|string', 
         'mode'            => 'nullable|in:w,B',
-        // Tambahkan validasi untuk ekstensi dinamis Admin
         'spy_ext'         => 'nullable|string'  
     ]);
 
     $supervisorExt = null;
 
-    // 1. PRIORITAS UTAMA: Jika ada input ekstensi dari frontend (Untuk Admin)
+    // 1. PRIORITAS UTAMA: Jika ada input ekstensi dari prompt frontend (Untuk Admin)
     if ($request->filled('spy_ext')) {
         $supervisorExt = $request->spy_ext;
     } 
-    // 2. Jika yang login adalah Supervisor, ambil dari session
+    // 2. Jika yang login adalah Supervisor, ambil langsung dari session
     elseif (session()->has('supervisor_extension')) {
         $supervisorExt = session('supervisor_extension');
-    } 
-    // 3. Fallback deteksi otomatis dari data Agen (jika metode session gagal)
-    elseif (auth()->check()) {
-        $agentExt = str_replace('PJSIP/', '', $request->target_channel);
-        $agent = Agent::where('extension', $agentExt)->first();
-
-        if ($agent && $agent->supervisor_id) {
-            $spvUser = Agent::find($agent->supervisor_id);
-            if ($spvUser) {
-                $supervisorExt = $spvUser->extension;
-            }
-        }
     }
 
-    // HAPUS fallback acak '201' agar tidak nyasar ke sembarang orang
+    // Jika ekstensi pendengar masih kosong, balas dengan error 400
+    // agar JavaScript di frontend memunculkan kotak prompt input ekstensi untuk Admin.
     if (!$supervisorExt) {
         return response()->json([
             'status' => 'error',
-            'message' => 'Ekstensi pendengar tidak ditemukan. Silakan masukkan nomor ekstensi Anda untuk mendengarkan.'
+            'message' => 'Ekstensi pendengar tidak ditemukan. Silakan masukkan nomor ekstensi softphone Anda untuk mendengarkan.'
         ], 400);
     }
 

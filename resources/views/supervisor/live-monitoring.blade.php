@@ -46,15 +46,17 @@
     </div>
 
     <!-- GRID CARD AGEN -->
+    <!-- GRID CARD AGEN -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         <template x-for="agent in agents" :key="agent.id">
             <div class="bg-white rounded-2xl shadow-sm border p-5 flex flex-col justify-between transition-all duration-300 hover:shadow-md relative overflow-hidden"
                  :class="{
-                     'border-slate-200': !agent.is_calling,
+                     'border-slate-200': !agent.is_calling && agent.status !== 'offline',
+                     'border-slate-200/60 bg-slate-50/60 opacity-60': agent.status === 'offline',
                      'border-amber-400 ring-2 ring-amber-500/20 bg-amber-50/10': agent.call_status === 'ringing',
                      'border-emerald-400 ring-2 ring-emerald-500/20 bg-emerald-50/10': agent.call_status === 'connected'
                  }">
-                 
+                  
                 <!-- Animated pulse background for connected -->
                 <div x-show="agent.call_status === 'connected'" class="absolute inset-0 bg-emerald-400/5 animate-pulse z-0 pointer-events-none"></div>
 
@@ -124,21 +126,7 @@
 @endsection
 
 @section('scripts')
-<script src="https://cdn.jsdelivr.net/npm/pusher-js@8.4.0/dist/web/pusher.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/laravel-echo@1.16.1/dist/echo.iife.js"></script>
-
 <script>
-    window.Pusher = Pusher;
-    window.Echo = new Echo({
-        broadcaster: 'reverb',
-        key: '{{ env("REVERB_APP_KEY") }}',
-        wsHost: window.location.hostname,
-        wsPort: 8080,
-        wssPort: 8080,
-        forceTLS: false,
-        enabledTransports: ['ws', 'wss'],
-    });
-
     function supervisorDashboard() {
         return {
             agents: [],
@@ -149,37 +137,35 @@
                     this.fetchAgents();
                 }, 300);
 
-                window.Echo.channel('supervisor.dashboard')
-                    .listen('.agent.status.updated', (e) => {
-                        console.log("🔥 STATUS UPDATE MASUK:", e);
-                        let index = this.agents.findIndex(a => a.id === e.agent.id);
-                        if(index !== -1) {
-                            this.agents[index].status = e.agent.status;
-                            this.updateStats();
-                        }
-                    })
-                    .listen('.agent.call.activity', (e) => {
-                        console.log("🔥 EVENT CALL ACTIVITY MASUK:", e);
-                        let index = this.agents.findIndex(a => a.extension == e.agent.extension);
-                        
-                        if(index !== -1) {
-                            if (e.status === 'ended') {
-                                this.agents[index] = {
-                                    ...this.agents[index],
-                                    is_calling: false,
-                                    call_status: null,
-                                    current_destination: null
-                                };
-                            } else {
-                                this.agents[index] = {
-                                    ...this.agents[index],
-                                    is_calling: true,
-                                    call_status: e.status, 
-                                    current_destination: e.destination
-                                };
-                            }
-                        }
-                    });
+                // Memakai window.Echo global yang sudah aman di app.blade.php
+                if (window.Echo) {
+                    window.Echo.channel('supervisor.dashboard')
+    .listen('.agent.status.updated', (e) => {
+        if (!e.agent) return;
+        let index = this.agents.findIndex(a => a.id === e.agent.id);
+        if (index !== -1) {
+            this.agents[index].status = e.agent.status;
+            this.updateStats();
+        }
+    })
+    .listen('.agent.call.activity', (e) => {
+        if (!e.agent) return;
+        let index = this.agents.findIndex(a => String(a.extension) === String(e.agent.extension));
+        
+        if (index !== -1) {
+            // Gunakan Object.assign agar reaktifitas Alpine.js tidak merusak scope 'agent' di HTML
+            if (e.status === 'ended') {
+                this.agents[index].is_calling = false;
+                this.agents[index].call_status = null;
+                this.agents[index].current_destination = null;
+            } else {
+                this.agents[index].is_calling = true;
+                this.agents[index].call_status = e.status;
+                this.agents[index].current_destination = e.destination;
+            }
+        }
+    });
+                }
             },
 
             fetchAgents() {
@@ -217,7 +203,6 @@
                     mode: mode 
                 };
                 
-                // Tambahkan spy_ext ke request jika Admin mengisi prompt
                 if (spyExt) {
                     payload.spy_ext = spyExt;
                 }
@@ -232,11 +217,9 @@
                 })
                 .then(res => res.json().then(data => ({ status: res.status, body: data })))
                 .then(resData => {
-                    // Jika API membalas 400 (Ekstensi Admin tidak ditemukan), jalankan PROMPT
                     if (resData.status === 400) {
                         let adminExt = prompt(resData.body.message + "\n\nMasukkan nomor ekstensi softphone yang sedang Anda gunakan (Cth: 199):");
                         
-                        // Jika Admin menekan OK dan memasukkan nomor, ulang eksekusi dengan nomor tersebut
                         if (adminExt) {
                             this.triggerSpy(agentExt, mode, adminExt);
                         }
