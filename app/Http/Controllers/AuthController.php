@@ -33,7 +33,7 @@ class AuthController extends Controller
             }
 
             // Jika dia Admin biasa / Manager, arahkan ke manajemen agent
-            return redirect('/admin/agents');
+            return redirect('/dashboard/agents');
         }
 
         return back()->with('error', 'Email atau password salah!')->onlyInput('email');
@@ -64,7 +64,7 @@ class AuthController extends Controller
                 $agent->save();
 
                 // Arahkan ke Dashboard Supervisor
-                return redirect('/supervisor/dashboard');
+                return redirect()->route('dashboard.overview');
             }
 
             // 2. JIKA YANG LOGIN ADALAH AGEN BIASA (CS)

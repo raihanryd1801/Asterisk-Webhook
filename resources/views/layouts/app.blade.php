@@ -6,13 +6,18 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>OmniDial - Contact Center Dashboard</title>
     
-    <!-- Tailwind, Alpine, FontAwesome -->
-    <script>window.FontAwesomeConfig = { autoReplaceSvg: 'nest' };</script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+    <!-- Tailwind, Alpine -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- 🚀 UPDATE 1: Ganti FontAwesome JS ke CSS supaya icon tidak nge-blink saat pindah menu -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     @vite(['resources/js/app.js'])
+
+    <!-- 🚀 UPDATE 2: TURBO HOTWIRE via CDN Resmi & Terstabil -->
+    <script type="module" src="https://cdn.jsdelivr.net/npm/@hotwired/turbo@8.0.4/dist/turbo.es2017-esm.js"></script>
 
     <script>
         tailwind.config = {
@@ -33,6 +38,12 @@
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         [x-cloak] { display: none !important; }
+        
+        /* Loading Bar Style untuk Turbo */
+        .turbo-progress-bar {
+            height: 4px;
+            background-color: #14b8a6;
+        }
     </style>
     @yield('styles')
     
@@ -58,33 +69,37 @@
         <nav class="flex-1 overflow-y-auto py-4 px-3 space-y-1">
             @if($isAgent)
                 <p class="px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-3 mt-2">Contact Center</p>
-                <a href="/agent/overview" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->is('agent/overview*') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
+                
+                <!-- 🚀 UPDATE 3: Penambahan parameter "false" agar output linknya menjadi relative (/dashboard/...) -->
+                <a href="{{ route('dashboard.overview', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('dashboard.overview') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
                     <i class="fa-solid fa-layer-group w-5 text-center"></i> Overview
                 </a>
-                <a href="/agent/{{ session('agent_extension') }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->is('agent/'.session('agent_extension')) ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
+                
+                <a href="{{ route('dashboard.workspace', session('agent_extension'), false) }}" data-turbo="false" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('dashboard.workspace') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
                     <i class="fa-solid fa-border-all w-5 text-center"></i> Workspace
                 </a>
             @else
                 <p class="px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-3 mt-2">Main Menu</p>
-                <a href="/agent/overview" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->is('agent/overview*') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
+                
+                <a href="{{ route('dashboard.overview', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('dashboard.overview') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
                     <i class="fa-solid fa-layer-group w-5 text-center"></i> Overview
                 </a>
 
                 @if(auth()->check() && auth()->user()->role === 'admin')
                     <p class="px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-3 mt-6">Admin Management</p>
-                    <a href="{{ route('admin.agents.index') }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->is('admin/agents*') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
+                    <a href="{{ route('dashboard.agents.index', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('dashboard.agents.*') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
                         <i class="fa-solid fa-headset w-5 text-center"></i> Agent Management
                     </a>
-                    <a href="{{ route('admin.users.index') }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->is('admin/users*') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
+                    <a href="{{ route('dashboard.users.index', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('dashboard.users.*') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
                         <i class="fa-solid fa-users w-5 text-center"></i> User Management
                     </a>
                 @endif
 
                 <p class="px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-3 mt-6">Monitoring & Reports</p>
-                <a href="/supervisor/dashboard" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->is('supervisor/dashboard*') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
+                <a href="{{ route('dashboard.live-monitoring', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('dashboard.live-monitoring') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
                     <i class="fa-solid fa-chart-pie w-5 text-center"></i> Live Monitoring
                 </a>
-                <a href="/supervisor/call-history" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->is('supervisor/call-history*') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
+                <a href="{{ route('dashboard.call-history', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('dashboard.call-history') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
                     <i class="fa-solid fa-clock-rotate-left w-5 text-center"></i> Call History
                 </a>
             @endif
@@ -106,7 +121,7 @@
                         </p>
                     @endif
                 </div>
-                <form action="{{ $isAgent ? url('/agent/logout') : (session()->has('supervisor_extension') ? route('supervisor.logout') : route('logout')) }}" method="POST">
+                <form action="{{ $isAgent ? url('/agent/logout') : url('/logout') }}" method="POST" data-turbo="false">
                     @csrf
                     <button type="submit" class="text-slate-500 hover:text-red-400 transition-colors" title="Logout"><i class="fa-solid fa-right-from-bracket"></i></button>
                 </form>

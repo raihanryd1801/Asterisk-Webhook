@@ -183,7 +183,7 @@
             },
 
             fetchAgents() {
-                fetch('/supervisor/agents', {
+                fetch('/dashboard/api/live-agents', {
                     headers: {
                         'Accept': 'application/json',
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
@@ -222,7 +222,7 @@
                     payload.spy_ext = spyExt;
                 }
 
-                fetch('/supervisor/spy', {
+                fetch('/dashboard/api/spy', {
                     method: 'POST',
                     headers: { 
                         'Content-Type': 'application/json', 

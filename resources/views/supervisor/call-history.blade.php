@@ -14,7 +14,8 @@
         
         <!-- Tombol Aksi Kanan -->
         <div class="flex items-center gap-2 flex-wrap">
-            <a :href="'/supervisor/call-logs/export?' + new URLSearchParams(filters).toString()" 
+            <!-- 🚀 FIX 1: URL Export Excel -->
+            <a :href="'/dashboard/api/call-logs/export?' + new URLSearchParams(filters).toString()" 
                target="_blank"
                class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-sm font-medium shadow-sm transition flex items-center gap-2">
                 <i class="fa-solid fa-file-excel text-xs"></i> Export Excel
@@ -43,7 +44,7 @@
             <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Filter Agen</label>
             <select x-model="filters.agent_extension" class="w-full border border-slate-200 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50">
                 <option value="">-- Semua Agen --</option>
-                <template x-for="agent in agents" :key="agent.id">
+                <template x-for="agent in agents" :key="agent.extension">
                     <option :value="agent.extension" x-text="agent.name + ' (Ext: ' + agent.extension + ')'"></option>
                 </template>
             </select>
@@ -68,9 +69,7 @@
                         <th class="px-6 py-4">Asal (SRC)</th>
                         <th class="px-6 py-4">Tujuan (DST)</th>
                         <th class="px-6 py-4">Status</th>
-                        <!-- Kolom SIP Error Code -->
                         <th class="px-6 py-4">SIP Error Code</th>
-                        <!-- Kolom Ditutup Oleh (BARU) -->
                         <th class="px-6 py-4">Ditutup Oleh</th>
                         <th class="px-6 py-4">Durasi</th>
                         <th class="px-6 py-4">Rekaman</th>
@@ -90,10 +89,6 @@
                                 </span>
                             </td>
 
-                            <!-- Data Kolom SIP Error Code -->
-                            <!-- FIX: format sip_code sekarang "200 OK" / "487 Request Terminated"
-                                 dst (bukan "200" / "Normal Clearing" lagi), jadi pengecekan warna
-                                 badge pakai startsWith('200') supaya tetap akurat -->
                             <td class="px-6 py-4 font-mono text-xs">
                                 <span class="px-2 py-1 rounded font-bold text-[11px]"
                                     :class="(!log.sip_code || log.sip_code.startsWith('200')) ? 'bg-slate-100 text-slate-600' : 'bg-rose-50 text-rose-600 border border-rose-100'"
@@ -101,7 +96,6 @@
                                 </span>
                             </td>
 
-                            <!-- Data Kolom Ditutup Oleh (BARU) -->
                             <td class="px-6 py-4 text-xs">
                                 <template x-if="log.terminated_by">
                                     <span class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-semibold"
@@ -117,7 +111,7 @@
 
                             <td class="px-6 py-4 text-slate-600 font-mono text-xs" x-text="log.billsec + ' dtk'"></td>
                             
-                            <!-- Kolom Rekaman dengan Tombol Listen & Mini Player -->
+                            <!-- Kolom Rekaman -->
                             <td class="px-6 py-4">
                                 <template x-if="log.recordingfile">
                                     <div class="flex items-center gap-2">
@@ -127,7 +121,8 @@
                                                         class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium shadow-sm transition active:scale-95">
                                                     <i class="fa-solid fa-play text-[10px] text-brand-600"></i> Listen
                                                 </button>
-                                                <a :href="'/supervisor/play-recording?file=' + log.recordingfile" 
+                                                <!-- 🚀 FIX 2: URL Download Rekaman -->
+                                                <a :href="'/dashboard/api/play-recording?file=' + log.recordingfile" 
                                                    download
                                                    class="inline-flex items-center justify-center w-7 h-7 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 shadow-sm transition active:scale-95" 
                                                    title="Download Rekaman">
@@ -223,7 +218,8 @@
                 }
 
                 this.playingFile = filename;
-                let audioUrl = '/supervisor/play-recording?file=' + filename;
+                // 🚀 FIX 3: URL Audio Player
+                let audioUrl = '/dashboard/api/play-recording?file=' + filename;
                 this.currentAudio = new Audio(audioUrl);
                 
                 this.currentAudio.play().then(() => {
@@ -276,7 +272,7 @@
             },
 
             fetchAgentsList() {
-                fetch('/supervisor/agents', { headers: { 'Accept': 'application/json' } })
+                fetch('/dashboard/api/live-agents', { headers: { 'Accept': 'application/json' } })
                 .then(res => res.json())
                 .then(data => { this.agents = data.agents || []; });
             },
@@ -290,7 +286,8 @@
                     agent_extension: this.filters.agent_extension
                 });
 
-                fetch(`/supervisor/call-logs?${params.toString()}`, { headers: { 'Accept': 'application/json' } })
+                // 🚀 FIX 4: URL Fetch Data
+                fetch(`/dashboard/api/call-logs?${params.toString()}`, { headers: { 'Accept': 'application/json' } })
                 .then(res => res.json())
                 .then(response => {
                     if (response.status === 'success') {

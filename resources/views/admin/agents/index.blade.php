@@ -164,7 +164,7 @@ function agentManagement() {
 
         submitForm() {
             this.isLoading = true;
-            let url = this.isEdit ? `/admin/agents/${this.form.id}` : '/admin/agents/store';
+            let url = this.isEdit ? `/dashboard/agents/${this.form.id}` : '/dashboard/agents/store';
             let method = this.isEdit ? 'PUT' : 'POST';
 
             fetch(url, {
