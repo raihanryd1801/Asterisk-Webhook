@@ -83,13 +83,17 @@ class AmiListenCommand extends Command
 
                 if ($agent) {
                     $isOnline = !in_array($state, ['UNAVAILABLE', 'INVALID', 'UNKNOWN']);
-                    $newStatus = $isOnline ? 'online' : 'offline';
-
-                    if ($agent->status !== $newStatus) {
-                        $agent->status = $newStatus;
+                    
+                    // 🚀 LOGIKA BARU: 
+                    // Daemon AMI hanya berhak mengubah status jadi 'offline' jika perangkatnya benar-benar mati/unavailable.
+                    // Jika perangkatnya nyala (isOnline = true), kita JANGAN paksa ubah jadi online otomatis 
+                    // jika agen/supervisor sedang sengaja offline-kan diri (logout dari web). 
+                    // Status 'online' murni dipegang oleh aksi Login Web.
+                    if (!$isOnline && $agent->status !== 'offline') {
+                        $agent->status = 'offline';
                         $agent->save();
 
-                        $this->line("🔄 Agen Ext {$extension} berubah status menjadi: <fg=cyan>{$newStatus}</> (State: {$state})");
+                        $this->line("🔄 Agen Ext {$extension} terdeteksi mati/unavailable -> Status diubah menjadi OFFLINE");
                         broadcast(new AgentStatusUpdated($agent));
                     }
                 }
@@ -173,6 +177,11 @@ class AmiListenCommand extends Command
 
                             // Broadcast supaya live monitoring langsung baca ada call baru + nomor tujuannya
                             broadcast(new AgentCallActivity($agent, $exten, 'ringing'));
+                            Cache::put('active_call_' . $extension, [
+                            'is_calling'  => true,
+                            'call_status' => 'ringing',
+                            'destination' => $exten
+                        ], now()->addHours(2));
                         }
                     }
                 }

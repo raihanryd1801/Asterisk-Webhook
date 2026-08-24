@@ -57,13 +57,14 @@ class AuthController extends Controller
             
             // 1. JIKA YANG LOGIN ADALAH SUPERVISOR
             if (isset($agent->role) && $agent->role === 'supervisor') {
-                // Buat session khusus supervisor
                 session(['supervisor_extension' => $agent->extension]);
                 
                 $agent->status = 'online';
                 $agent->save();
 
-                // Arahkan ke Dashboard Supervisor
+                // 🚀 PANCARKAN EVENT SPV ONLINE KE DASHBOARD
+                broadcast(new \App\Events\AgentStatusUpdated($agent));
+
                 return redirect()->route('dashboard.overview');
             }
 
@@ -76,25 +77,35 @@ class AuthController extends Controller
             // Kirim broadcast status online
             broadcast(new \App\Events\AgentStatusUpdated($agent));
 
-            return redirect('/agent/' . $agent->extension);
+            return redirect('/dashboard/workspace/' . $agent->extension);
         }
 
         return back()->with('error', 'Nomor Ekstensi atau Password SIP salah!')->withInput();
     }
 
-    // ================= LOGOUT =================
-    public function logout(Request $request)
+    // ================= LOGOUT UTAMA =================
+   public function logout(Request $request)
     {
+        // 1. Jika yang logout adalah Agent
         if (session()->has('agent_extension')) {
             $agent = Agent::where('extension', session('agent_extension'))->first();
             if ($agent) {
                 $agent->status = 'offline';
                 $agent->save();
-
-                // 🚀 KIRIM BROADCAST SAAT LOGOUT
                 broadcast(new \App\Events\AgentStatusUpdated($agent));
             }
             session()->forget('agent_extension');
+        }
+
+        // 2. 🚀 TAMBAHKAN INI: Jika yang logout adalah Supervisor
+        if (session()->has('supervisor_extension')) {
+            $supervisor = Agent::where('extension', session('supervisor_extension'))->first();
+            if ($supervisor) {
+                $supervisor->status = 'offline';
+                $supervisor->save();
+                broadcast(new \App\Events\AgentStatusUpdated($supervisor));
+            }
+            session()->forget('supervisor_extension');
         }
 
         Auth::logout();
@@ -131,6 +142,9 @@ class AuthController extends Controller
             if ($supervisor) {
                 $supervisor->status = 'offline';
                 $supervisor->save();
+                
+                // 🚀 Tambahkan ini supaya Supervisor juga real-time
+                broadcast(new \App\Events\AgentStatusUpdated($supervisor));
             }
             session()->forget('supervisor_extension');
         }
