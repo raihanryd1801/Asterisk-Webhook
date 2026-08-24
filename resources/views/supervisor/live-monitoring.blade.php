@@ -127,45 +127,65 @@
 
 @section('scripts')
 <script>
+    // 🚀 1. Cegah Turbo melakukan cache pada halaman realtime ini
+    if (!document.querySelector('meta[name="turbo-cache-control"]')) {
+        let meta = document.createElement('meta');
+        meta.name = 'turbo-cache-control';
+        meta.content = 'no-cache';
+        document.head.appendChild(meta);
+    }
+
     function supervisorDashboard() {
         return {
             agents: [],
             stats: { online: 0, break: 0, offline: 0 },
-            
+
             init() {
                 setTimeout(() => {
                     this.fetchAgents();
                 }, 300);
 
-                // Memakai window.Echo global yang sudah aman di app.blade.php
                 if (window.Echo) {
                     window.Echo.channel('supervisor.dashboard')
-    .listen('.agent.status.updated', (e) => {
-        if (!e.agent) return;
-        let index = this.agents.findIndex(a => a.id === e.agent.id);
-        if (index !== -1) {
-            this.agents[index].status = e.agent.status;
-            this.updateStats();
-        }
-    })
-    .listen('.agent.call.activity', (e) => {
-        if (!e.agent) return;
-        let index = this.agents.findIndex(a => String(a.extension) === String(e.agent.extension));
-        
-        if (index !== -1) {
-            // Gunakan Object.assign agar reaktifitas Alpine.js tidak merusak scope 'agent' di HTML
-            if (e.status === 'ended') {
-                this.agents[index].is_calling = false;
-                this.agents[index].call_status = null;
-                this.agents[index].current_destination = null;
-            } else {
-                this.agents[index].is_calling = true;
-                this.agents[index].call_status = e.status;
-                this.agents[index].current_destination = e.destination;
-            }
-        }
-    });
+                        .listen('.agent.status.updated', (e) => {
+                            if (!e.agent) return;
+                            let index = this.agents.findIndex(a => a.id === e.agent.id);
+                            if (index !== -1) {
+                                this.agents[index].status = e.agent.status;
+                                this.updateStats();
+                            }
+                        })
+                        .listen('.agent.call.activity', (e) => {
+                            if (!e.agent) return;
+                            let index = this.agents.findIndex(a => String(a.extension) === String(e.agent.extension));
+
+                            if (index !== -1) {
+                                if (e.status === 'ended') {
+                                    this.agents[index].is_calling = false;
+                                    this.agents[index].call_status = null;
+                                    this.agents[index].current_destination = null;
+                                } else {
+                                    this.agents[index].is_calling = true;
+                                    this.agents[index].call_status = e.status;
+                                    this.agents[index].current_destination = e.destination;
+                                }
+                            }
+                        });
                 }
+
+                // 🚀 2. CLEANUP: Bersihkan Listener WebSocket & Aturan Cache saat pindah menu
+                document.addEventListener('turbo:before-visit', () => {
+                    // Hapus aturan no-cache agar tidak mengganggu halaman lain
+                    let meta = document.querySelector('meta[name="turbo-cache-control"]');
+                    if (meta) meta.remove();
+
+                    // Putuskan WebSocket agar tidak duplikat saat balik lagi
+                    // Pakai optional chaining (?.) supaya tidak error kalau
+                    // window.Echo belum siap / bukan instance yang benar.
+                    if (window.Echo?.leaveChannel) {
+                        window.Echo.leaveChannel('supervisor.dashboard');
+                    }
+                }, { once: true });
             },
 
             fetchAgents() {
@@ -175,20 +195,20 @@
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
                     }
                 })
-                .then(res => res.json())
-                .then(data => {
-                    let agentList = Array.isArray(data) ? data : (data.agents || []);
-                    
-                    this.agents = agentList.map(agent => ({
-                        ...agent,
-                        is_calling: agent.is_calling ?? false,
-                        call_status: agent.call_status ?? null,
-                        current_destination: agent.current_destination ?? null
-                    }));
-                    
-                    this.updateStats();
-                })
-                .catch(err => console.error("Gagal mengambil data agen:", err));
+                    .then(res => res.json())
+                    .then(data => {
+                        let agentList = Array.isArray(data) ? data : (data.agents || []);
+
+                        this.agents = agentList.map(agent => ({
+                            ...agent,
+                            is_calling: agent.is_calling ?? false,
+                            call_status: agent.call_status ?? null,
+                            current_destination: agent.current_destination ?? null
+                        }));
+
+                        this.updateStats();
+                    })
+                    .catch(err => console.error("Gagal mengambil data agen:", err));
             },
 
             updateStats() {
@@ -198,38 +218,37 @@
             },
 
             triggerSpy(agentExt, mode, spyExt = null) {
-                let payload = { 
-                    target_channel: 'PJSIP/' + agentExt, 
-                    mode: mode 
+                let payload = {
+                    target_channel: 'PJSIP/' + agentExt,
+                    mode: mode
                 };
-                
+
                 if (spyExt) {
                     payload.spy_ext = spyExt;
                 }
 
                 fetch('/dashboard/api/spy', {
                     method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json', 
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content') 
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
                     },
                     body: JSON.stringify(payload)
                 })
-                .then(res => res.json().then(data => ({ status: res.status, body: data })))
-                .then(resData => {
-                    if (resData.status === 400) {
-                        let adminExt = prompt(resData.body.message + "\n\nMasukkan nomor ekstensi softphone yang sedang Anda gunakan (Cth: 199):");
-                        
-                        if (adminExt) {
-                            this.triggerSpy(agentExt, mode, adminExt);
+                    .then(res => res.json().then(data => ({ status: res.status, body: data })))
+                    .then(resData => {
+                        if (resData.status === 400) {
+                            let adminExt = prompt(resData.body.message + "\n\nMasukkan nomor ekstensi softphone yang sedang Anda gunakan (Cth: 199):");
+                            if (adminExt) {
+                                this.triggerSpy(agentExt, mode, adminExt);
+                            }
+                        } else if (resData.body.status === 'success') {
+                            alert(resData.body.message);
+                        } else {
+                            alert('Gagal: ' + (resData.body.message || 'Terjadi kesalahan sistem.'));
                         }
-                    } else if (resData.body.status === 'success') {
-                        alert(resData.body.message);
-                    } else {
-                        alert('Gagal: ' + (resData.body.message || 'Terjadi kesalahan sistem.'));
-                    }
-                })
-                .catch(err => console.error("Gagal mengeksekusi spy:", err));
+                    })
+                    .catch(err => console.error("Gagal mengeksekusi spy:", err));
             }
         }
     }

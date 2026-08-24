@@ -134,27 +134,36 @@
     </main>
 
     <!-- PUSTAKA GLOBAL ECHO & PUSHER -->
-    <!-- PUSTAKA GLOBAL ECHO & PUSHER -->
-    <script src="https://cdn.jsdelivr.net/npm/pusher-js@8.4.0/dist/web/pusher.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/laravel-echo@1.16.1/dist/echo.iife.js"></script>
-    
-    <script>
-        window.Pusher = Pusher;
+    <script src="https://cdn.jsdelivr.net/npm/pusher-js@8.4.0/dist/web/pusher.min.js" data-turbo-eval="false"></script>
+<script src="https://cdn.jsdelivr.net/npm/laravel-echo@1.16.1/dist/echo.iife.js" data-turbo-eval="false"></script>
 
-        // Pastikan window.Echo diubah dari Constructor menjadi Instance yang siap pakai
-        if (typeof window.Echo === 'function') {
-            window.Echo = new window.Echo({
-                broadcaster: 'reverb',
-                key: '{{ env("REVERB_APP_KEY") }}',
-                wsHost: window.location.hostname,
-                wsPort: 8080,
-                wssPort: 8080,
-                forceTLS: false,
-                enabledTransports: ['ws', 'wss'],
-            });
-        }
-    </script>
+<script data-turbo-eval="false">
+    window.Pusher = Pusher;
 
-    @yield('scripts')
+    if (typeof window.Echo === 'function') {
+        window.Echo = new window.Echo({
+            broadcaster: 'reverb',
+            key: '{{ env("REVERB_APP_KEY") }}',
+            wsHost: window.location.hostname,
+            wsPort: 8080,
+            wssPort: 8080,
+            forceTLS: false,
+            enabledTransports: ['ws', 'wss'],
+        });
+    }
+
+    // 🚀 Cegah Alpine "nyangkut" di snapshot cache Turbo.
+    // Bersihkan semua komponen Alpine sebelum Turbo menyimpan cache halaman,
+    // supaya saat snapshot itu ditampilkan lagi, Alpine init ulang dari nol
+    // (x-for, x-data, dll dievaluasi bersih, tidak ada binding "log is not defined").
+    document.addEventListener('turbo:before-cache', () => {
+        document.querySelectorAll('[x-data]').forEach((el) => {
+            if (window.Alpine) {
+                window.Alpine.destroyTree(el);
+            }
+        });
+    });
+</script>
+@yield('scripts')
 </body>
 </html>
