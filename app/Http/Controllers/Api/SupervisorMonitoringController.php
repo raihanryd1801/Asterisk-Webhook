@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Log;
 use App\Exports\CallLogsExport;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Jobs\ProvisionAsteriskAgent;
+use Illuminate\Support\Facades\DB;
 
 class SupervisorMonitoringController extends Controller
 {
@@ -260,12 +261,59 @@ class SupervisorMonitoringController extends Controller
         ], 500);
     }
 }
+public function saveNote(Request $request, $uniqueid)
+{
+    $request->validate([
+        'notes' => 'nullable|string'
+    ]);
+
+    try {
+        $tableName = (new \App\Models\Cdr())->getTable();
+        $cleanId = trim($uniqueid);
+
+        // 1. Cek dulu apakah data dengan uniqueid tersebut benar-benar ada di tabel cdr_live
+        $record = DB::table($tableName)->where('uniqueid', $cleanId)->first();
+
+        if (!$record) {
+            // Coba cari dengan LIKE untuk melihat apakah ada string yang mirip (mengantisipasi ekstensi/karakter tambahan)
+            $similar = DB::table($tableName)->where('uniqueid', 'like', "%{$cleanId}%")->first();
+            
+            $msg = "Uniqueid '{$cleanId}' tidak ditemukan di tabel '{$tableName}'.";
+            if ($similar) {
+                $msg .= " (Peringatan: Ditemukan uniqueid mirip di DB yaitu '{$similar->uniqueid}')";
+            }
+
+            return response()->json([
+                'status' => 'error',
+                'message' => $msg
+            ], 404);
+        }
+
+        // 2. Jika ketemu, lakukan update
+        DB::table($tableName)
+            ->where('uniqueid', $cleanId)
+            ->update([
+                'notes' => $request->notes
+            ]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Catatan berhasil disimpan!'
+        ]);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Database Error: ' . $e->getMessage()
+        ], 500);
+    }
+}
 
     public function callLogs(Request $request)
 {
     $query = Cdr::select([
-        'calldate', 'src', 'dst', 'duration', 
-        'billsec', 'disposition', 'recordingfile', 'cnam', 'cnum', 'sip_code', 'terminated_by'// <-- Tambahkan 'sip_code' di sini
+        'uniqueid','calldate', 'src', 'dst', 'duration', 
+        'billsec', 'disposition', 'recordingfile', 'cnam', 'cnum', 'sip_code', 'terminated_by','notes'// <-- Tambahkan 'sip_code' di sini
     ])->orderBy('calldate', 'desc');
 
     if (session()->has('supervisor_extension')) {

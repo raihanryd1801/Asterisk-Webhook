@@ -151,6 +151,14 @@ Route::prefix('dashboard')->group(function () {
         return view('agent.workspace', ['extension' => $extension, 'sipPassword' => $agent->secret]);
     })->name('dashboard.workspace');
 
+    // 🚀 INI YANG KURANG: Rute Halaman Call History Khusus Agent
+    Route::get('/agent/call-history', function () {
+        if (!session()->has('agent_extension')) {
+            return redirect('/agent/login')->with('error', 'Silakan login terlebih dahulu.');
+        }
+        return view('agent.call-history', ['extension' => session('agent_extension')]);
+    })->name('dashboard.agent.call-history');
+
     // 3. Supervisor & Admin Monitoring
     Route::get('/live-monitoring', [SupervisorController::class, 'dashboard'])->name('dashboard.live-monitoring');
     
@@ -160,7 +168,7 @@ Route::prefix('dashboard')->group(function () {
         }
         return view('supervisor.call-history');
     })->name('dashboard.call-history');
-
+    
     // 4. Admin Management (Hanya Admin)
     Route::middleware(['auth', 'role:admin'])->group(function () {
         Route::get('/users', [UserController::class, 'index'])->name('dashboard.users.index');
@@ -181,6 +189,8 @@ Route::prefix('dashboard')->group(function () {
     Route::get('/api/play-recording', [SupervisorMonitoringController::class, 'playRecording']);
     Route::post('/api/agent/{extension}/status', [SupervisorMonitoringController::class, 'updateStatus']);
     Route::post('/api/agent/click-to-call', [SupervisorMonitoringController::class, 'agentClickToCall']);
+    Route::post('/api/call-logs/{uniqueid}/note', [SupervisorMonitoringController::class, 'saveNote']);
+
 });
 
 // ==========================================

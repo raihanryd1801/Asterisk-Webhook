@@ -9,12 +9,11 @@
             <h1 class="text-xl font-semibold text-slate-800 flex items-center gap-2">
                 <i class="fa-solid fa-clock-rotate-left text-brand-600"></i> Call History & Recordings
             </h1>
-            <p class="text-sm text-slate-500 mt-0.5">Arsip riwayat percakapan telepon lengkap dengan filter pencarian dan pemutar rekaman.</p>
+            <p class="text-sm text-slate-500 mt-0.5">Arsip riwayat percakapan telepon lengkap dengan catatan dari agen dan rekaman.</p>
         </div>
         
         <!-- Tombol Aksi Kanan -->
         <div class="flex items-center gap-2 flex-wrap">
-            <!-- 🚀 FIX 1: URL Export Excel -->
             <a :href="'/dashboard/api/call-logs/export?' + new URLSearchParams(filters).toString()" 
                target="_blank"
                class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-sm font-medium shadow-sm transition flex items-center gap-2">
@@ -72,18 +71,20 @@
                         <th class="px-6 py-4">SIP Error Code</th>
                         <th class="px-6 py-4">Ditutup Oleh</th>
                         <th class="px-6 py-4">Durasi</th>
+                        <!-- Kolom Catatan (Read-Only untuk Supervisor) -->
+                        <th class="px-6 py-4 w-72">Catatan Agen</th>
                         <th class="px-6 py-4">Rekaman</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
-                    <template x-for="(log, index) in logs" :key="index">
+                    <template x-for="(log, index) in logs" :key="log.uniqueid || index">
                         <tr class="hover:bg-slate-50/70 transition-colors">
                             <td class="px-6 py-4 text-slate-600 num text-xs" x-text="log.calldate"></td>
                             <td class="px-6 py-4 font-mono font-medium text-slate-800" x-text="log.src"></td>
                             <td class="px-6 py-4 font-mono text-brand-600" x-text="log.dst"></td>
                             <td class="px-6 py-4">
                                 <span class="inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-full border uppercase"
-                                    :class="log.disposition === 'ANSWERED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100'">
+                                      :class="log.disposition === 'ANSWERED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100'">
                                     <span class="w-1.5 h-1.5 rounded-full" :class="log.disposition === 'ANSWERED' ? 'bg-emerald-500' : 'bg-red-500'"></span>
                                     <span x-text="log.disposition"></span>
                                 </span>
@@ -91,15 +92,15 @@
 
                             <td class="px-6 py-4 font-mono text-xs">
                                 <span class="px-2 py-1 rounded font-bold text-[11px]"
-                                    :class="(!log.sip_code || log.sip_code.startsWith('200')) ? 'bg-slate-100 text-slate-600' : 'bg-rose-50 text-rose-600 border border-rose-100'"
-                                    x-text="log.sip_code || '200 OK'">
+                                      :class="(!log.sip_code || log.sip_code.startsWith('200')) ? 'bg-slate-100 text-slate-600' : 'bg-rose-50 text-rose-600 border border-rose-100'"
+                                      x-text="log.sip_code || '200 OK'">
                                 </span>
                             </td>
 
                             <td class="px-6 py-4 text-xs">
                                 <template x-if="log.terminated_by">
                                     <span class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-semibold"
-                                        :class="log.terminated_by === 'Agent' ? 'bg-sky-50 text-sky-600 border border-sky-100' : 'bg-amber-50 text-amber-600 border border-amber-100'">
+                                          :class="log.terminated_by === 'Agent' ? 'bg-sky-50 text-sky-600 border border-sky-100' : 'bg-amber-50 text-amber-600 border border-amber-100'">
                                         <i :class="log.terminated_by === 'Agent' ? 'fa-solid fa-headset' : 'fa-solid fa-phone-volume'" class="text-[9px]"></i>
                                         <span x-text="log.terminated_by === 'Agent' ? 'Agent' : log.terminated_by"></span>
                                     </span>
@@ -111,6 +112,12 @@
 
                             <td class="px-6 py-4 text-slate-600 font-mono text-xs" x-text="log.billsec + ' dtk'"></td>
                             
+                            <!-- TAMPILAN CATATAN (READ-ONLY) -->
+                            <td class="px-6 py-4 text-xs">
+                                <span x-text="log.notes || '-'" 
+                                      :class="log.notes ? 'text-slate-700 font-medium' : 'text-slate-400 italic'"></span>
+                            </td>
+
                             <!-- Kolom Rekaman -->
                             <td class="px-6 py-4">
                                 <template x-if="log.recordingfile">
@@ -121,7 +128,6 @@
                                                         class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium shadow-sm transition active:scale-95">
                                                     <i class="fa-solid fa-play text-[10px] text-brand-600"></i> Listen
                                                 </button>
-                                                <!-- 🚀 FIX 2: URL Download Rekaman -->
                                                 <a :href="'/dashboard/api/play-recording?file=' + log.recordingfile" 
                                                    download
                                                    class="inline-flex items-center justify-center w-7 h-7 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 shadow-sm transition active:scale-95" 
@@ -218,7 +224,6 @@
                 }
 
                 this.playingFile = filename;
-                // 🚀 FIX 3: URL Audio Player
                 let audioUrl = '/dashboard/api/play-recording?file=' + filename;
                 this.currentAudio = new Audio(audioUrl);
                 
@@ -286,7 +291,6 @@
                     agent_extension: this.filters.agent_extension
                 });
 
-                // 🚀 FIX 4: URL Fetch Data
                 fetch(`/dashboard/api/call-logs?${params.toString()}`, { headers: { 'Accept': 'application/json' } })
                 .then(res => res.json())
                 .then(response => {
@@ -300,7 +304,7 @@
                     }
                 });
             },
-            
+
             resetFilters() {
                 this.stopAudio();
                 this.filters = { start_date: '', end_date: '', search: '', agent_extension: '' };

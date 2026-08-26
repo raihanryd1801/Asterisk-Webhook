@@ -134,13 +134,15 @@
     </main>
 
     <!-- PUSTAKA GLOBAL ECHO & PUSHER -->
-    <script src="https://cdn.jsdelivr.net/npm/pusher-js@8.4.0/dist/web/pusher.min.js" data-turbo-eval="false"></script>
+    <!-- PUSTAKA GLOBAL ECHO & PUSHER -->
+<script src="https://cdn.jsdelivr.net/npm/pusher-js@8.4.0/dist/web/pusher.min.js" data-turbo-eval="false"></script>
 <script src="https://cdn.jsdelivr.net/npm/laravel-echo@1.16.1/dist/echo.iife.js" data-turbo-eval="false"></script>
 
 <script data-turbo-eval="false">
     window.Pusher = Pusher;
 
-    if (typeof window.Echo === 'function') {
+    // Perbaikan pengecekan agar Echo pasti terinisialisasi
+    if (typeof window.Echo !== 'undefined') {
         window.Echo = new window.Echo({
             broadcaster: 'reverb',
             key: '{{ env("REVERB_APP_KEY") }}',
@@ -152,10 +154,7 @@
         });
     }
 
-    // 🚀 Cegah Alpine "nyangkut" di snapshot cache Turbo.
-    // Bersihkan semua komponen Alpine sebelum Turbo menyimpan cache halaman,
-    // supaya saat snapshot itu ditampilkan lagi, Alpine init ulang dari nol
-    // (x-for, x-data, dll dievaluasi bersih, tidak ada binding "log is not defined").
+    // Bersihkan Alpine tree sebelum Turbo cache halaman
     document.addEventListener('turbo:before-cache', () => {
         document.querySelectorAll('[x-data]').forEach((el) => {
             if (window.Alpine) {
