@@ -53,6 +53,9 @@ class ProvisionerService
             $ssh->exec("asterisk -rx 'database put AMPUSER {$ext}/recording/ondemand enabled'");
             $ssh->exec("asterisk -rx 'database put AMPUSER {$ext}/recording/priority 10'");
 
+            // 🚀 Pastikan agen baru bersih dari status blokir AstDB
+            $ssh->exec("asterisk -rx 'database del CRM_BLOCK {$ext}'");
+
             $ssh->exec("fwconsole reload");
             $sftp->delete($remoteCsvPath);
 
@@ -107,6 +110,10 @@ class ProvisionerService
             $ssh->exec("asterisk -rx 'database deltree AMPUSER/{$ext}'");
             $ssh->exec("asterisk -rx 'database deltree DEVICE/{$ext}'");
             $ssh->exec("asterisk -rx 'database deltree PJSIP/endpoints/{$ext}'");
+            
+            // Bersihkan juga dari AstDB CRM_BLOCK saat dihapus
+            $ssh->exec("asterisk -rx 'database del CRM_BLOCK {$ext}'");
+            
             $ssh->exec("fwconsole reload");
 
             if (str_contains($output, 'ERROR')) {
@@ -175,7 +182,17 @@ class ProvisionerService
 
             $ssh = $this->connectSsh();
             $ssh->exec("asterisk -rx 'database put AMPUSER {$ext}/cidname \"{$name}\"'");
-            $ssh->exec("asterisk -rx 'module reload res_pjsip.so'");
+
+            // 🚀 4. KONTROL ASTDB CRM_BLOCK (ENABLE / DISABLE)
+            if ($agent->context === 'blokir-total') {
+                $ssh->exec("asterisk -rx 'database put CRM_BLOCK {$ext} 1'");
+                \Log::info("[ASTDB] Ekstensi {$ext} berhasil DIBLOKIR total (Outbound Block).");
+            } else {
+                $ssh->exec("asterisk -rx 'database del CRM_BLOCK {$ext}'");
+                \Log::info("[ASTDB] Blokir ekstensi {$ext} DICABUT (Enabled kembali).");
+            }
+
+            $ssh->exec("module reload res_pjsip.so");
             $ssh->exec("fwconsole reload");
 
             return "Update Provisioning Success";
@@ -184,18 +201,6 @@ class ProvisionerService
             \Log::error("[UPDATE PABX EXCEPTION] " . $e->getMessage());
             throw new Exception("Error Update Provisioning: " . $e->getMessage());
         }
-    }
-
-    /**
-     * Helper koneksi SSH
-     */
-    private function connectSsh()
-    {
-        $ssh = new SSH2($this->host);
-        if (!$ssh->login($this->user, $this->pass)) {
-            throw new Exception("Gagal login SSH ke FreePBX");
-        }
-        return $ssh;
     }
 
     /**

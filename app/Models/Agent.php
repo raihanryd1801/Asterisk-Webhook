@@ -16,7 +16,8 @@ class Agent extends Model
     'secret', 
     'role', // Tambahkan baris ini
     'group_id', 
-    'status'
+    'status',
+    'context'
 ];
     public function group()
     {

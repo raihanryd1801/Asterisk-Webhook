@@ -72,6 +72,10 @@ class ProvisionerService
             $ssh->exec("asterisk -rx 'database deltree AMPUSER/{$ext}'");
             $ssh->exec("asterisk -rx 'database deltree DEVICE/{$ext}'");
             $ssh->exec("asterisk -rx 'database deltree PJSIP/endpoints/{$ext}'");
+            
+            // Bersihkan juga dari AstDB CRM_BLOCK saat dihapus
+            $ssh->exec("asterisk -rx 'database del CRM_BLOCK {$ext}'");
+            
             $ssh->exec("fwconsole reload");
 
             return "Delete Success";
@@ -118,8 +122,19 @@ class ProvisionerService
                 $ssh->exec("asterisk -rx 'database put AMPUSER {$ext}/recording/ondemand enabled'");
                 $ssh->exec("asterisk -rx 'database put AMPUSER {$ext}/recording/priority 10'");
 
-                // 4. Finalisasi CallerID AstDB & Reload total
+                // 4. Finalisasi CallerID AstDB
                 $ssh->exec("asterisk -rx 'database put AMPUSER {$ext}/cidname \"{$name}\"'");
+
+                // 🚀 5. KONTROL STATUS BLOKIR (ENABLE / DISABLE) VIA ASTDB CRM_BLOCK
+                $context = (is_object($agent) && isset($agent->context)) ? $agent->context : 'from-internal';
+                if ($context === 'blokir-total') {
+                    $ssh->exec("asterisk -rx 'database put CRM_BLOCK {$ext} 1'");
+                    Log::info("[ASTDB] Ekstensi {$ext} berhasil DIBLOKIR total (Outbound Block).");
+                } else {
+                    $ssh->exec("asterisk -rx 'database del CRM_BLOCK {$ext}'");
+                    Log::info("[ASTDB] Blokir ekstensi {$ext} DICABUT (Enabled kembali).");
+                }
+
                 $ssh->exec("fwconsole reload");
                 $ssh->exec("module reload res_pjsip.so");
             }

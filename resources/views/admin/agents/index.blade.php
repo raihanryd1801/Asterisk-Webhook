@@ -26,7 +26,8 @@
                         <th class="px-6 py-4">Extension</th>
                         <th class="px-6 py-4">Jabatan</th>
                         <th class="px-6 py-4">Group (Supervisor)</th>
-                        <th class="px-6 py-4">Status</th>
+                        <th class="px-6 py-4">Status App</th>
+                        <th class="px-6 py-4">Akses Panggilan</th> <!-- 🚀 KOLOM BARU INDIKATOR BLOKIR -->
                         <th class="px-6 py-4">Aksi</th>
                     </tr>
                 </thead>
@@ -49,6 +50,20 @@
                                 {{ $agent->status }}
                             </span>
                         </td>
+                        
+                        <!-- 🚀 ISI KOLOM BARU: Badge Indikator Blokir / Aktif -->
+                        <td class="px-6 py-4">
+                            @if(($agent->context ?? 'from-internal') === 'blokir-total')
+                                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold rounded-full border bg-red-50 text-red-600 border-red-100 uppercase">
+                                    <i class="fa-solid fa-phone-slash text-[9px]"></i> Disabled
+                                </span>
+                            @else
+                                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold rounded-full border bg-emerald-50 text-emerald-600 border-emerald-100 uppercase">
+                                    <i class="fa-solid fa-phone text-[9px]"></i> Active
+                                </span>
+                            @endif
+                        </td>
+
                         <td class="px-6 py-4 flex items-center gap-3">
                             <button @click="openEditModal({{ json_encode($agent) }})" class="text-brand-600 hover:text-brand-700 font-medium text-xs transition">Edit</button>
                             
@@ -92,17 +107,41 @@
                 </div>
 
                 <div>
-    <label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Password SIP (Secret)</label>
-    <div class="relative">
-        <input :type="showSecret ? 'text' : 'password'" x-model="form.secret" placeholder="Kosongkan untuk generate otomatis" class="w-full border border-slate-200 p-2.5 pr-10 rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50 font-mono">
-        
-        <!-- Tombol Toggle Show/Hide Password -->
-        <button @click="showSecret = !showSecret" type="button" class="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-600 focus:outline-none cursor-pointer">
-            <!-- Tambahkan pointer-events-none agar klik tembus ke tombol -->
-            <i :class="showSecret ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'" class="pointer-events-none text-sm"></i>
-        </button>
-    </div>
-</div>
+                    <label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Password SIP (Secret)</label>
+                    <div class="relative">
+                        <input :type="showSecret ? 'text' : 'password'" x-model="form.secret" placeholder="Kosongkan untuk generate otomatis" class="w-full border border-slate-200 p-2.5 pr-10 rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50 font-mono">
+                        
+                        <!-- Tombol Toggle Show/Hide Password -->
+                        <button @click="showSecret = !showSecret" type="button" class="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-600 focus:outline-none cursor-pointer">
+                            <i :class="showSecret ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'" class="pointer-events-none text-sm"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 🚀 BAGIAN AKSES PANGGILAN (DIKOREKSI/DIBALIK SUPAYA GA KELIRU) -->
+                <div x-show="isEdit">
+                    <label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Akses Panggilan (FreePBX)</label>
+                    <div class="flex p-1 bg-slate-100 rounded-xl border border-slate-200">
+                        <!-- Tombol Enable (Mengirim from-internal) -->
+                        <button type="button" 
+                                @click="form.context = 'from-internal'"
+                                class="flex-1 py-2 rounded-lg text-xs font-bold transition-all duration-200 flex items-center justify-center gap-1.5"
+                                :class="form.context === 'from-internal' ? 'bg-white shadow-sm text-emerald-600' : 'text-slate-500 hover:text-slate-700'">
+                            <i class="fa-solid fa-phone"></i> Enable
+                        </button>
+                        
+                        <!-- Tombol Disable (Mengirim blokir-total) -->
+                        <button type="button" 
+                                @click="form.context = 'blokir-total'"
+                                class="flex-1 py-2 rounded-lg text-xs font-bold transition-all duration-200 flex items-center justify-center gap-1.5"
+                                :class="form.context === 'blokir-total' ? 'bg-white shadow-sm text-red-600' : 'text-slate-500 hover:text-slate-700'">
+                            <i class="fa-solid fa-phone-slash"></i> Disable
+                        </button>
+                    </div>
+                    <p class="text-[10px] mt-1.5 font-medium" 
+                       :class="form.context === 'blokir-total' ? 'text-red-500' : 'text-slate-400'" 
+                       x-text="form.context === 'blokir-total' ? '* Agen ini diblokir total dan tidak bisa melakukan/menerima panggilan.' : '* Agen aktif (from-internal).'"></p>
+                </div>
 
                 <div>
                     <label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Assign ke Supervisor (Grup)</label>
@@ -138,26 +177,27 @@ function agentManagement() {
         isEdit: false,
         isLoading: false,
         deletingId: null,
-        showSecret: false,    // <-- State untuk toggle tampil/sembunyi password
-        form: { id: null, name: '', extension: '', secret: '', role: 'agent', supervisor_id: '' },
+        showSecret: false,
+        form: { id: null, name: '', extension: '', secret: '', role: 'agent', supervisor_id: '', context: 'from-internal' },
 
         openCreateModal() {
             this.isEdit = false;
             this.showSecret = false;
-            this.form = { id: null, name: '', extension: '', secret: '', role: 'agent', supervisor_id: '' };
+            this.form = { id: null, name: '', extension: '', secret: '', role: 'agent', supervisor_id: '', context: 'from-internal' };
             this.openModal = true;
         },
 
         openEditModal(agent) {
             this.isEdit = true;
-            this.showSecret = false; // Reset jadi tersembunyi tiap buka modal edit
+            this.showSecret = false;
             this.form = {
                 id: agent.id,
                 name: agent.name,
                 extension: agent.extension,
-                secret: agent.secret || '', // <-- Masukkan password existing ke form
+                secret: agent.secret || '', 
                 role: agent.role || 'agent',
-                supervisor_id: agent.supervisor_id || ''
+                supervisor_id: agent.supervisor_id || '',
+                context: agent.context || 'from-internal'
             };
             this.openModal = true;
         },
@@ -206,7 +246,6 @@ function agentManagement() {
                 }
             })
             .then(async res => {
-                // Tangkap data JSON, dan lempar error jika status HTTP bukan 200 OK
                 let data = await res.json();
                 if (!res.ok) throw new Error(data.message || 'Terjadi kesalahan pada server');
                 return data;
@@ -217,14 +256,13 @@ function agentManagement() {
                     alert(data.message);
                     location.reload();
                 } else {
-                    // Tampilkan pesan alasan gagal dari server
                     alert('Gagal: ' + (data.message || 'Gagal menghapus pengguna.'));
                 }
             })
             .catch(err => {
                 this.deletingId = null;
                 console.error('Error:', err);
-                alert('Error Sistem: ' + err.message); // Munculkan pesan error asli (misal: terkait relasi database)
+                alert('Error Sistem: ' + err.message); 
             });
         }
     }
