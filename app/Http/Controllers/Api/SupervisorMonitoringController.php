@@ -15,6 +15,7 @@ use App\Exports\CallLogsExport;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Jobs\ProvisionAsteriskAgent;
 use Illuminate\Support\Facades\DB;
+use phpseclib3\Net\SSH2; // 🚀 WAJIB DITAMBAHKAN UNTUK TAKEOVER
 
 class SupervisorMonitoringController extends Controller
 {
@@ -91,9 +92,6 @@ class SupervisorMonitoringController extends Controller
         }
     }
 
-    /**
-     * 🚀 FUNGSI CREATE AGENT YANG SEBELUMNYA HILANG
-     */
     public function createAgent(Request $request)
     {
         $request->validate([
@@ -111,7 +109,6 @@ class SupervisorMonitoringController extends Controller
                 'supervisor_id' => $request->supervisor_id ?? null,
             ]);
 
-            // Dispatch job provisioning ke Asterisk jika ada
             if (class_exists(ProvisionAsteriskAgent::class)) {
                 ProvisionAsteriskAgent::dispatch($agent);
             }
@@ -131,9 +128,6 @@ class SupervisorMonitoringController extends Controller
         }
     }
 
-    /**
-     * 🚀 FUNGSI UPDATE AGENT
-     */
     public function update(Request $request, $id)
     {
         $request->validate([
@@ -157,10 +151,8 @@ class SupervisorMonitoringController extends Controller
                 $secretChanged = ($request->secret !== $oldSecret);
             }
 
-            // 1. Simpan perubahan ke database lokal
             $agent->save();
 
-            // 2. Lempar proses update FreePBX ke background queue
             if (class_exists(ProvisionAsteriskAgent::class)) {
                 ProvisionAsteriskAgent::dispatch($agent, 'update', $secretChanged);
             }
@@ -179,21 +171,14 @@ class SupervisorMonitoringController extends Controller
         }
     }
 
-    /**
-     * 🚀 FUNGSI DELETE / DESTROY AGENT
-     */
     public function destroy($id)
     {
         try {
             $agent = Agent::findOrFail($id);
-            
-            // Buat snapshot data agent sebelum dihapus dari database lokal
             $agentSnapshot = clone $agent;
-
-            // 1. Hapus dari database lokal secepat kilat
+            
             $agent->delete();
 
-            // 2. Lempar proses pembersihan FreePBX ke background queue
             if (class_exists(ProvisionAsteriskAgent::class)) {
                 ProvisionAsteriskAgent::dispatch($agentSnapshot, 'delete');
             }
@@ -213,177 +198,172 @@ class SupervisorMonitoringController extends Controller
     }
 
     public function spyAction(Request $request)
-{
-    $request->validate([
-        'target_channel'  => 'required|string', 
-        'mode'            => 'nullable|in:w,B',
-        'spy_ext'         => 'nullable|string'  
-    ]);
-
-    $supervisorExt = null;
-
-    // 1. PRIORITAS UTAMA: Jika ada input ekstensi dari prompt frontend (Untuk Admin)
-    if ($request->filled('spy_ext')) {
-        $supervisorExt = $request->spy_ext;
-    } 
-    // 2. Jika yang login adalah Supervisor, ambil langsung dari session
-    elseif (session()->has('supervisor_extension')) {
-        $supervisorExt = session('supervisor_extension');
-    }
-
-    // Jika ekstensi pendengar masih kosong, balas dengan error 400
-    // agar JavaScript di frontend memunculkan kotak prompt input ekstensi untuk Admin.
-    if (!$supervisorExt) {
-        return response()->json([
-            'status' => 'error',
-            'message' => 'Ekstensi pendengar tidak ditemukan. Silakan masukkan nomor ekstensi softphone Anda untuk mendengarkan.'
-        ], 400);
-    }
-
-    try {
-        $mode = $request->mode ?? '';
-        $response = $this->originateService->supervisorAction(
-            $supervisorExt, 
-            $request->target_channel, 
-            $mode
-        );
-
-        return response()->json([
-            'status' => 'success',
-            'message' => "Aksi berhasil! Menghubungkan ke Softphone Anda (Ext: {$supervisorExt})",
-            'asterisk_response' => trim($response)
+    {
+        $request->validate([
+            'target_channel'  => 'required|string', 
+            'mode'            => 'nullable|in:w,B',
+            'spy_ext'         => 'nullable|string'  
         ]);
 
-    } catch (\Exception $e) {
-        return response()->json([
-            'status' => 'error',
-            'message' => $e->getMessage()
-        ], 500);
-    }
-}
-public function saveNote(Request $request, $uniqueid)
-{
-    $request->validate([
-        'notes' => 'nullable|string'
-    ]);
+        $supervisorExt = null;
 
-    try {
-        $tableName = (new \App\Models\Cdr())->getTable();
-        $cleanId = trim($uniqueid);
+        if ($request->filled('spy_ext')) {
+            $supervisorExt = $request->spy_ext;
+        } 
+        elseif (session()->has('supervisor_extension')) {
+            $supervisorExt = session('supervisor_extension');
+        }
 
-        // 1. Cek dulu apakah data dengan uniqueid tersebut benar-benar ada di tabel cdr_live
-        $record = DB::table($tableName)->where('uniqueid', $cleanId)->first();
-
-        if (!$record) {
-            // Coba cari dengan LIKE untuk melihat apakah ada string yang mirip (mengantisipasi ekstensi/karakter tambahan)
-            $similar = DB::table($tableName)->where('uniqueid', 'like', "%{$cleanId}%")->first();
-            
-            $msg = "Uniqueid '{$cleanId}' tidak ditemukan di tabel '{$tableName}'.";
-            if ($similar) {
-                $msg .= " (Peringatan: Ditemukan uniqueid mirip di DB yaitu '{$similar->uniqueid}')";
-            }
-
+        if (!$supervisorExt) {
             return response()->json([
                 'status' => 'error',
-                'message' => $msg
-            ], 404);
+                'message' => 'Ekstensi pendengar tidak ditemukan. Silakan masukkan nomor ekstensi softphone Anda.'
+            ], 400);
         }
 
-        // 2. Jika ketemu, lakukan update
-        DB::table($tableName)
-            ->where('uniqueid', $cleanId)
-            ->update([
-                'notes' => $request->notes
+        try {
+            $mode = $request->mode ?? '';
+            $response = $this->originateService->supervisorAction(
+                $supervisorExt, 
+                $request->target_channel, 
+                $mode
+            );
+
+            return response()->json([
+                'status' => 'success',
+                'message' => "Aksi berhasil! Menghubungkan ke Softphone Anda (Ext: {$supervisorExt})",
+                'asterisk_response' => trim($response)
             ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function saveNote(Request $request, $uniqueid)
+    {
+        $request->validate([
+            'notes' => 'nullable|string'
+        ]);
+
+        try {
+            $tableName = (new \App\Models\Cdr())->getTable();
+            $cleanId = trim($uniqueid);
+
+            $record = DB::table($tableName)->where('uniqueid', $cleanId)->first();
+
+            if (!$record) {
+                $similar = DB::table($tableName)->where('uniqueid', 'like', "%{$cleanId}%")->first();
+                
+                $msg = "Uniqueid '{$cleanId}' tidak ditemukan di tabel '{$tableName}'.";
+                if ($similar) {
+                    $msg .= " (Peringatan: Ditemukan uniqueid mirip di DB yaitu '{$similar->uniqueid}')";
+                }
+
+                return response()->json([
+                    'status' => 'error',
+                    'message' => $msg
+                ], 404);
+            }
+
+            DB::table($tableName)
+                ->where('uniqueid', $cleanId)
+                ->update([
+                    'notes' => $request->notes
+                ]);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Catatan berhasil disimpan!'
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Database Error: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function callLogs(Request $request)
+    {
+        $query = Cdr::select([
+            'uniqueid','calldate', 'src', 'dst', 'duration', 
+            'billsec', 'disposition', 'recordingfile', 'cnam', 'cnum', 'sip_code', 'terminated_by','notes'
+        ])->orderBy('calldate', 'desc');
+
+        if (session()->has('supervisor_extension')) {
+            $spvExt = session('supervisor_extension');
+            $spv = Agent::where('extension', $spvExt)->first();
+
+            if ($spv) {
+                $managedExtensions = Agent::where('supervisor_id', $spv->id)
+                                          ->orWhere('id', $spv->id)
+                                          ->pluck('extension')
+                                          ->toArray();
+
+                $query->where(function($q) use ($managedExtensions) {
+                    $q->whereIn('src', $managedExtensions)->orWhereIn('dst', $managedExtensions);
+                });
+            } else {
+                $query->whereRaw('1 = 0');
+            }
+        }
+
+        if ($request->filled('agent_extension')) {
+            $ext = $request->agent_extension;
+            $query->where(function($q) use ($ext) {
+                $q->where('src', $ext)->orWhere('dst', $ext);
+            });
+        }
+        elseif (session()->has('agent_extension')) {
+            $extension = session('agent_extension');
+            $query->where(function($q) use ($extension) {
+                $q->where('src', $extension)->orWhere('dst', $extension);
+            });
+        }
+
+        if ($request->filled('search')) {
+            $keyword = $request->search;
+            $query->where(function($q) use ($keyword) {
+                $q->where('src', 'like', "%{$keyword}%")
+                  ->orWhere('dst', 'like', "%{$keyword}%")
+                  ->orWhere('cnam', 'like', "%{$keyword}%")
+                  ->orWhere('cnum', 'like', "%{$keyword}%");
+            });
+        }
+
+        if (!$request->filled('start_date') && !$request->filled('end_date')) {
+            $query->whereDate('calldate', '>=', now()->subDays(7));
+        } else {
+            if ($request->filled('start_date')) {
+                $query->whereDate('calldate', '>=', $request->start_date);
+            }
+            if ($request->filled('end_date')) {
+                $query->whereDate('calldate', '<=', $request->end_date);
+            }
+        }
+
+        $perPage = $request->query('per_page', 15);
+        $paginatedLogs = $query->simplePaginate($perPage);
+        $paginatedLogs->appends($request->except('page'));
+
+        $paginatedLogs->getCollection()->transform(function ($log) {
+            if ($log->src === $log->dst && strlen($log->src) > 5) {
+                $log->src = 'Ext / Agent'; 
+            }
+            return $log;
+        });
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Catatan berhasil disimpan!'
+            'data'   => $paginatedLogs
         ]);
-
-    } catch (\Exception $e) {
-        return response()->json([
-            'status' => 'error',
-            'message' => 'Database Error: ' . $e->getMessage()
-        ], 500);
-    }
-}
-
-    public function callLogs(Request $request)
-{
-    $query = Cdr::select([
-        'uniqueid','calldate', 'src', 'dst', 'duration', 
-        'billsec', 'disposition', 'recordingfile', 'cnam', 'cnum', 'sip_code', 'terminated_by','notes'// <-- Tambahkan 'sip_code' di sini
-    ])->orderBy('calldate', 'desc');
-
-    if (session()->has('supervisor_extension')) {
-        $spvExt = session('supervisor_extension');
-        $spv = Agent::where('extension', $spvExt)->first();
-
-        if ($spv) {
-            $managedExtensions = Agent::where('supervisor_id', $spv->id)
-                                      ->orWhere('id', $spv->id)
-                                      ->pluck('extension')
-                                      ->toArray();
-
-            $query->where(function($q) use ($managedExtensions) {
-                $q->whereIn('src', $managedExtensions)->orWhereIn('dst', $managedExtensions);
-            });
-        } else {
-            $query->whereRaw('1 = 0');
-        }
     }
 
-    if ($request->filled('agent_extension')) {
-        $ext = $request->agent_extension;
-        $query->where(function($q) use ($ext) {
-            $q->where('src', $ext)->orWhere('dst', $ext);
-        });
-    }
-    elseif (session()->has('agent_extension')) {
-        $extension = session('agent_extension');
-        $query->where(function($q) use ($extension) {
-            $q->where('src', $extension)->orWhere('dst', $extension);
-        });
-    }
-
-    if ($request->filled('search')) {
-        $keyword = $request->search;
-        $query->where(function($q) use ($keyword) {
-            $q->where('src', 'like', "%{$keyword}%")
-              ->orWhere('dst', 'like', "%{$keyword}%")
-              ->orWhere('cnam', 'like', "%{$keyword}%")
-              ->orWhere('cnum', 'like', "%{$keyword}%");
-        });
-    }
-
-    if (!$request->filled('start_date') && !$request->filled('end_date')) {
-        $query->whereDate('calldate', '>=', now()->subDays(7));
-    } else {
-        if ($request->filled('start_date')) {
-            $query->whereDate('calldate', '>=', $request->start_date);
-        }
-        if ($request->filled('end_date')) {
-            $query->whereDate('calldate', '<=', $request->end_date);
-        }
-    }
-
-    $perPage = $request->query('per_page', 15);
-    $paginatedLogs = $query->simplePaginate($perPage);
-    $paginatedLogs->appends($request->except('page'));
-
-    $paginatedLogs->getCollection()->transform(function ($log) {
-        if ($log->src === $log->dst && strlen($log->src) > 5) {
-            $log->src = 'Ext / Agent'; 
-        }
-        return $log;
-    });
-
-    return response()->json([
-        'status' => 'success',
-        'data'   => $paginatedLogs
-    ]);
-}
     public function updateStatus(Request $request, $extension)
     {
         $request->validate([
@@ -493,6 +473,102 @@ public function saveNote(Request $request, $uniqueid)
             return response()->json([
                 'status' => 'error',
                 'message' => 'Gagal Memanggil: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * 🚀 FUNGSI BARU: TAKEOVER (MERAMPAS PANGGILAN) 🚀
+     */
+    /**
+     * 🚀 FUNGSI BARU: TAKEOVER (MERAMPAS PANGGILAN) 🚀
+     */
+    /**
+     * 🚀 FUNGSI BARU: TAKEOVER (MERAMPAS PANGGILAN) 🚀
+     */
+    public function takeoverAction(Request $request)
+    {
+        $request->validate([
+            'target_channel'  => 'required|string', 
+            'spy_ext'         => 'nullable|string'  
+        ]);
+
+        $supervisorExt = null;
+
+        if ($request->filled('spy_ext')) {
+            $supervisorExt = $request->spy_ext;
+        } elseif (session()->has('supervisor_extension')) {
+            $supervisorExt = session('supervisor_extension');
+        }
+
+        if (!$supervisorExt) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ekstensi supervisor tidak ditemukan. Silakan masukkan ekstensi softphone Anda.'
+            ], 400);
+        }
+
+        try {
+            // Setup koneksi SSH
+            $host = env('ASTERISK_SSH_HOST', env('FREEPBX_SSH_HOST', '172.16.1.24')); 
+            $user = env('ASTERISK_SSH_USER', env('FREEPBX_SSH_USER', 'root'));
+            $pass = env('ASTERISK_SSH_PASS', env('FREEPBX_SSH_PASS', 'fid1234'));
+
+            $ssh = new SSH2($host);
+            if (!$ssh->login($user, $pass)) {
+                throw new \Exception("Gagal login SSH ke server Asterisk.");
+            }
+
+            // 🚀 1. Ekstrak nomor ekstensi murni
+            $agentExt = str_replace('PJSIP/', '', $request->target_channel);
+
+            // 🚀 2. Cari NAMA EXACT channel agen yang sedang aktif
+            $getAgentChannelCmd = "asterisk -rx 'core show channels' | grep -m 1 -o 'PJSIP/{$agentExt}-[a-zA-Z0-9]*'";
+            $exactAgentChannel = trim($ssh->exec($getAgentChannelCmd));
+
+            if (empty($exactAgentChannel)) {
+                throw new \Exception("Channel PJSIP untuk agen {$agentExt} tidak terdeteksi aktif di Asterisk.");
+            }
+
+            // 🚀 3. Dapatkan Bridge ID (Karena Asterisk modern menggunakan Bridge ID)
+            $getBridgeIdCmd = "asterisk -rx 'core show channel {$exactAgentChannel}' | grep 'Bridge ID:' | awk '{print \$3}'";
+            $bridgeId = trim($ssh->exec($getBridgeIdCmd));
+
+            $bridgedChannel = "";
+
+            if (!empty($bridgeId)) {
+                // 🚀 4. Jika Bridge ID ketemu, cari channel milik Customer di ruangan yang sama
+                // (Mencari semua channel di dalam bridge, lalu membuang channel milik agen)
+                $getPeerCmd = "asterisk -rx 'bridge show {$bridgeId}' | grep 'Channel:' | awk '{print \$2}' | grep -v '^{$exactAgentChannel}$' | head -n 1";
+                $bridgedChannel = trim($ssh->exec($getPeerCmd));
+            } else {
+                // Fallback darurat jika sistem tidak merespons Bridge ID
+                $fallbackCmd = "asterisk -rx 'core show channelvar {$exactAgentChannel} BRIDGEPEER'";
+                $bridgePeer = trim($ssh->exec($fallbackCmd));
+                if (strpos($bridgePeer, 'BRIDGEPEER=') !== false) {
+                    $bridgedChannel = str_replace('BRIDGEPEER=', '', $bridgePeer);
+                }
+            }
+
+            if (empty($bridgedChannel)) {
+                throw new \Exception("Gagal menemukan channel lawan (Customer) di dalam sistem.");
+            }
+
+            // 🚀 5. Eksekusi Redirect / Takeover!
+            // Lempar channel lawan ke softphone Supervisor
+            $spvExt = escapeshellarg($supervisorExt);
+            $redirectCmd = "asterisk -rx 'channel redirect {$bridgedChannel} from-internal,{$spvExt},1'";
+            $ssh->exec($redirectCmd);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => "Berhasil Takeover! Customer dialihkan ke Softphone Anda (Ext: {$supervisorExt})."
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Gagal Takeover: ' . $e->getMessage()
             ], 500);
         }
     }

@@ -64,7 +64,7 @@ Route::prefix('dashboard')->group(function () {
 
             if ($spv) {
                 $managedExtensions = App\Models\Agent::where('supervisor_id', $spv->id)
-                                          ->orWhere('id', $spv->id)->pluck('extension')->toArray();
+                                            ->orWhere('id', $spv->id)->pluck('extension')->toArray();
 
                 $query->where(function($q) use ($managedExtensions) {
                     $q->whereIn('src', $managedExtensions)->orWhereIn('dst', $managedExtensions);
@@ -81,7 +81,7 @@ Route::prefix('dashboard')->group(function () {
             return redirect('/agent/login')->with('error', 'Silakan login terlebih dahulu.');
         }
 
-        // ✅ INI KODE YANG BENAR (Pakai CURDATE & SUM supaya tidak bentrok parameter)
+        // Statistik Utama
         $statsData = (clone $query)->selectRaw("
             SUM(CASE WHEN DATE(calldate) = CURDATE() THEN 1 ELSE 0 END) as today_calls,
             SUM(CASE WHEN DATE(calldate) = CURDATE() AND disposition = 'ANSWERED' THEN 1 ELSE 0 END) as today_answered,
@@ -89,30 +89,106 @@ Route::prefix('dashboard')->group(function () {
             SUM(CASE WHEN disposition = 'ANSWERED' THEN 1 ELSE 0 END) as all_answered
         ")->first();
 
-        // Hitung metrik HARI INI
         $today_calls      = (int) ($statsData->today_calls ?? 0);
         $today_answered   = (int) ($statsData->today_answered ?? 0);
-        $today_unanswered = $today_calls - $today_answered; // Hitung di PHP agar akurat
+        $today_unanswered = $today_calls - $today_answered; 
         $today_rate       = $today_calls > 0 ? round(($today_answered / $today_calls) * 100, 1) : 0;
 
-        // Hitung metrik KESELURUHAN (Sesuai Filter Waktu)
         $total_calls    = (int) ($statsData->total_calls ?? 0);
         $all_answered   = (int) ($statsData->all_answered ?? 0);
         $all_unanswered = $total_calls - $all_answered;
         $all_time_rate  = $total_calls > 0 ? round(($all_answered / $total_calls) * 100, 1) : 0;
 
-        // Masukkan ke array $stats untuk dikirim ke Blade
         $stats = [
             'today_calls'      => $today_calls,
             'today_answered'   => $today_answered,
             'today_unanswered' => $today_unanswered,
             'today_rate'       => $today_rate,
-            
             'total_calls'      => $total_calls,
             'all_answered'     => $all_answered,
             'all_unanswered'   => $all_unanswered,
             'all_time_rate'    => $all_time_rate,
         ];
+
+        // ==========================================
+        // 🚀 1. DATA CALL VOLUME CHART
+        // ==========================================
+        // ==========================================
+        // 🚀 1. DATA CALL VOLUME CHART (Dinamis Berdasarkan Filter)
+        // ==========================================
+        $chartVolumeCategories = [];
+        $chartVolumeData = [];
+        $chartSubtitle = "Call volume overview.";
+
+        if ($range === 'today') {
+            $volumeDataRaw = (clone $query)->selectRaw("HOUR(calldate) as time_key, COUNT(*) as total")
+                ->groupByRaw("HOUR(calldate)")->get();
+            $volumeRaw = $volumeDataRaw->pluck('total', 'time_key')->toArray();
+
+            for ($i = 0; $i < 24; $i++) {
+                $chartVolumeCategories[] = sprintf("%02d:00", $i);
+                $chartVolumeData[] = (int) ($volumeRaw[$i] ?? 0);
+            }
+            $chartSubtitle = "Calls per hour, WIB.";
+        } 
+        elseif ($range === '7_days') {
+            $volumeDataRaw = (clone $query)->selectRaw("DATE(calldate) as time_key, COUNT(*) as total")
+                ->groupByRaw("DATE(calldate)")->get();
+            $volumeRaw = $volumeDataRaw->pluck('total', 'time_key')->toArray();
+
+            for ($i = 6; $i >= 0; $i--) {
+                $date = now()->subDays($i);
+                $chartVolumeCategories[] = $date->format('d M');
+                $chartVolumeData[] = (int) ($volumeRaw[$date->toDateString()] ?? 0);
+            }
+            $chartSubtitle = "Calls per day, last 7 days.";
+        } 
+        elseif ($range === 'this_month') {
+            $volumeDataRaw = (clone $query)->selectRaw("DATE(calldate) as time_key, COUNT(*) as total")
+                ->groupByRaw("DATE(calldate)")->get();
+            $volumeRaw = $volumeDataRaw->pluck('total', 'time_key')->toArray();
+
+            $daysInMonth = now()->daysInMonth;
+            for ($i = 1; $i <= $daysInMonth; $i++) {
+                $dateString = now()->setDay($i)->toDateString();
+                $chartVolumeCategories[] = $i;
+                $chartVolumeData[] = (int) ($volumeRaw[$dateString] ?? 0);
+            }
+            $chartSubtitle = "Calls per day, this month.";
+        } 
+        else {
+            $volumeDataRaw = (clone $query)->selectRaw("DATE_FORMAT(calldate, '%Y-%m') as time_key, COUNT(*) as total")
+                ->groupByRaw("DATE_FORMAT(calldate, '%Y-%m')")
+                ->orderBy('time_key')
+                ->get();
+            $volumeRaw = $volumeDataRaw->pluck('total', 'time_key')->toArray();
+
+            foreach ($volumeRaw as $key => $val) {
+                $date = \Carbon\Carbon::createFromFormat('Y-m', $key);
+                $chartVolumeCategories[] = $date->format('M Y');
+                $chartVolumeData[] = (int) $val;
+            }
+            $chartSubtitle = "Calls per month, all time.";
+        }
+        // ==========================================
+        // 🚀 2. DATA CALL OUTCOMES CHART
+        // ==========================================
+        $outcomesRaw = (clone $query)
+            ->selectRaw("disposition, COUNT(*) as total")
+            ->groupBy('disposition')
+            ->pluck('total', 'disposition');
+
+        $chartOutcomesCounts = [
+            $outcomesRaw['CANCEL'] ?? 0,
+            $outcomesRaw['NO ANSWER'] ?? 0,
+            $outcomesRaw['ANSWERED'] ?? 0,
+            $outcomesRaw['BUSY'] ?? 0,
+            $outcomesRaw['FAILED'] ?? 0,
+        ];
+
+        // ==========================================
+        // TABEL AGENT PERFORMANCE
+        // ==========================================
         $performanceQuery = clone $query;
         $agentPerformanceRaw = $performanceQuery->selectRaw("
             src as extension, COUNT(*) as total_calls, SUM(CASE WHEN disposition = 'ANSWERED' THEN 1 ELSE 0 END) as connected_calls, SUM(billsec) as total_talk_time
@@ -138,7 +214,16 @@ Route::prefix('dashboard')->group(function () {
             ];
         });
 
-        return view('agent.overview', compact('stats', 'roleTitle', 'range', 'agentPerformance'));
+        // 🚀 Pastikan semua variabel ini ikut di-compact ke view
+        return view('agent.overview', compact(
+            'stats', 
+            'roleTitle', 
+            'range', 
+            'agentPerformance', 
+            'chartVolumeCategories', 
+            'chartVolumeData', 
+            'chartOutcomesCounts'
+        ));
     })->name('dashboard.overview');
 
     // 2. Agent Workspace
@@ -151,7 +236,6 @@ Route::prefix('dashboard')->group(function () {
         return view('agent.workspace', ['extension' => $extension, 'sipPassword' => $agent->secret]);
     })->name('dashboard.workspace');
 
-    // 🚀 INI YANG KURANG: Rute Halaman Call History Khusus Agent
     Route::get('/agent/call-history', function () {
         if (!session()->has('agent_extension')) {
             return redirect('/agent/login')->with('error', 'Silakan login terlebih dahulu.');
@@ -179,9 +263,7 @@ Route::prefix('dashboard')->group(function () {
         Route::delete('/agents/{id}', [AgentController::class, 'destroy']);
     });
 
-   // ------------------------------------------
-    // B. ENDPOINT API / AJAX (Untuk Fetch Alpine.js)
-    // ------------------------------------------
+    // B. ENDPOINT API / AJAX
     Route::get('/api/live-agents', [SupervisorMonitoringController::class, 'agentsList']);
     Route::post('/api/spy', [SupervisorMonitoringController::class, 'spyAction']);
     Route::get('/api/call-logs', [SupervisorMonitoringController::class, 'callLogs']);
@@ -189,8 +271,7 @@ Route::prefix('dashboard')->group(function () {
     Route::get('/api/play-recording', [SupervisorMonitoringController::class, 'playRecording']);
     Route::post('/api/agent/{extension}/status', [SupervisorMonitoringController::class, 'updateStatus']);
     Route::post('/api/agent/click-to-call', [SupervisorMonitoringController::class, 'agentClickToCall']);
-    
-    // 🚀 TAMBAHKAN BARIS INI BANG: Endpoint untuk Simpan Catatan
+    Route::post('/monitoring/takeover', [SupervisorMonitoringController::class, 'takeoverAction']);
     Route::post('/api/call-logs/{uniqueid}/note', [SupervisorMonitoringController::class, 'saveNote']);
 });
 
