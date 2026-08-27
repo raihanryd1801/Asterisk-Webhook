@@ -268,7 +268,7 @@ class AmiListenCommand extends Command
                                         'terminated_by' => $actorLabel, // "Agent" atau nomor tujuan
                                         'src'           => $extension,
                                         'dst'           => $dest,
-                                        'calldate'      => now()->toDateTimeString(), // dipakai HANYA kalau insert baru
+                                        'calldate'      => now('UTC')->toDateTimeString(), // Menggunakan UTC agar selaras dengan master CDR Asterisk // dipakai HANYA kalau insert baru
                                         'disposition'   => $answered ? 'ANSWERED' : 'NO ANSWER',
                                         'duration'      => 0,
                                         'billsec'       => 0,
