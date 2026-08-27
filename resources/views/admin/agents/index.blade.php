@@ -197,26 +197,34 @@ function agentManagement() {
             
             this.deletingId = id;
 
-            fetch(`/admin/agents/${id}`, {
+            fetch(`/dashboard/agents/${id}`, {
                 method: 'DELETE',
                 headers: {
+                    'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
                     'Accept': 'application/json'
                 }
             })
-            .then(res => res.json())
+            .then(async res => {
+                // Tangkap data JSON, dan lempar error jika status HTTP bukan 200 OK
+                let data = await res.json();
+                if (!res.ok) throw new Error(data.message || 'Terjadi kesalahan pada server');
+                return data;
+            })
             .then(data => {
                 this.deletingId = null;
                 if(data.status === 'success') {
                     alert(data.message);
                     location.reload();
                 } else {
-                    alert('Gagal menghapus pengguna.');
+                    // Tampilkan pesan alasan gagal dari server
+                    alert('Gagal: ' + (data.message || 'Gagal menghapus pengguna.'));
                 }
             })
             .catch(err => {
                 this.deletingId = null;
                 console.error('Error:', err);
+                alert('Error Sistem: ' + err.message); // Munculkan pesan error asli (misal: terkait relasi database)
             });
         }
     }

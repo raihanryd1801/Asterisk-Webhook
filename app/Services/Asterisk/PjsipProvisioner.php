@@ -15,7 +15,7 @@ class ProvisionerService
 
     public function __construct()
     {
-        $this->host = env('ASTERISK_SSH_HOST', env('FREEPBX_SSH_HOST', '192.168.99.73')); 
+        $this->host = env('ASTERISK_SSH_HOST', env('FREEPBX_SSH_HOST', '172.16.1.24')); 
         $this->user = env('ASTERISK_SSH_USER', env('FREEPBX_SSH_USER', 'root'));
         $this->pass = env('ASTERISK_SSH_PASS', env('FREEPBX_SSH_PASS', 'fid1234'));
     }

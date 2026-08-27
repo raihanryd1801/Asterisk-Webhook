@@ -416,9 +416,9 @@ public function saveNote(Request $request, $uniqueid)
             $year = $matches[1];
             $month = $matches[2];
             $day = $matches[3];
-            $publicAudioUrl = "http://192.168.99.73/monitor/{$year}/{$month}/{$day}/{$filename}";
+            $publicAudioUrl = "http://172.16.1.24/monitor/{$year}/{$month}/{$day}/{$filename}";
         } else {
-            $publicAudioUrl = "http://192.168.99.73/monitor/{$filename}";
+            $publicAudioUrl = "http://172.16.1.24/monitor/{$filename}";
         }
 
         try {

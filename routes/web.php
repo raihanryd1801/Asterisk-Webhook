@@ -179,7 +179,7 @@ Route::prefix('dashboard')->group(function () {
         Route::delete('/agents/{id}', [AgentController::class, 'destroy']);
     });
 
-    // ------------------------------------------
+   // ------------------------------------------
     // B. ENDPOINT API / AJAX (Untuk Fetch Alpine.js)
     // ------------------------------------------
     Route::get('/api/live-agents', [SupervisorMonitoringController::class, 'agentsList']);
@@ -189,8 +189,9 @@ Route::prefix('dashboard')->group(function () {
     Route::get('/api/play-recording', [SupervisorMonitoringController::class, 'playRecording']);
     Route::post('/api/agent/{extension}/status', [SupervisorMonitoringController::class, 'updateStatus']);
     Route::post('/api/agent/click-to-call', [SupervisorMonitoringController::class, 'agentClickToCall']);
+    
+    // 🚀 TAMBAHKAN BARIS INI BANG: Endpoint untuk Simpan Catatan
     Route::post('/api/call-logs/{uniqueid}/note', [SupervisorMonitoringController::class, 'saveNote']);
-
 });
 
 // ==========================================
