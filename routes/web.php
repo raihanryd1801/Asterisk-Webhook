@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Cache;
 use App\Models\Agent;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\AgentController;
@@ -20,29 +21,25 @@ Route::post('/agent/login', [AuthController::class, 'authenticateAgent']);
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 Route::post('/agent/logout', [AuthController::class, 'agentLogout']);
 
-// Redirect root ke login
 Route::get('/', function () {
     return redirect('/login');
 });
 
 // ==========================================
-// 2. DASHBOARD AREA (Semua URL Berawalan /dashboard)
+// 2. DASHBOARD AREA
 // ==========================================
 Route::prefix('dashboard')->group(function () {
 
-    // ------------------------------------------
-    // A. HALAMAN UTAMA (VIEWS)
-    // ------------------------------------------
-
-    // 1. Overview (Bisa diakses Agent/SPV/Admin)
+    // 1. Overview Dashboard (SUPER FAST CACHED + AJAX READY)
     Route::get('/overview', function (Illuminate\Http\Request $request) {
         
         $range = $request->query('range', 'this_month');
         $query = App\Models\Cdr::query();
 
+        // 🚀 Optimasi Waktu (Ramah Index Database)
         switch ($range) {
-            case 'today': $query->whereDate('calldate', today()); break;
-            case '7_days': $query->where('calldate', '>=', now()->subDays(7)); break;
+            case 'today': $query->where('calldate', '>=', now()->startOfDay()); break;
+            case '7_days': $query->where('calldate', '>=', now()->subDays(7)->startOfDay()); break;
             case 'all_time': break;
             case 'this_month':
             default: $query->where('calldate', '>=', now()->startOfMonth()); break;
@@ -50,6 +47,7 @@ Route::prefix('dashboard')->group(function () {
         
         $managedExtensions = [];
         $roleTitle = "Overview";
+        $userKey = 'admin';
 
         if (session()->has('agent_extension')) {
             $extension = session('agent_extension');
@@ -57,6 +55,7 @@ Route::prefix('dashboard')->group(function () {
                 $q->where('src', $extension)->orWhere('dst', $extension);
             });
             $roleTitle = "Agent Ext: " . $extension;
+            $userKey = 'agent_' . $extension;
         } 
         elseif (session()->has('supervisor_extension')) {
             $spvExt = session('supervisor_extension');
@@ -65,7 +64,6 @@ Route::prefix('dashboard')->group(function () {
             if ($spv) {
                 $managedExtensions = App\Models\Agent::where('supervisor_id', $spv->id)
                                             ->orWhere('id', $spv->id)->pluck('extension')->toArray();
-
                 $query->where(function($q) use ($managedExtensions) {
                     $q->whereIn('src', $managedExtensions)->orWhereIn('dst', $managedExtensions);
                 });
@@ -73,6 +71,7 @@ Route::prefix('dashboard')->group(function () {
                 $query->whereRaw('1 = 0');
             }
             $roleTitle = "Supervisor Group Overview";
+            $userKey = 'spv_' . $spvExt;
         } 
         elseif (auth()->check()) {
             $user = auth()->user();
@@ -81,150 +80,126 @@ Route::prefix('dashboard')->group(function () {
             return redirect('/agent/login')->with('error', 'Silakan login terlebih dahulu.');
         }
 
-        // Statistik Utama
-        $statsData = (clone $query)->selectRaw("
-            SUM(CASE WHEN DATE(calldate) = CURDATE() THEN 1 ELSE 0 END) as today_calls,
-            SUM(CASE WHEN DATE(calldate) = CURDATE() AND disposition = 'ANSWERED' THEN 1 ELSE 0 END) as today_answered,
-            COUNT(*) as total_calls,
-            SUM(CASE WHEN disposition = 'ANSWERED' THEN 1 ELSE 0 END) as all_answered
-        ")->first();
-
-        $today_calls      = (int) ($statsData->today_calls ?? 0);
-        $today_answered   = (int) ($statsData->today_answered ?? 0);
-        $today_unanswered = $today_calls - $today_answered; 
-        $today_rate       = $today_calls > 0 ? round(($today_answered / $today_calls) * 100, 1) : 0;
-
-        $total_calls    = (int) ($statsData->total_calls ?? 0);
-        $all_answered   = (int) ($statsData->all_answered ?? 0);
-        $all_unanswered = $total_calls - $all_answered;
-        $all_time_rate  = $total_calls > 0 ? round(($all_answered / $total_calls) * 100, 1) : 0;
-
-        $stats = [
-            'today_calls'      => $today_calls,
-            'today_answered'   => $today_answered,
-            'today_unanswered' => $today_unanswered,
-            'today_rate'       => $today_rate,
-            'total_calls'      => $total_calls,
-            'all_answered'     => $all_answered,
-            'all_unanswered'   => $all_unanswered,
-            'all_time_rate'    => $all_time_rate,
-        ];
-
         // ==========================================
-        // 🚀 1. DATA CALL VOLUME CHART
+        // 🚀 SISTEM CACHE & PEMROSESAN DATA
         // ==========================================
-        // ==========================================
-        // 🚀 1. DATA CALL VOLUME CHART (Dinamis Berdasarkan Filter)
-        // ==========================================
-        $chartVolumeCategories = [];
-        $chartVolumeData = [];
-        $chartSubtitle = "Call volume overview.";
+        $cacheKey = "dashboard_overview_{$range}_{$userKey}";
+        $cacheDuration = ($range === 'today') ? 0 : 300; 
 
-        if ($range === 'today') {
-            $volumeDataRaw = (clone $query)->selectRaw("HOUR(calldate) as time_key, COUNT(*) as total")
-                ->groupByRaw("HOUR(calldate)")->get();
-            $volumeRaw = $volumeDataRaw->pluck('total', 'time_key')->toArray();
+        $dashboardData = Cache::remember($cacheKey, $cacheDuration, function () use ($range, $query) {
+            
+            // 1. STATISTIK RINGKAS
+            $todayStart = now()->startOfDay()->format('Y-m-d H:i:s');
+            $statsData = (clone $query)->selectRaw("
+                SUM(CASE WHEN calldate >= '{$todayStart}' THEN 1 ELSE 0 END) as today_calls,
+                SUM(CASE WHEN calldate >= '{$todayStart}' AND disposition = 'ANSWERED' THEN 1 ELSE 0 END) as today_answered,
+                COUNT(*) as total_calls,
+                SUM(CASE WHEN disposition = 'ANSWERED' THEN 1 ELSE 0 END) as all_answered
+            ")->first();
 
-            for ($i = 0; $i < 24; $i++) {
-                $chartVolumeCategories[] = sprintf("%02d:00", $i);
-                $chartVolumeData[] = (int) ($volumeRaw[$i] ?? 0);
-            }
-            $chartSubtitle = "Calls per hour, WIB.";
-        } 
-        elseif ($range === '7_days') {
-            $volumeDataRaw = (clone $query)->selectRaw("DATE(calldate) as time_key, COUNT(*) as total")
-                ->groupByRaw("DATE(calldate)")->get();
-            $volumeRaw = $volumeDataRaw->pluck('total', 'time_key')->toArray();
+            $today_calls      = (int) ($statsData->today_calls ?? 0);
+            $today_answered   = (int) ($statsData->today_answered ?? 0);
+            $today_rate       = $today_calls > 0 ? round(($today_answered / $today_calls) * 100, 1) : 0;
+            $total_calls      = (int) ($statsData->total_calls ?? 0);
+            $all_answered     = (int) ($statsData->all_answered ?? 0);
+            $all_time_rate    = $total_calls > 0 ? round(($all_answered / $total_calls) * 100, 1) : 0;
 
-            for ($i = 6; $i >= 0; $i--) {
-                $date = now()->subDays($i);
-                $chartVolumeCategories[] = $date->format('d M');
-                $chartVolumeData[] = (int) ($volumeRaw[$date->toDateString()] ?? 0);
-            }
-            $chartSubtitle = "Calls per day, last 7 days.";
-        } 
-        elseif ($range === 'this_month') {
-            $volumeDataRaw = (clone $query)->selectRaw("DATE(calldate) as time_key, COUNT(*) as total")
-                ->groupByRaw("DATE(calldate)")->get();
-            $volumeRaw = $volumeDataRaw->pluck('total', 'time_key')->toArray();
-
-            $daysInMonth = now()->daysInMonth;
-            for ($i = 1; $i <= $daysInMonth; $i++) {
-                $dateString = now()->setDay($i)->toDateString();
-                $chartVolumeCategories[] = $i;
-                $chartVolumeData[] = (int) ($volumeRaw[$dateString] ?? 0);
-            }
-            $chartSubtitle = "Calls per day, this month.";
-        } 
-        else {
-            $volumeDataRaw = (clone $query)->selectRaw("DATE_FORMAT(calldate, '%Y-%m') as time_key, COUNT(*) as total")
-                ->groupByRaw("DATE_FORMAT(calldate, '%Y-%m')")
-                ->orderBy('time_key')
-                ->get();
-            $volumeRaw = $volumeDataRaw->pluck('total', 'time_key')->toArray();
-
-            foreach ($volumeRaw as $key => $val) {
-                $date = \Carbon\Carbon::createFromFormat('Y-m', $key);
-                $chartVolumeCategories[] = $date->format('M Y');
-                $chartVolumeData[] = (int) $val;
-            }
-            $chartSubtitle = "Calls per month, all time.";
-        }
-        // ==========================================
-        // 🚀 2. DATA CALL OUTCOMES CHART
-        // ==========================================
-        $outcomesRaw = (clone $query)
-            ->selectRaw("disposition, COUNT(*) as total")
-            ->groupBy('disposition')
-            ->pluck('total', 'disposition');
-
-        $chartOutcomesCounts = [
-            $outcomesRaw['CANCEL'] ?? 0,
-            $outcomesRaw['NO ANSWER'] ?? 0,
-            $outcomesRaw['ANSWERED'] ?? 0,
-            $outcomesRaw['BUSY'] ?? 0,
-            $outcomesRaw['FAILED'] ?? 0,
-        ];
-
-        // ==========================================
-        // TABEL AGENT PERFORMANCE
-        // ==========================================
-        $performanceQuery = clone $query;
-        $agentPerformanceRaw = $performanceQuery->selectRaw("
-            src as extension, COUNT(*) as total_calls, SUM(CASE WHEN disposition = 'ANSWERED' THEN 1 ELSE 0 END) as connected_calls, SUM(billsec) as total_talk_time
-        ")->where('src', '!=', '')->groupBy('extension')->orderBy('total_calls', 'desc')->limit(50)->get();
-
-        $agentNames = \App\Models\Agent::whereIn('extension', $agentPerformanceRaw->pluck('extension'))->pluck('name', 'extension');
-
-        $agentPerformance = $agentPerformanceRaw->map(function($item) use ($agentNames) {
-            $name = $agentNames[$item->extension] ?? 'Unknown Agent';
-            $percentage = $item->total_calls > 0 ? round(($item->connected_calls / $item->total_calls) * 100) : 0;
-            $hours = floor($item->total_talk_time / 3600);
-            $minutes = floor(($item->total_talk_time % 3600) / 60);
-            $seconds = $item->total_talk_time % 60;
-            $formattedTalkTime = sprintf("%d:%02d:%02d", $hours, $minutes, $seconds);
-
-            return [
-                'name'            => $name,
-                'extension'       => $item->extension,
-                'total_calls'     => $item->total_calls,
-                'connected_calls' => $item->connected_calls,
-                'percentage'      => $percentage,
-                'talk_time'       => $formattedTalkTime
+            $stats = [
+                'today_calls'      => $today_calls,
+                'today_answered'   => $today_answered,
+                'today_unanswered' => $today_calls - $today_answered,
+                'today_rate'       => $today_rate,
+                'total_calls'      => $total_calls,
+                'all_answered'     => $all_answered,
+                'all_unanswered'   => $total_calls - $all_answered,
+                'all_time_rate'    => $all_time_rate,
             ];
+
+            // 2. CALL VOLUME CHART
+            $chartVolumeCategories = [];
+            $chartVolumeData = [];
+            
+            if ($range === 'today') {
+                $volumeRaw = (clone $query)->selectRaw("HOUR(calldate) as time_key, COUNT(*) as total")->groupByRaw("HOUR(calldate)")->pluck('total', 'time_key')->toArray();
+                for ($i = 0; $i < 24; $i++) {
+                    $chartVolumeCategories[] = sprintf("%02d:00", $i);
+                    $chartVolumeData[] = (int) ($volumeRaw[$i] ?? 0);
+                }
+                $chartSubtitle = "Calls per hour, WIB.";
+            } elseif ($range === '7_days') {
+                $volumeRaw = (clone $query)->selectRaw("DATE(calldate) as time_key, COUNT(*) as total")->groupByRaw("DATE(calldate)")->pluck('total', 'time_key')->toArray();
+                for ($i = 6; $i >= 0; $i--) {
+                    $date = now()->subDays($i);
+                    $chartVolumeCategories[] = $date->format('d M');
+                    $chartVolumeData[] = (int) ($volumeRaw[$date->toDateString()] ?? 0);
+                }
+                $chartSubtitle = "Calls per day, last 7 days.";
+            } elseif ($range === 'this_month') {
+                $volumeRaw = (clone $query)->selectRaw("DATE(calldate) as time_key, COUNT(*) as total")->groupByRaw("DATE(calldate)")->pluck('total', 'time_key')->toArray();
+                $daysInMonth = now()->daysInMonth;
+                for ($i = 1; $i <= $daysInMonth; $i++) {
+                    $dateString = now()->setDay($i)->toDateString();
+                    $chartVolumeCategories[] = $i;
+                    $chartVolumeData[] = (int) ($volumeRaw[$dateString] ?? 0);
+                }
+                $chartSubtitle = "Calls per day, this month.";
+            } else {
+                $volumeDataRaw = (clone $query)->selectRaw("DATE_FORMAT(calldate, '%Y-%m') as time_key, COUNT(*) as total")->groupByRaw("DATE_FORMAT(calldate, '%Y-%m')")->orderBy('time_key')->get();
+                foreach ($volumeDataRaw as $row) {
+                    $chartVolumeCategories[] = \Carbon\Carbon::createFromFormat('Y-m', $row->time_key)->format('M Y');
+                    $chartVolumeData[] = (int) $row->total;
+                }
+                $chartSubtitle = "Calls per month, all time.";
+            }
+
+            // 3. CALL OUTCOMES CHART
+            $outcomesDataRaw = (clone $query)->selectRaw("disposition, COUNT(*) as total")->groupBy("disposition")->get();
+            $outcomesRaw = [];
+            foreach ($outcomesDataRaw as $row) {
+                $dispKey = strtoupper($row->disposition);
+                $outcomesRaw[$dispKey] = ($outcomesRaw[$dispKey] ?? 0) + (int) $row->total;
+            }
+
+            $chartOutcomesCounts = [
+                $outcomesRaw['CANCEL'] ?? 0,
+                $outcomesRaw['NO ANSWER'] ?? 0,
+                $outcomesRaw['ANSWERED'] ?? 0,
+                $outcomesRaw['BUSY'] ?? 0,
+                $outcomesRaw['FAILED'] ?? 0,
+            ];
+
+            // 4. TABEL AGENT PERFORMANCE
+            $agentPerformanceRaw = (clone $query)->selectRaw("src as extension, COUNT(*) as total_calls, SUM(CASE WHEN disposition = 'ANSWERED' THEN 1 ELSE 0 END) as connected_calls, SUM(billsec) as total_talk_time")->where('src', '!=', '')->groupBy('extension')->orderBy('total_calls', 'desc')->limit(50)->get();
+            $agentNames = \App\Models\Agent::whereIn('extension', $agentPerformanceRaw->pluck('extension'))->pluck('name', 'extension');
+
+            $agentPerformance = $agentPerformanceRaw->map(function($item) use ($agentNames) {
+                $name = $agentNames[$item->extension] ?? 'Unknown Agent';
+                $percentage = $item->total_calls > 0 ? round(($item->connected_calls / $item->total_calls) * 100) : 0;
+                $formattedTalkTime = sprintf("%d:%02d:%02d", floor($item->total_talk_time / 3600), floor(($item->total_talk_time % 3600) / 60), $item->total_talk_time % 60);
+
+                return [
+                    'name' => $name, 'extension' => $item->extension,
+                    'total_calls' => $item->total_calls, 'connected_calls' => $item->connected_calls,
+                    'percentage' => $percentage, 'talk_time' => $formattedTalkTime
+                ];
+            })->toArray(); // 🚀 Wajib toArray() agar aman di Cache
+
+            return compact('stats', 'chartVolumeCategories', 'chartVolumeData', 'chartSubtitle', 'chartOutcomesCounts', 'agentPerformance');
         });
 
-        // 🚀 Pastikan semua variabel ini ikut di-compact ke view
-        return view('agent.overview', compact(
-            'stats', 
-            'roleTitle', 
-            'range', 
-            'agentPerformance', 
-            'chartVolumeCategories', 
-            'chartVolumeData', 
-            'chartOutcomesCounts'
-        ));
+        // ==========================================
+        // 🚀 PENGEMBALIAN DATA (JSON AJAX ATAU BLADE HTML)
+        // ==========================================
+        if ($request->wantsJson()) {
+            return response()->json($dashboardData);
+        }
+
+        return view('agent.overview', array_merge($dashboardData, [
+            'roleTitle' => $roleTitle,
+            'range'     => $range
+        ]));
     })->name('dashboard.overview');
+
 
     // 2. Agent Workspace
     Route::get('/workspace/{extension}', function ($extension) {
@@ -237,26 +212,20 @@ Route::prefix('dashboard')->group(function () {
     })->name('dashboard.workspace');
 
     Route::get('/agent/call-history', function () {
-        if (!session()->has('agent_extension')) {
-            return redirect('/agent/login')->with('error', 'Silakan login terlebih dahulu.');
-        }
+        if (!session()->has('agent_extension')) return redirect('/agent/login')->with('error', 'Silakan login terlebih dahulu.');
         return view('agent.call-history', ['extension' => session('agent_extension')]);
     })->name('dashboard.agent.call-history');
 
     // 3. Supervisor & Admin Monitoring
     Route::get('/live-monitoring', [SupervisorController::class, 'dashboard'])->name('dashboard.live-monitoring');
-    
     Route::get('/call-history', function () {
-        if (!session()->has('supervisor_extension') && !auth()->check()) {
-            return redirect('/agent/login')->with('error', 'Silakan login terlebih dahulu.');
-        }
+        if (!session()->has('supervisor_extension') && !auth()->check()) return redirect('/agent/login')->with('error', 'Silakan login terlebih dahulu.');
         return view('supervisor.call-history');
     })->name('dashboard.call-history');
     
     // 4. Admin Management (Hanya Admin)
     Route::middleware(['auth', 'role:admin'])->group(function () {
         Route::get('/users', [UserController::class, 'index'])->name('dashboard.users.index');
-        
         Route::get('/agents', [AgentController::class, 'index'])->name('dashboard.agents.index');
         Route::post('/agents/store', [AgentController::class, 'store']);
         Route::put('/agents/{id}', [AgentController::class, 'update']);
