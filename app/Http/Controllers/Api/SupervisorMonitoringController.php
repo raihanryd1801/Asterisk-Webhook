@@ -550,15 +550,22 @@ class SupervisorMonitoringController extends Controller
         }
 
         try {
-            // Setup koneksi SSH
-            $host = env('ASTERISK_SSH_HOST', env('FREEPBX_SSH_HOST', '172.16.1.24')); 
-            $user = env('ASTERISK_SSH_USER', env('FREEPBX_SSH_USER', 'root'));
-            $pass = env('ASTERISK_SSH_PASS', env('FREEPBX_SSH_PASS', 'fid1234'));
+            // Tarik kredensial dengan aman dari konfigurasi
+            $host = config('services.freepbx.host'); 
+            $user = config('services.freepbx.user');
+            $pass = config('services.freepbx.pass');
+
+            // Proteksi jika lupa set password di .env
+            if (empty($pass)) {
+                throw new \Exception("Password SSH FreePBX belum dikonfigurasi di file .env server.");
+            }
 
             $ssh = new SSH2($host);
             if (!$ssh->login($user, $pass)) {
                 throw new \Exception("Gagal login SSH ke server Asterisk.");
             }
+            
+            // ... (lanjut ke proses ekstrak PJSIP) ...
 
             // 🚀 1. Ekstrak nomor ekstensi murni
             $agentExt = str_replace('PJSIP/', '', $request->target_channel);
@@ -598,7 +605,8 @@ class SupervisorMonitoringController extends Controller
             // 🚀 5. Eksekusi Redirect / Takeover!
             // Lempar channel lawan ke softphone Supervisor
             $spvExt = escapeshellarg($supervisorExt);
-            $redirectCmd = "asterisk -rx 'channel redirect {$bridgedChannel} from-internal,{$spvExt},1'";
+            //Merekam TakeOver
+            $redirectCmd = "asterisk -rx 'channel redirect {$bridgedChannel} custom-takeover,{$spvExt},1'";
             $ssh->exec($redirectCmd);
 
             return response()->json([

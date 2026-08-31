@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    'freepbx' => [
+        'host' => env('FREEPBX_SSH_HOST', '127.0.0.1'),
+        'user' => env('FREEPBX_SSH_USER', 'root'),
+        'pass' => env('FREEPBX_SSH_PASS'), // 🚀 Kosongkan parameter kedua agar password mentah tidak terekspos
+    ],
+
 ];
