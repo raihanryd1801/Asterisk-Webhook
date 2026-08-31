@@ -25,9 +25,9 @@
                         <th class="px-6 py-4">Nama</th>
                         <th class="px-6 py-4">Extension</th>
                         <th class="px-6 py-4">Jabatan</th>
-                        <th class="px-6 py-4">Group (Supervisor)</th>
+                        <th class="px-6 py-4">Supervisor (Tim)</th> <!-- 🚀 Kolom disesuaikan -->
                         <th class="px-6 py-4">Status App</th>
-                        <th class="px-6 py-4">Akses Panggilan</th> <!-- 🚀 KOLOM BARU INDIKATOR BLOKIR -->
+                        <th class="px-6 py-4">Akses Panggilan</th>
                         <th class="px-6 py-4">Aksi</th>
                     </tr>
                 </thead>
@@ -41,9 +41,20 @@
                                 {{ $agent->role ?? 'Agent' }}
                             </span>
                         </td>
+                        
+                        <!-- 🚀 TAMPILKAN BANYAK SUPERVISOR DI TABEL -->
                         <td class="px-6 py-4 text-slate-600 text-xs">
-                            {{ $agent->supervisor_id ? ($supervisors->where('id', $agent->supervisor_id)->first()->name ?? 'N/A') . ' (Ext: ' . ($supervisors->where('id', $agent->supervisor_id)->first()->extension ?? '-') . ')' : '—' }}
+                            @if($agent->supervisors->isNotEmpty())
+                                <div class="flex flex-col gap-0.5">
+                                    @foreach($agent->supervisors as $spv)
+                                        <span class="font-medium text-slate-700">• {{ $spv->name }} <span class="text-slate-400">({{ $spv->extension }})</span></span>
+                                    @endforeach
+                                </div>
+                            @else
+                                <span class="text-slate-400">— Tanpa SPV —</span>
+                            @endif
                         </td>
+
                         <td class="px-6 py-4">
                             <span class="inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold rounded-full border uppercase {{ $agent->status === 'online' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-50 text-slate-500 border-slate-100' }}">
                                 <span class="w-1.5 h-1.5 rounded-full {{ $agent->status === 'online' ? 'bg-emerald-500' : 'bg-slate-400' }}"></span>
@@ -51,7 +62,6 @@
                             </span>
                         </td>
                         
-                        <!-- 🚀 ISI KOLOM BARU: Badge Indikator Blokir / Aktif -->
                         <td class="px-6 py-4">
                             @if(($agent->context ?? 'from-internal') === 'blokir-total')
                                 <span class="inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold rounded-full border bg-red-50 text-red-600 border-red-100 uppercase">
@@ -65,9 +75,8 @@
                         </td>
 
                         <td class="px-6 py-4 flex items-center gap-3">
-                            <button @click="openEditModal({{ json_encode($agent) }})" class="text-brand-600 hover:text-brand-700 font-medium text-xs transition">Edit</button>
+                            <button @click="openEditModal({{ json_encode($agent->load('supervisors')) }})" class="text-brand-600 hover:text-brand-700 font-medium text-xs transition">Edit</button>
                             
-                            <!-- Tombol Delete dengan Loading State Individual per Baris -->
                             <button @click="deleteAgent({{ $agent->id }})" 
                                     :disabled="deletingId === {{ $agent->id }}" 
                                     class="text-red-500 hover:text-red-600 font-medium text-xs transition disabled:opacity-50 flex items-center gap-1.5">
@@ -84,7 +93,7 @@
 
     <!-- MODAL FORM -->
     <div x-show="openModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4" style="display: none;" x-cloak>
-        <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md" @click.outside="openModal = false">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md max-h-[90vh] overflow-y-auto" @click.outside="openModal = false">
             <h3 class="text-lg font-bold text-slate-800 mb-6" x-text="isEdit ? 'Edit Data Pengguna' : 'Tambah Pengguna Baru'"></h3>
             
             <form @submit.prevent="submitForm()" class="space-y-4">
@@ -110,27 +119,22 @@
                     <label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Password SIP (Secret)</label>
                     <div class="relative">
                         <input :type="showSecret ? 'text' : 'password'" x-model="form.secret" placeholder="Kosongkan untuk generate otomatis" class="w-full border border-slate-200 p-2.5 pr-10 rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50 font-mono">
-                        
-                        <!-- Tombol Toggle Show/Hide Password -->
                         <button @click="showSecret = !showSecret" type="button" class="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-600 focus:outline-none cursor-pointer">
                             <i :class="showSecret ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'" class="pointer-events-none text-sm"></i>
                         </button>
                     </div>
                 </div>
 
-                <!-- 🚀 BAGIAN AKSES PANGGILAN (DIKOREKSI/DIBALIK SUPAYA GA KELIRU) -->
+                <!-- AKSES PANGGILAN -->
                 <div x-show="isEdit">
                     <label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Akses Panggilan (FreePBX)</label>
                     <div class="flex p-1 bg-slate-100 rounded-xl border border-slate-200">
-                        <!-- Tombol Enable (Mengirim from-internal) -->
                         <button type="button" 
                                 @click="form.context = 'from-internal'"
                                 class="flex-1 py-2 rounded-lg text-xs font-bold transition-all duration-200 flex items-center justify-center gap-1.5"
                                 :class="form.context === 'from-internal' ? 'bg-white shadow-sm text-emerald-600' : 'text-slate-500 hover:text-slate-700'">
                             <i class="fa-solid fa-phone"></i> Enable
                         </button>
-                        
-                        <!-- Tombol Disable (Mengirim blokir-total) -->
                         <button type="button" 
                                 @click="form.context = 'blokir-total'"
                                 class="flex-1 py-2 rounded-lg text-xs font-bold transition-all duration-200 flex items-center justify-center gap-1.5"
@@ -143,18 +147,29 @@
                        x-text="form.context === 'blokir-total' ? '* Agen ini diblokir total dan tidak bisa melakukan/menerima panggilan.' : '* Agen aktif (from-internal).'"></p>
                 </div>
 
-                <div>
-                    <label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Assign ke Supervisor (Grup)</label>
-                    <select x-model="form.supervisor_id" class="w-full border border-slate-200 p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50">
-                        <option value="">-- Tanpa Supervisor (Global) --</option>
-                        @foreach($supervisors as $spv)
-                            <option value="{{ $spv->id }}">{{ $spv->name }} (Ext: {{ $spv->extension }})</option>
-                        @endforeach
-                    </select>
-                </div>
+                <!-- 🚀 MULTIPLE SUPERVISOR SELECT INPUT -->
+                <!-- 🚀 GANTI SELECT BIASA MENJADI DAFTAR CHECKBOX -->
+<div>
+    <label class="block text-[11px] font-bold text-slate-500 uppercase mb-2">Assign ke Supervisor (Pilih Banyak)</label>
+    
+    <div class="border border-slate-200 rounded-xl p-3 bg-slate-50 space-y-2 max-h-48 overflow-y-auto">
+        @foreach($supervisors as $spv)
+            <label class="flex items-center gap-2.5 p-2 rounded-lg hover:bg-white transition cursor-pointer select-none">
+                <!-- Checkbox mendeteksi apakah ID SPV ada di dalam array form.supervisor_ids -->
+                <input type="checkbox" 
+                       value="{{ $spv->id }}" 
+                       x-model="form.supervisor_ids"
+                       class="w-4 h-4 text-brand-600 rounded border-slate-300 focus:ring-brand-500">
+                <span class="text-sm font-medium text-slate-700">
+                    {{ $spv->name }} <span class="text-xs text-slate-400 font-mono">(Ext: {{ $spv->extension }})</span>
+                </span>
+            </label>
+        @endforeach
+    </div>
+    <p class="text-[10px] text-slate-400 mt-1.5">* Centang nama Supervisor yang ingin diberikan akses monitoring ke agen ini.</p>
+</div>
 
                 <div class="flex gap-2 pt-4">
-                    <!-- Tombol Submit dengan Loading Spinner & Text Berubah -->
                     <button type="submit" 
                             :disabled="isLoading" 
                             class="flex-1 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white py-2.5 rounded-xl font-medium text-sm transition flex items-center justify-center gap-2">
@@ -178,25 +193,47 @@ function agentManagement() {
         isLoading: false,
         deletingId: null,
         showSecret: false,
-        form: { id: null, name: '', extension: '', secret: '', role: 'agent', supervisor_id: '', context: 'from-internal' },
+        
+        // 🚀 Ubah supervisor_id menjadi supervisor_ids berupa Array ([])
+        form: { 
+            id: null, 
+            name: '', 
+            extension: '', 
+            secret: '', 
+            role: 'agent', 
+            supervisor_ids: [], 
+            context: 'from-internal' 
+        },
 
         openCreateModal() {
             this.isEdit = false;
             this.showSecret = false;
-            this.form = { id: null, name: '', extension: '', secret: '', role: 'agent', supervisor_id: '', context: 'from-internal' };
+            this.form = { 
+                id: null, 
+                name: '', 
+                extension: '', 
+                secret: '', 
+                role: 'agent', 
+                supervisor_ids: [], 
+                context: 'from-internal' 
+            };
             this.openModal = true;
         },
 
         openEditModal(agent) {
             this.isEdit = true;
             this.showSecret = false;
+            
+            // 🚀 Mapping data relasi supervisors menjadi array of ID (contoh: [1, 3])
+            let spvIds = agent.supervisors ? agent.supervisors.map(s => s.id) : [];
+
             this.form = {
                 id: agent.id,
                 name: agent.name,
                 extension: agent.extension,
                 secret: agent.secret || '', 
                 role: agent.role || 'agent',
-                supervisor_id: agent.supervisor_id || '',
+                supervisor_ids: spvIds,
                 context: agent.context || 'from-internal'
             };
             this.openModal = true;

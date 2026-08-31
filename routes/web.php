@@ -62,8 +62,13 @@ Route::prefix('dashboard')->group(function () {
             $spv = App\Models\Agent::where('extension', $spvExt)->first();
 
             if ($spv) {
-                $managedExtensions = App\Models\Agent::where('supervisor_id', $spv->id)
-                                            ->orWhere('id', $spv->id)->pluck('extension')->toArray();
+                // 🚀 Ganti bagian ini menggunakan relasi many-to-many pivot agents()
+                $managedExtensions = $spv->agents()
+                                        ->pluck('extension')
+                                        ->merge([$spv->extension])
+                                        ->unique()
+                                        ->toArray();
+
                 $query->where(function($q) use ($managedExtensions) {
                     $q->whereIn('src', $managedExtensions)->orWhereIn('dst', $managedExtensions);
                 });

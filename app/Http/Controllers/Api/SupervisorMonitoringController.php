@@ -45,9 +45,11 @@ class SupervisorMonitoringController extends Controller
                 $spv = Agent::where('extension', $spvExt)->first();
                 
                 if ($spv) {
-                    $rawAgents = Agent::where('supervisor_id', $spv->id)
-                                    ->orWhere('id', $spv->id) 
-                                    ->get();
+                    // 🚀 Ubah dari supervisor_id menjadi relasi Many-to-Many pivot
+                    $managedIds = $spv->agents()->pluck('agents.id')->toArray();
+                    $managedIds[] = $spv->id; // Masukkan ID SPV itu sendiri agar ikut tampil
+
+                    $rawAgents = Agent::whereIn('id', $managedIds)->get();
                 }
             } 
             else {
@@ -98,19 +100,26 @@ class SupervisorMonitoringController extends Controller
     public function createAgent(Request $request)
     {
         $request->validate([
-            'name'      => 'required|string|max:255',
-            'extension' => 'required|string|unique:agents,extension',
-            'secret'    => 'required|string',
+            'name'             => 'required|string|max:255',
+            'extension'        => 'required|string|unique:agents,extension',
+            'secret'           => 'required|string',
+            'supervisor_ids'   => 'nullable|array', // 🚀 Validasi array multi-SPV
+            'supervisor_ids.*' => 'exists:agents,id'
         ]);
 
         try {
             $agent = Agent::create([
-                'name'          => $request->name,
-                'extension'     => $request->extension,
-                'secret'        => $request->secret,
-                'status'        => 'offline',
-                'supervisor_id' => $request->supervisor_id ?? null,
+                'name'      => $request->name,
+                'extension' => $request->extension,
+                'secret'    => $request->secret,
+                'status'    => 'offline',
+                // Hapus supervisor_id karena sudah dipindah ke tabel pivot
             ]);
+
+            // 🚀 Sinkronisasi Multiple Supervisor ke tabel pivot
+            if ($request->has('supervisor_ids')) {
+                $agent->supervisors()->sync($request->supervisor_ids);
+            }
 
             if (class_exists(ProvisionAsteriskAgent::class)) {
                 ProvisionAsteriskAgent::dispatch($agent);
@@ -134,19 +143,20 @@ class SupervisorMonitoringController extends Controller
     public function update(Request $request, $id)
     {
         $request->validate([
-            'name'          => 'required|string|max:255',
-            'supervisor_id' => 'nullable|exists:agents,id', 
-            'secret'        => 'nullable|string|min:4',
-            'role'          => 'required|in:agent,supervisor'
+            'name'             => 'required|string|max:255',
+            'supervisor_ids'   => 'nullable|array', // 🚀 Validasi array multi-SPV
+            'supervisor_ids.*' => 'exists:agents,id',
+            'secret'           => 'nullable|string|min:4',
+            'role'             => 'required|in:agent,supervisor'
         ]);
 
         try {
             $agent = Agent::findOrFail($id);
             $oldSecret = $agent->secret;
             
-            $agent->name          = $request->name;
-            $agent->supervisor_id = $request->supervisor_id;
-            $agent->role          = $request->role;
+            $agent->name = $request->name;
+            $agent->role = $request->role;
+            // Hapus assignment supervisor_id
 
             $secretChanged = false;
             if ($request->filled('secret')) {
@@ -155,6 +165,13 @@ class SupervisorMonitoringController extends Controller
             }
 
             $agent->save();
+
+            // 🚀 Sinkronisasi Multiple Supervisor ke tabel pivot
+            if ($request->has('supervisor_ids')) {
+                $agent->supervisors()->sync($request->supervisor_ids);
+            } else {
+                $agent->supervisors()->detach();
+            }
 
             if (class_exists(ProvisionAsteriskAgent::class)) {
                 ProvisionAsteriskAgent::dispatch($agent, 'update', $secretChanged);
@@ -303,10 +320,12 @@ class SupervisorMonitoringController extends Controller
             $spv = Agent::where('extension', $spvExt)->first();
 
             if ($spv) {
-                $managedExtensions = Agent::where('supervisor_id', $spv->id)
-                                          ->orWhere('id', $spv->id)
-                                          ->pluck('extension')
-                                          ->toArray();
+                // 🚀 Tarik semua ekstensi agen bawahan via relasi Many-to-Many
+                $managedExtensions = $spv->agents()
+                                        ->pluck('extension')
+                                        ->merge([$spv->extension])
+                                        ->unique()
+                                        ->toArray();
 
                 $query->where(function($q) use ($managedExtensions) {
                     $q->whereIn('src', $managedExtensions)->orWhereIn('dst', $managedExtensions);
@@ -315,6 +334,8 @@ class SupervisorMonitoringController extends Controller
                 $query->whereRaw('1 = 0');
             }
         }
+
+        // ... (sisa filter pencarian & pagination callLogs tetap sama) ...
 
         if ($request->filled('agent_extension')) {
             $ext = $request->agent_extension;

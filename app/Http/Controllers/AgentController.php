@@ -54,21 +54,25 @@ class AgentController extends Controller
     public function update(Request $request, $id)
     {
         $request->validate([
-            'name'          => 'required|string|max:255',
-            'supervisor_id' => 'nullable|exists:agents,id', 
-            'secret'        => 'nullable|string|min:4',
-            'role'          => 'required|in:agent,supervisor',
-            'context'       => 'nullable|string|in:from-internal,blokir-total' // 🚀 Validasi context
+            'name'           => 'required|string|max:255',
+            'secret'         => 'nullable|string|min:4',
+            'role'           => 'required|in:agent,supervisor',
+            'context'        => 'nullable|string|in:from-internal,blokir-total',
+            
+            // 🚀 Ubah validasi menjadi array untuk menampung banyak SPV
+            'supervisor_ids'   => 'nullable|array',
+            'supervisor_ids.*' => 'exists:agents,id' 
         ]);
 
         $agent = Agent::findOrFail($id);
         $oldSecret = $agent->secret;
-        $oldContext = $agent->context; // 🚀 Cek context lama
+        $oldContext = $agent->context; 
         
         $agent->name          = $request->name;
-        $agent->supervisor_id = $request->supervisor_id;
         $agent->role          = $request->role;
-        $agent->context       = $request->context ?? 'from-internal'; // 🚀 Update context
+        $agent->context       = $request->context ?? 'from-internal';
+        
+        // Hapus baris: $agent->supervisor_id = $request->supervisor_id;
 
         $secretChanged = false;
         if ($request->filled('secret')) {
@@ -76,13 +80,20 @@ class AgentController extends Controller
             $secretChanged = ($request->secret !== $oldSecret);
         }
 
-        // Cek apakah context juga berubah (Opsional, buat penanda di Job)
         $contextChanged = ($agent->context !== $oldContext);
 
+        // 🚀 Simpan data utama agen terlebih dahulu
         $agent->save();
 
+        // 🚀 Jalankan sinkronisasi Multiple Supervisor ke tabel pivot
+        if ($request->has('supervisor_ids')) {
+            $agent->supervisors()->sync($request->supervisor_ids);
+        } else {
+            // Kosongkan SPV jika user menghapus semua pilihan di dropdown
+            $agent->supervisors()->detach(); 
+        }
+
         // Lempar proses update ke background queue
-        // (Abang bisa memodifikasi parameter dispatch ini jika Job butuh tahu context-nya berubah)
         ProvisionAsteriskAgent::dispatch($agent, 'update', $secretChanged);
 
         return response()->json([
