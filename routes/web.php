@@ -170,19 +170,28 @@ Route::prefix('dashboard')->group(function () {
 
             // 4. TABEL AGENT PERFORMANCE
             $agentPerformanceRaw = (clone $query)->selectRaw("src as extension, COUNT(*) as total_calls, SUM(CASE WHEN disposition = 'ANSWERED' THEN 1 ELSE 0 END) as connected_calls, SUM(billsec) as total_talk_time")->where('src', '!=', '')->groupBy('extension')->orderBy('total_calls', 'desc')->limit(50)->get();
+            
             $agentNames = \App\Models\Agent::whereIn('extension', $agentPerformanceRaw->pluck('extension'))->pluck('name', 'extension');
 
-            $agentPerformance = $agentPerformanceRaw->map(function($item) use ($agentNames) {
-                $name = $agentNames[$item->extension] ?? 'Unknown Agent';
-                $percentage = $item->total_calls > 0 ? round(($item->connected_calls / $item->total_calls) * 100) : 0;
-                $formattedTalkTime = sprintf("%d:%02d:%02d", floor($item->total_talk_time / 3600), floor(($item->total_talk_time % 3600) / 60), $item->total_talk_time % 60);
+            $agentPerformance = $agentPerformanceRaw
+                ->filter(function($item) use ($agentNames) {
+                    // 🚀 Hanya ambil ext yang benar-benar terdaftar di tabel Agent (buang nomor asing/unknown)
+                    return $agentNames->has($item->extension);
+                })
+                ->map(function($item) use ($agentNames) {
+                    $name = $agentNames[$item->extension]; // Pasti ketemu karena sudah difilter
+                    $percentage = $item->total_calls > 0 ? round(($item->connected_calls / $item->total_calls) * 100) : 0;
+                    $formattedTalkTime = sprintf("%d:%02d:%02d", floor($item->total_talk_time / 3600), floor(($item->total_talk_time % 3600) / 60), $item->total_talk_time % 60);
 
-                return [
-                    'name' => $name, 'extension' => $item->extension,
-                    'total_calls' => $item->total_calls, 'connected_calls' => $item->connected_calls,
-                    'percentage' => $percentage, 'talk_time' => $formattedTalkTime
-                ];
-            })->toArray(); // 🚀 Wajib toArray() agar aman di Cache
+                    return [
+                        'name' => $name, 
+                        'extension' => $item->extension,
+                        'total_calls' => $item->total_calls, 
+                        'connected_calls' => $item->connected_calls,
+                        'percentage' => $percentage, 
+                        'talk_time' => $formattedTalkTime
+                    ];
+                })->values()->toArray(); // 🚀 Wajib toArray() agar aman di Cache
 
             return compact('stats', 'chartVolumeCategories', 'chartVolumeData', 'chartSubtitle', 'chartOutcomesCounts', 'agentPerformance');
         });
