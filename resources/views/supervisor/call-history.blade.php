@@ -12,17 +12,33 @@
             <p class="text-sm text-slate-500 mt-0.5">Arsip riwayat percakapan telepon lengkap dengan catatan dari agen dan rekaman.</p>
         </div>
         
-        <!-- Tombol Aksi Kanan -->
         <div class="flex items-center gap-2 flex-wrap">
-            <a :href="'/dashboard/api/call-logs/export?' + new URLSearchParams(filters).toString()" 
-               target="_blank"
-               class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-sm font-medium shadow-sm transition flex items-center gap-2">
-                <i class="fa-solid fa-file-excel text-xs"></i> Export Excel
-            </a>
-            <button @click="fetchLogs(1)" class="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2.5 rounded-xl text-sm font-medium shadow-sm transition flex items-center gap-2">
-                <i class="fa-solid fa-rotate text-xs"></i> Refresh Data
-            </button>
-        </div>
+    
+    <!-- Dropdown Pilih Format -->
+    <select x-model="exportFormat" class="border border-gray-300 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+        <option value="xlsx">Format Excel (.xlsx)</option>
+        <option value="csv">Format CSV (.csv)</option>
+    </select>
+
+    <!-- Tombol Export Baru dengan state isExporting -->
+    <button @click="exportData()" :disabled="isExporting" 
+        class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-sm font-medium shadow-sm transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+        
+        <!-- Icon berubah jadi muter saat isExporting = true -->
+        <i class="fa-solid" :class="isExporting ? 'fa-gear fa-spin' : 'fa-file-excel text-xs'"></i> 
+        
+        <!-- Teks berubah dinamis tergantung format yang dipilih -->
+        <span x-text="isExporting ? 'Merakit ' + exportFormat.toUpperCase() + '...' : 'Export Data'"></span>
+    </button>
+    
+    <button @click="syncAndRefresh()" :disabled="isSyncing" 
+        class="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2.5 rounded-xl text-sm font-medium shadow-sm transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+    
+    <i class="fa-solid fa-rotate text-xs" :class="isSyncing ? 'fa-spin' : ''"></i> 
+    
+    <span x-text="isSyncing ? 'Syncing...' : 'Refresh Data'"></span>
+</button>
+</div>
     </div>
 
     <!-- Panel Filter & Pencarian -->
@@ -206,9 +222,33 @@
             pagination: { current_page: 1, last_page: 1, total: 0 },
             filters: { start_date: '', end_date: '', search: '', agent_extension: '' },
             
+            isExporting: false, 
+            exportFormat: 'xlsx', // 🚀 State format export (xlsx / csv)
+            isSyncing: false,
             init() {
                 this.fetchAgentsList();
                 this.fetchLogs(1);
+            },
+            async syncAndRefresh() {
+                this.isSyncing = true;
+
+                try {
+                    // 1. Panggil API backend untuk jalankan artisan cdr:sync
+                    let res = await fetch('/dashboard/api/cdr-sync', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+                    let result = await res.json();
+
+                    if (result.status === 'success') {
+                        // 2. Setelah sync beres, tarik ulang data terbaru ke tabel
+                        this.fetchLogs(1);
+                    } else {
+                        alert('Gagal melakukan sinkronisasi data.');
+                    }
+                } catch (err) {
+                    console.error("Sync Error:", err);
+                    alert("Terjadi kesalahan pada server saat sinkronisasi.");
+                } finally {
+                    this.isSyncing = false; // Matikan animasi loading
+                }
             },
             
             formatTime(seconds) {
@@ -309,6 +349,50 @@
                 this.stopAudio();
                 this.filters = { start_date: '', end_date: '', search: '', agent_extension: '' };
                 this.fetchLogs(1);
+            },
+
+            async exportData() {
+                this.isExporting = true; 
+
+                try {
+                    let params = new URLSearchParams(this.filters).toString();
+                    let url = `/dashboard/api/call-logs/export?${params}&format=${this.exportFormat}`;
+
+                    let response = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+                    
+                    if (!response.ok) throw new Error('Gagal memicu export di server.');
+                    
+                    let data = await response.json();
+
+                    let checkInterval = setInterval(async () => {
+                        try {
+                            let res = await fetch(`/dashboard/api/call-logs/export-status?filename=${data.filename}`);
+                            
+                            if (!res.ok) {
+                                clearInterval(checkInterval);
+                                throw new Error('Server error ' + res.status);
+                            }
+
+                            let status = await res.json();
+
+                            if (status.ready) {
+                                clearInterval(checkInterval);
+                                window.location.href = status.url; 
+                                this.isExporting = false; 
+                            }
+                        } catch (err) {
+                            clearInterval(checkInterval);
+                            console.error("Polling Error:", err);
+                            this.isExporting = false;
+                            alert("Proses terhenti karena error server. Silakan cek log Laravel.");
+                        }
+                    }, 5000); 
+
+                } catch (error) {
+                    console.error("Export Error:", error);
+                    this.isExporting = false; 
+                    alert("Gagal memulai ekspor data.");
+                }
             }
         }
     }

@@ -16,6 +16,9 @@ use Maatwebsite\Excel\Facades\Excel;
 use App\Jobs\ProvisionAsteriskAgent;
 use Illuminate\Support\Facades\DB;
 use phpseclib3\Net\SSH2; // 🚀 WAJIB DITAMBAHKAN UNTUK TAKEOVER
+use Symfony\Component\HttpFoundation\StreamedResponse;
+use App\Jobs\ProcessCallLogExport;
+use Illuminate\Support\Facades\Artisan;
 
 class SupervisorMonitoringController extends Controller
 {
@@ -422,10 +425,48 @@ class SupervisorMonitoringController extends Controller
 
     public function exportExcel(Request $request)
     {
-        $filename = 'call-history-' . date('Y-m-d_H-i-s') . '.xlsx';
-        return Excel::download(new CallLogsExport($request), $filename);
+        // 🚀 Tangkap format dari frontend (.xlsx atau .csv)
+        $format = $request->query('format', 'xlsx');
+        if (!in_array($format, ['xlsx', 'csv'])) {
+            $format = 'xlsx';
+        }
+
+        // Terapkan format ke nama file
+        $filename = 'call-history-' . date('Y-m-d_H-i-s') . '.' . $format;
+        $filePath = 'exports/' . $filename;
+
+        $filters = $request->only(['agent_extension', 'search', 'start_date', 'end_date']);
+        $filters['supervisor_extension'] = session('supervisor_extension');
+
+        // Lempar ke Job FastExcel
+        ProcessCallLogExport::dispatch($filters, $filePath);
+
+        return response()->json([
+            'status' => 'processing',
+            'filename' => $filename
+        ]);
     }
 
+   public function checkExportStatus(\Illuminate\Http\Request $request)
+    {
+        $filename = $request->query('filename');
+        if (!$filename) {
+            return response()->json(['ready' => false]);
+        }
+
+        $path = 'exports/' . $filename;
+        $disk = \Illuminate\Support\Facades\Storage::disk('public');
+
+        // 🚀 GEMBOK GANDA: File harus wujud DAN ukurannya lebih dari 0 bytes
+        if ($disk->exists($path) && $disk->size($path) > 0) {
+            return response()->json([
+                'ready' => true,
+                'url' => asset('storage/' . $path)
+            ]);
+        }
+
+        return response()->json(['ready' => false]);
+    }
     public function agentClickToCall(Request $request)
     {
         $request->validate([
@@ -572,4 +613,21 @@ class SupervisorMonitoringController extends Controller
             ], 500);
         }
     }
+    public function syncCdr()
+{
+    try {
+        // Menjalankan perintah artisan cdr:sync
+        \Illuminate\Support\Facades\Artisan::call('cdr:sync');
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'CDR synced successfully'
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => 'error',
+            'message' => $e->getMessage()
+        ], 500);
+    }
+}
 }

@@ -13,7 +13,8 @@
         "laravel/tinker": "^3.0",
         "maatwebsite/excel": "^4.0",
         "phpseclib/phpseclib": "~3.0",
-        "pusher/pusher-php-server": "*"
+        "pusher/pusher-php-server": "*",
+        "rap2hpoutre/fast-excel": "^5.15"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",

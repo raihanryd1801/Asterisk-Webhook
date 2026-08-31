@@ -237,11 +237,13 @@ Route::prefix('dashboard')->group(function () {
     Route::post('/api/spy', [SupervisorMonitoringController::class, 'spyAction']);
     Route::get('/api/call-logs', [SupervisorMonitoringController::class, 'callLogs']);
     Route::get('/api/call-logs/export', [SupervisorMonitoringController::class, 'exportExcel']);
+    Route::get('/api/call-logs/export-status', [SupervisorMonitoringController::class, 'checkExportStatus']);
     Route::get('/api/play-recording', [SupervisorMonitoringController::class, 'playRecording']);
     Route::post('/api/agent/{extension}/status', [SupervisorMonitoringController::class, 'updateStatus']);
     Route::post('/api/agent/click-to-call', [SupervisorMonitoringController::class, 'agentClickToCall']);
     Route::post('/monitoring/takeover', [SupervisorMonitoringController::class, 'takeoverAction']);
     Route::post('/api/call-logs/{uniqueid}/note', [SupervisorMonitoringController::class, 'saveNote']);
+    Route::get('/api/cdr-sync', [SupervisorMonitoringController::class, 'syncCdr']);
 });
 
 // ==========================================
