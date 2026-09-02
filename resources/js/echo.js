@@ -17,3 +17,8 @@ window.Echo = new Echo({
 
     enabledTransports: ['ws', 'wss'],
 });
+document.addEventListener('turbo:before-cache', () => {
+    document.querySelectorAll('[x-data]').forEach((el) => {
+        if (window.Alpine) { window.Alpine.destroyTree(el); }
+    });
+});

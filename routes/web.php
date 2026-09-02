@@ -257,6 +257,7 @@ Route::prefix('dashboard')->group(function () {
     Route::get('/api/chat/contacts', [ChatController::class, 'getContacts']);
     Route::get('/api/chat/messages/{partnerId}', [ChatController::class, 'fetchMessages']);
     Route::post('/api/chat/send', [ChatController::class, 'sendMessage']);
+    Route::get('/api/chat/unread-count', [ChatController::class, 'getUnreadCount']);
 });
 
 // ==========================================

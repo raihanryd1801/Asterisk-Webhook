@@ -8,6 +8,13 @@
 
 import './echo';
 
+import './chat-widget.js';
+
 import JsSIP from 'jssip';
 
 window.JsSIP = JsSIP;
+
+window.formatNumber = function(value) {
+    // Logika format angka Abang di sini
+    return new Intl.NumberFormat('id-ID').format(value);
+};

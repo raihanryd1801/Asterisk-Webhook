@@ -113,4 +113,25 @@ class ChatController extends Controller
             return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
         }
     }
+    public function getUnreadCount(Request $request)
+{
+    try {
+        $myId = $request->query('my_id');
+
+        if (!$myId) {
+            return response()->json(['status' => 'error', 'message' => 'my_id wajib diisi'], 422);
+        }
+
+        $count = Message::where('receiver_id', $myId)
+                        ->where('is_read', 0)
+                        ->count();
+
+        return response()->json([
+            'status' => 'success',
+            'unread_count' => $count
+        ]);
+    } catch (\Exception $e) {
+        return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
+    }
+}
 }

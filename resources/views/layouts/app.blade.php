@@ -10,9 +10,9 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     @vite(['resources/js/app.js'])
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    
 
     <script type="module" src="https://cdn.jsdelivr.net/npm/@hotwired/turbo@8.0.4/dist/turbo.es2017-esm.js"></script>
 
@@ -88,9 +88,9 @@
                 <a href="{{ route('dashboard.overview', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('dashboard.overview') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
                     <i class="fa-solid fa-layer-group w-5 text-center"></i> Overview
                 </a>
-                <a href="{{ route('dashboard.workspace', $profileExt, false) }}" data-turbo="false" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('dashboard.workspace') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
-                    <i class="fa-solid fa-border-all w-5 text-center"></i> Workspace
-                </a>
+                <a href="{{ route('dashboard.workspace', $profileExt, false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('dashboard.workspace') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
+    <i class="fa-solid fa-border-all w-5 text-center"></i> Workspace
+</a>
             @else
                 <p class="px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-3 mt-2">Main Menu</p>
                 <a href="{{ route('dashboard.overview', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('dashboard.overview') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
@@ -118,23 +118,23 @@
         </nav>
 
         <div class="p-3 border-t border-slate-800 shrink-0">
-    <div class="flex items-center gap-3 p-2 rounded-lg relative group">
-        <div class="w-9 h-9 rounded-full bg-brand-500 flex items-center justify-center text-white font-semibold text-sm shrink-0">
-            {{ strtoupper(substr($profileName, 0, 1)) }}
+            <div class="flex items-center gap-3 p-2 rounded-lg relative group">
+                <div class="w-9 h-9 rounded-full bg-brand-500 flex items-center justify-center text-white font-semibold text-sm shrink-0">
+                    {{ strtoupper(substr($profileName, 0, 1)) }}
+                </div>
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm font-medium truncate">{{ $profileName }}</p>
+                    <p class="text-xs flex items-center gap-1 text-emerald-400">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> 
+                        {{ $profileRole }} {!! $profileExt ? "(Ext: $profileExt)" : "" !!}
+                    </p>
+                </div>
+                <form action="{{ $userType === 'admin' ? url('/logout') : url('/agent/logout') }}" method="POST" data-turbo="false">
+                    @csrf
+                    <button type="submit" class="text-slate-500 hover:text-red-400 transition-colors" title="Logout"><i class="fa-solid fa-right-from-bracket"></i></button>
+                </form>
+            </div>
         </div>
-        <div class="flex-1 min-w-0">
-            <p class="text-sm font-medium truncate">{{ $profileName }}</p>
-            <p class="text-xs flex items-center gap-1 text-emerald-400">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> 
-                {{ $profileRole }} {!! $profileExt ? "(Ext: $profileExt)" : "" !!}
-            </p>
-        </div>
-        <form action="{{ $userType === 'admin' ? url('/logout') : url('/agent/logout') }}" method="POST" data-turbo="false">
-            @csrf
-            <button type="submit" class="text-slate-500 hover:text-red-400 transition-colors" title="Logout"><i class="fa-solid fa-right-from-bracket"></i></button>
-        </form>
-    </div>
-</div>
     </aside>
 
     <main class="flex-1 flex flex-col min-w-0 overflow-hidden relative z-10">
@@ -143,35 +143,25 @@
         </div>
     </main>
 
-    <script src="https://cdn.jsdelivr.net/npm/pusher-js@8.4.0/dist/web/pusher.min.js" data-turbo-eval="false"></script>
-    <script src="https://cdn.jsdelivr.net/npm/laravel-echo@1.16.1/dist/echo.iife.js" data-turbo-eval="false"></script>
-
-    <script data-turbo-eval="false">
-        window.Pusher = Pusher;
-        if (typeof window.Echo !== 'undefined') {
-            window.Echo = new window.Echo({
-                broadcaster: 'reverb',
-                key: '{{ env("REVERB_APP_KEY") }}',
-                wsHost: window.location.hostname,
-                wsPort: 8080,
-                wssPort: 8080,
-                forceTLS: false,
-                enabledTransports: ['ws', 'wss'],
-            });
-        }
-        document.addEventListener('turbo:before-cache', () => {
-            document.querySelectorAll('[x-data]').forEach((el) => {
-                if (window.Alpine) { window.Alpine.destroyTree(el); }
-            });
-        });
-    </script>
+    {{-- Echo, Pusher, Alpine turbo-cache cleanup, dan chatWidget component sekarang
+         di-bundle lewat @vite(['resources/js/app.js']) di <head> —
+         lihat resources/js/echo.js dan resources/js/chat-widget.js --}}
 
     @if($userType !== 'admin')
-    <div class="fixed bottom-6 right-6 z-50" x-data="chatWidget({{ $myChatUserId }})">
-        <button @click="toggleChat()" class="bg-brand-600 hover:bg-brand-700 text-white w-14 h-14 rounded-full shadow-xl flex items-center justify-center transition-all transform hover:scale-105 relative group">
-            <i class="fa-solid fa-comments text-xl"></i>
-            <span class="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm" x-show="unreadCount > 0" x-text="unreadCount" x-cloak></span>
-        </button>
+    <div class="fixed bottom-6 right-6 z-50" x-data="chatWidget({{ $myChatUserId }})" x-bind:style="widgetStyle">
+    <button 
+        x-ref="chatButton"
+        @mousedown="startDrag($event)"
+        @touchstart="startDrag($event)"
+        @click="handleButtonClick()"
+        class="bg-brand-600 hover:bg-brand-700 text-white w-14 h-14 rounded-full shadow-xl flex items-center justify-center transition-all transform hover:scale-105 relative group cursor-grab active:cursor-grabbing select-none">
+        <i class="fa-solid fa-comments text-xl pointer-events-none"></i>
+        <span class="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm" x-show="unreadCount > 0" x-text="unreadCount" x-cloak></span>
+    </button>
+
+    
+         ...
+         {{-- panel chat tetap sama persis seperti sebelumnya --}}
 
         <div x-show="isOpen" 
              x-transition:enter="transition ease-out duration-200"
@@ -256,142 +246,6 @@
             </div>
         </div>
     </div>
-
-    <script>
-    document.addEventListener('alpine:init', () => {
-        Alpine.data('chatWidget', (initUserId) => ({
-            isOpen: false,
-            contacts: [],
-            activePartner: null,
-            messages: [],
-            newMessage: '',
-            currentUserId: initUserId, 
-            unreadCount: 0,
-
-            init() {
-                setInterval(() => {
-                    if (this.activePartner && this.isOpen) {
-                        this.fetchMessages(true);
-                    }
-                }, 3000);
-            },
-
-            toggleChat() {
-                this.isOpen = !this.isOpen;
-                if (this.isOpen) {
-                    this.unreadCount = 0;
-                    this.fetchContacts();
-                    if (this.activePartner) {
-                        this.fetchMessages();
-                    }
-                }
-            },
-
-            fetchContacts() {
-                fetch('/dashboard/api/chat/contacts?my_id=' + this.currentUserId, {
-                    headers: { 'Accept': 'application/json' }
-                })
-                .then(async res => {
-                    if (!res.ok) throw new Error('Gagal memuat kontak.');
-                    return res.json();
-                })
-                .then(data => {
-                    if(data.status === 'success') {
-                        this.contacts = data.contacts.filter(c => c.id != this.currentUserId);
-                    }
-                })
-                .catch(err => {
-                    this.contacts = [];
-                });
-            },
-
-            selectContact(contact) {
-                this.activePartner = contact;
-                this.fetchMessages();
-            },
-
-            fetchMessages(silent = false) {
-                if(!this.activePartner) return;
-                
-                fetch(`/dashboard/api/chat/messages/${this.activePartner.id}?my_id=${this.currentUserId}`, {
-                    headers: { 'Accept': 'application/json' }
-                })
-                .then(async res => {
-                    if (!res.ok) return [];
-                    return res.json();
-                })
-                .then(messages => {
-                    if (Array.isArray(messages)) {
-                        let isNew = messages.length > this.messages.length;
-                        
-                        if (isNew && !this.isOpen) {
-                            this.unreadCount++;
-                        }
-
-                        this.messages = messages;
-                        
-                        if (isNew || !silent) {
-                            this.$nextTick(() => {
-                                let container = this.$refs.messageContainer;
-                                if(container) container.scrollTop = container.scrollHeight;
-                            });
-                        }
-                    }
-                })
-                .catch(err => console.error('Error fetch messages:', err));
-            },
-
-            sendMessage() {
-                if(!this.newMessage || !this.newMessage.trim() || !this.activePartner) return;
-
-                let textToSend = this.newMessage;
-                this.newMessage = ''; 
-
-                fetch('/dashboard/api/chat/send', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-                        'Accept': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        receiver_id: this.activePartner.id,
-                        message: textToSend,
-                        sender_id: this.currentUserId
-                    })
-                })
-                .then(async res => {
-                    if (!res.ok) {
-                        let err = await res.json().catch(() => ({}));
-                        throw new Error(err.message || 'Gagal mengirim pesan');
-                    }
-                    return res.json();
-                })
-                .then(data => {
-                    if(data.status === 'success') {
-                        this.messages.push(data.message);
-                        this.$nextTick(() => {
-                            let container = this.$refs.messageContainer;
-                            if(container) container.scrollTop = container.scrollHeight;
-                        });
-                    }
-                })
-                .catch(err => {
-                    console.error('Error send message:', err);
-                    alert(err.message);
-                });
-            },
-
-            formatTime(timestamp) {
-                if (!timestamp) return '';
-                let formattedString = timestamp.replace(' ', 'T');
-                let date = new Date(formattedString);
-                if (isNaN(date.getTime())) return '';
-                return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            }
-        }));
-    });
-    </script>
     @endif
 
     @yield('scripts')

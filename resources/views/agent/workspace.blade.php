@@ -9,8 +9,8 @@
 
 @section('content')
 
-<!-- BUNGKUS UTAMA: w-full agar FULL SCREEN -->
-<div class="w-full space-y-6" x-data="agentWorkspaceData('{{ $extension }}')" data-turbo="false">
+<!-- 🚀 HAPUS data-turbo="false" AGAR PINDAH MENU MULUS -->
+<div class="w-full space-y-6" x-data="agentWorkspaceData('{{ $extension }}')">
     
     <!-- Header Workspace -->
     <div class="bg-brand-50 border border-brand-100 rounded-2xl p-6 flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -26,7 +26,6 @@
     <!-- ============================================== -->
     <!-- BAGIAN 1: STATUS TOOLBAR (FULL WIDTH BAR)      -->
     <!-- ============================================== -->
-    <!-- z-50 dan relative sangat penting di sini agar dropdown melayang di atas segalanya -->
     <div class="bg-white border border-slate-200 rounded-2xl p-4 sm:px-6 shadow-sm flex flex-col xl:flex-row xl:items-center justify-between gap-4 relative z-50">
         
         <div class="flex flex-wrap items-center gap-4 sm:gap-6">
@@ -185,14 +184,25 @@
         </div>
 
         <div class="p-5 bg-slate-50">
-            <template x-if="logs.length === 0">
+            
+            <!-- 🚀 LOADING SPINNER -->
+            <template x-if="isLoading">
+                <div class="flex flex-col items-center justify-center py-12 text-slate-400">
+                    <i class="fa-solid fa-circle-notch fa-spin text-4xl mb-4 text-brand-500"></i>
+                    <p class="text-xs font-medium animate-pulse tracking-wide">Memuat riwayat panggilan...</p>
+                </div>
+            </template>
+
+            <!-- 🚀 PESAN DATA KOSONG -->
+            <template x-if="!isLoading && logs.length === 0">
                 <div class="text-center py-10 text-slate-400 text-sm border-2 border-dashed border-slate-200 rounded-xl bg-white">
                     <i class="fa-regular fa-folder-open text-3xl text-slate-300 mb-3 block"></i>
                     Belum ada data riwayat panggilan.
                 </div>
             </template>
 
-            <div class="space-y-3">
+            <!-- 🚀 TAMPILAN DATA -->
+            <div class="space-y-3" x-show="!isLoading">
                 <template x-for="(log, index) in logs" :key="log.uniqueid || index">
                     <div class="border border-slate-300 rounded-lg bg-white overflow-hidden shadow-sm hover:border-slate-400 transition-colors">
                         
@@ -277,7 +287,6 @@
 
 @section('scripts')
 <script>
-    // PERBAIKAN TURBO HOTWIRE ADA DI SINI
     document.addEventListener('alpine:init', () => {
         Alpine.data('agentWorkspaceData', (extension) => ({
             extension: extension,
@@ -287,7 +296,8 @@
             logs: [],
             pagination: { current_page: 1, last_page: 1, total: 0 },
             filters: { search: '' },
-            statusInterval: null, // Wadah interval
+            statusInterval: null, 
+            isLoading: true, // 🚀 TAMBAHKAN STATE LOADING
 
             init() {
                 this.fetchAgentStatus();
@@ -295,7 +305,6 @@
                 this.fetchLogs(1);
             },
 
-            // Bersihkan interval saat pindah halaman (Turbo friendly)
             destroy() {
                 if (this.statusInterval) {
                     clearInterval(this.statusInterval);
@@ -361,6 +370,8 @@
             },
 
             fetchLogs(page) {
+                this.isLoading = true; // 🚀 Aktifkan Loading
+                
                 let params = new URLSearchParams({
                     page: page,
                     search: this.filters.search
@@ -377,6 +388,9 @@
                         }));
                         this.pagination = { current_page: response.data.current_page, last_page: response.data.last_page, total: response.data.total };
                     }
+                })
+                .finally(() => {
+                    this.isLoading = false; // 🚀 Matikan loading saat selesai (berhasil/gagal)
                 });
             },
             
