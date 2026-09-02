@@ -8,6 +8,7 @@ use App\Http\Controllers\AgentController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\SupervisorController;
 use App\Http\Controllers\Api\SupervisorMonitoringController;
+use App\Http\Controllers\ChatController;
 
 // ==========================================
 // 1. AUTHENTICATION ROUTES
@@ -45,7 +46,6 @@ Route::prefix('dashboard')->group(function () {
             default: $query->where('calldate', '>=', now()->startOfMonth()); break;
         }
         
-        $managedExtensions = [];
         $roleTitle = "Overview";
         $userKey = 'admin';
 
@@ -62,7 +62,6 @@ Route::prefix('dashboard')->group(function () {
             $spv = App\Models\Agent::where('extension', $spvExt)->first();
 
             if ($spv) {
-                // 🚀 Ganti bagian ini menggunakan relasi many-to-many pivot agents()
                 $managedExtensions = $spv->agents()
                                         ->pluck('extension')
                                         ->merge([$spv->extension])
@@ -180,11 +179,10 @@ Route::prefix('dashboard')->group(function () {
 
             $agentPerformance = $agentPerformanceRaw
                 ->filter(function($item) use ($agentNames) {
-                    // 🚀 Hanya ambil ext yang benar-benar terdaftar di tabel Agent (buang nomor asing/unknown)
                     return $agentNames->has($item->extension);
                 })
                 ->map(function($item) use ($agentNames) {
-                    $name = $agentNames[$item->extension]; // Pasti ketemu karena sudah difilter
+                    $name = $agentNames[$item->extension];
                     $percentage = $item->total_calls > 0 ? round(($item->connected_calls / $item->total_calls) * 100) : 0;
                     $formattedTalkTime = sprintf("%d:%02d:%02d", floor($item->total_talk_time / 3600), floor(($item->total_talk_time % 3600) / 60), $item->total_talk_time % 60);
 
@@ -196,14 +194,11 @@ Route::prefix('dashboard')->group(function () {
                         'percentage' => $percentage, 
                         'talk_time' => $formattedTalkTime
                     ];
-                })->values()->toArray(); // 🚀 Wajib toArray() agar aman di Cache
+                })->values()->toArray();
 
             return compact('stats', 'chartVolumeCategories', 'chartVolumeData', 'chartSubtitle', 'chartOutcomesCounts', 'agentPerformance');
         });
 
-        // ==========================================
-        // 🚀 PENGEMBALIAN DATA (JSON AJAX ATAU BLADE HTML)
-        // ==========================================
         if ($request->wantsJson()) {
             return response()->json($dashboardData);
         }
@@ -213,7 +208,6 @@ Route::prefix('dashboard')->group(function () {
             'range'     => $range
         ]));
     })->name('dashboard.overview');
-
 
     // 2. Agent Workspace
     Route::get('/workspace/{extension}', function ($extension) {
@@ -246,7 +240,7 @@ Route::prefix('dashboard')->group(function () {
         Route::delete('/agents/{id}', [AgentController::class, 'destroy']);
     });
 
-    // B. ENDPOINT API / AJAX
+    // 5. API / AJAX Endpoints (Termasuk Chat Bimbingan TL & Agent)
     Route::get('/api/live-agents', [SupervisorMonitoringController::class, 'agentsList']);
     Route::post('/api/spy', [SupervisorMonitoringController::class, 'spyAction']);
     Route::get('/api/call-logs', [SupervisorMonitoringController::class, 'callLogs']);
@@ -258,6 +252,11 @@ Route::prefix('dashboard')->group(function () {
     Route::post('/monitoring/takeover', [SupervisorMonitoringController::class, 'takeoverAction']);
     Route::post('/api/call-logs/{uniqueid}/note', [SupervisorMonitoringController::class, 'saveNote']);
     Route::get('/api/cdr-sync', [SupervisorMonitoringController::class, 'syncCdr']);
+    
+   // Letakkan ini di dalam Route::prefix('dashboard')->group(function () { ... })
+    Route::get('/api/chat/contacts', [ChatController::class, 'getContacts']);
+    Route::get('/api/chat/messages/{partnerId}', [ChatController::class, 'fetchMessages']);
+    Route::post('/api/chat/send', [ChatController::class, 'sendMessage']);
 });
 
 // ==========================================
@@ -271,3 +270,4 @@ Route::get('/test-ami/{ext}', function($ext) {
         'hasil_dari_pjsip_show' => $amiService->isExtensionRegistered($ext) ? 'YES (Terdaftar)' : 'NO (Tidak Terdaftar)'
     ]);
 });
+

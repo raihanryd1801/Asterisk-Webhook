@@ -18,6 +18,7 @@ return new class extends Migration
         $table->string('secret');              // Password PJSIP
         $table->string('workgroup')->nullable();
         $table->string('status')->default('offline'); // online, offline, in-call
+        $table->string('role')->default('agent');
         $table->timestamps();
     });
 }

@@ -242,8 +242,10 @@
     window.outcomeChartInstance = window.outcomeChartInstance || null;
     window.dashboardBrowserCache = window.dashboardBrowserCache || {}; 
 
-    // Helper formatter angka (contoh: 180000 -> 180.000)
-    const formatNumber = (num) => new Intl.NumberFormat('id-ID').format(num);
+    // Helper formatter angka (aman dari Turbo)
+    if (typeof window.formatNumber === 'undefined') {
+        window.formatNumber = (num) => new Intl.NumberFormat('id-ID').format(num);
+    }
 
     function initCharts() {
         let volumeContainer = document.querySelector("#callVolumeChart");

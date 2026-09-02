@@ -33,4 +33,15 @@ class Agent extends Model
     {
         return $this->belongsToMany(Agent::class, 'agent_supervisor', 'supervisor_id', 'agent_id');
     }
+    // Pesan yang dikirim oleh agen/supervisor ini
+    public function sentMessages()
+    {
+        return $this->hasMany(Message::class, 'sender_id');
+    }
+
+    // Pesan yang diterima oleh agen/supervisor ini
+    public function receivedMessages()
+    {
+        return $this->hasMany(Message::class, 'receiver_id');
+    }
 }

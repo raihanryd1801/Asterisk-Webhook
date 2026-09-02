@@ -13,7 +13,7 @@ return new class extends Migration
             // (mis. "087786868966") kalau pihak tujuan/trunk yang menutup duluan.
             // Nullable karena tidak semua row (mis. yang cuma dari cdr:sync tanpa
             // pernah lewat ami:listen) akan punya info ini.
-            $table->string('terminated_by', 40)->nullable()->after('sip_code');
+            $table->string('terminated_by', 40)->nullable();
         });
     }
  
