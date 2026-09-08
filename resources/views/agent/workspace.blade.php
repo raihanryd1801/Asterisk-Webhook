@@ -161,6 +161,100 @@
     <hr class="border-slate-200 border-dashed my-8">
 
     <!-- ============================================== -->
+    <!-- BAGIAN 2.5: CUSTOMER ASSIGNED (CLICK TO CALL)  -->
+    <!-- ============================================== -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden w-full">
+        <div class="p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/50">
+            <div>
+                <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                    <i class="fa-solid fa-users text-brand-600"></i> Customer Assigned
+                </h2>
+                <p class="text-xs text-slate-500">Daftar customer yang ditugaskan ke Anda</p>
+            </div>
+            <button @click="fetchAssignedCustomers()" class="bg-brand-600 hover:bg-brand-700 text-white px-3 py-2 rounded-lg text-xs font-semibold shadow-sm transition whitespace-nowrap" title="Refresh">
+                <i class="fa-solid fa-rotate"></i>
+            </button>
+        </div>
+
+        <div class="p-5 bg-slate-50">
+            <!-- LOADING -->
+            <template x-if="isLoadingCustomers">
+                <div class="flex flex-col items-center justify-center py-8 text-slate-400">
+                    <i class="fa-solid fa-circle-notch fa-spin text-3xl mb-3 text-brand-500"></i>
+                    <p class="text-xs font-medium animate-pulse tracking-wide">Memuat customer assigned...</p>
+                </div>
+            </template>
+
+            <!-- EMPTY STATE -->
+            <template x-if="!isLoadingCustomers && assignedCustomers.length === 0">
+                <div class="text-center py-8 text-slate-400 text-sm border-2 border-dashed border-slate-200 rounded-xl bg-white">
+                    <i class="fa-regular fa-user-plus text-3xl text-slate-300 mb-3 block"></i>
+                    Belum ada customer yang ditugaskan ke Anda.
+                </div>
+            </template>
+
+            <!-- CUSTOMER LIST -->
+            <div class="space-y-2" x-show="!isLoadingCustomers && assignedCustomers.length > 0">
+                <template x-for="(customer, index) in assignedCustomers" :key="customer.id">
+                    <div class="border border-slate-200 rounded-lg bg-white overflow-hidden shadow-sm hover:border-brand-300 hover:shadow-md transition-all duration-200">
+                        <div class="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <span class="font-semibold text-slate-800 truncate" x-text="customer.name"></span>
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border"
+                                        :class="getCustomerStatusClass(customer.status)"
+                                        x-text="formatCustomerStatus(customer.status)"></span>
+                                </div>
+                                <div class="flex items-center gap-3 mt-1.5 text-xs text-slate-500 flex-wrap">
+                                    <span class="font-mono flex items-center gap-1" x-text="customer.phone"></span>
+                                    <template x-if="customer.email">
+                                        <span class="flex items-center gap-1" x-text="customer.email"></span>
+                                    </template>
+                                    <template x-if="customer.company">
+                                        <span class="flex items-center gap-1 text-slate-400" x-text="customer.company"></span>
+                                    </template>
+                                </div>
+                                <template x-if="customer.notes">
+                                    <div class="mt-2 text-[11px] text-slate-500 bg-slate-50 p-2 rounded border border-slate-100 line-clamp-2" x-text="customer.notes"></div>
+                                </template>
+                                
+                                <!-- Payment Info -->
+                                <template x-if="customer.total_amount > 0">
+                                    <div class="mt-2 p-2 bg-slate-50 rounded border border-slate-100">
+                                        <div class="flex items-center gap-2 text-[11px]">
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border"
+                                                :class="getPaymentStatusClass(customer.payment_status)"
+                                                x-text="formatPaymentStatus(customer.payment_status)"></span>
+                                            <span class="text-slate-600 font-mono" x-text="'Rp ' + formatCurrency(customer.paid_amount) + ' / Rp ' + formatCurrency(customer.total_amount)"></span>
+                                            <template x-if="customer.discount_amount > 0">
+                                                <span class="text-emerald-600 font-mono" x-text="'Diskon: Rp ' + formatCurrency(customer.discount_amount)"></span>
+                                            </template>
+                                        </div>
+                                        <div class="w-full h-1.5 bg-slate-200 rounded-full mt-1 overflow-hidden">
+                                            <div class="h-full bg-brand-600 transition-all duration-300" :style="'width: ' + getPaymentProgress(customer) + '%'"></div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                            
+                            <div class="shrink-0 flex items-center gap-2">
+                                <button @click="callCustomer(customer.phone, customer.name)" 
+                                    :disabled="currentStatus !== 'online'"
+                                    class="bg-brand-600 hover:bg-brand-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:hover:bg-slate-200 text-white text-xs px-3 py-2 rounded-lg transition shadow-sm flex items-center gap-1.5 font-medium whitespace-nowrap"
+                                    :title="currentStatus !== 'online' ? 'Status harus Online untuk menelepon' : 'Panggil ' + customer.name">
+                                    <i class="fa-solid fa-phone"></i> Call
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+
+    <hr class="border-slate-200 border-dashed my-8">
+
+    <!-- ============================================== -->
     <!-- BAGIAN 3: RIWAYAT & CATATAN (FULL WIDTH)       -->
     <!-- ============================================== -->
     <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden w-full">
@@ -297,12 +391,16 @@
             pagination: { current_page: 1, last_page: 1, total: 0 },
             filters: { search: '' },
             statusInterval: null, 
-            isLoading: true, // 🚀 TAMBAHKAN STATE LOADING
+            isLoading: true,
+            // 🚀 CUSTOMER ASSIGNED
+            assignedCustomers: [],
+            isLoadingCustomers: true,
 
             init() {
                 this.fetchAgentStatus();
                 this.statusInterval = setInterval(() => { this.fetchAgentStatus(); }, 5000);
                 this.fetchLogs(1);
+                this.fetchAssignedCustomers();
             },
 
             destroy() {
@@ -445,6 +543,84 @@
                     else if (range[range.length - 1] !== '...') { range.push('...'); }
                 }
                 return range;
+            },
+
+            // 🚀 CUSTOMER ASSIGNED METHODS
+            fetchAssignedCustomers() {
+                this.isLoadingCustomers = true;
+                fetch(`/dashboard/crm/agent/${this.extension}/customers`, { headers: { 'Accept': 'application/json' } })
+                .then(res => res.json())
+                .then(response => {
+                    if (response.status === 'success') {
+                        this.assignedCustomers = response.data;
+                    }
+                })
+                .catch(err => console.error('Gagal memuat customer assigned:', err))
+                .finally(() => {
+                    this.isLoadingCustomers = false;
+                });
+            },
+
+            callCustomer(phone, name) {
+                if (this.currentStatus !== 'online') {
+                    this.infoMessage = 'Status harus Online untuk menelepon';
+                    return;
+                }
+                this.targetNumber = phone;
+                this.infoMessage = `Menghubungkan ke ${name} (${phone})...`;
+                this.makeCall();
+            },
+
+            formatCustomerStatus(status) {
+                const labels = {
+                    'new': 'New',
+                    'contacted': 'Contacted',
+                    'qualified': 'Qualified',
+                    'proposal': 'Proposal',
+                    'closed_won': 'Closed Won',
+                    'closed_lost': 'Closed Lost',
+                };
+                return labels[status] || status;
+            },
+
+            getCustomerStatusClass(status) {
+                const classes = {
+                    'new': 'bg-blue-50 text-blue-700 border-blue-200',
+                    'contacted': 'bg-yellow-50 text-yellow-700 border-yellow-200',
+                    'qualified': 'bg-purple-50 text-purple-700 border-purple-200',
+                    'proposal': 'bg-indigo-50 text-indigo-700 border-indigo-200',
+                    'closed_won': 'bg-green-50 text-green-700 border-green-200',
+                    'closed_lost': 'bg-red-50 text-red-700 border-red-200',
+                };
+                return classes[status] || 'bg-slate-50 text-slate-700 border-slate-200';
+            },
+
+            formatPaymentStatus(status) {
+                const labels = {
+                    'unpaid': 'Belum Bayar',
+                    'partial': 'Cicilan',
+                    'paid': 'Lunas',
+                };
+                return labels[status] || status;
+            },
+
+            getPaymentStatusClass(status) {
+                const classes = {
+                    'unpaid': 'bg-red-50 text-red-700 border-red-200',
+                    'partial': 'bg-yellow-50 text-yellow-700 border-yellow-200',
+                    'paid': 'bg-green-50 text-green-700 border-green-200',
+                };
+                return classes[status] || 'bg-slate-50 text-slate-700 border-slate-200';
+            },
+
+            formatCurrency(amount) {
+                return new Intl.NumberFormat('id-ID').format(amount || 0);
+            },
+
+            getPaymentProgress(customer) {
+                if (!customer.total_amount || customer.total_amount <= 0) return 0;
+                const paid = (customer.paid_amount || 0) + (customer.discount_amount || 0);
+                return Math.min(100, Math.round((paid / customer.total_amount) * 100));
             }
         }));
     });

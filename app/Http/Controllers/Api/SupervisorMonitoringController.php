@@ -19,6 +19,7 @@ use phpseclib3\Net\SSH2; // 🚀 WAJIB DITAMBAHKAN UNTUK TAKEOVER
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use App\Jobs\ProcessCallLogExport;
 use Illuminate\Support\Facades\Artisan;
+use App\Exports\CallRecordingsZipExport;
 
 class SupervisorMonitoringController extends Controller
 {
@@ -117,8 +118,13 @@ class SupervisorMonitoringController extends Controller
             ]);
 
             // 🚀 Sinkronisasi Multiple Supervisor ke tabel pivot
-            if ($request->has('supervisor_ids')) {
-                $agent->supervisors()->sync($request->supervisor_ids);
+            if ($request->filled('supervisor_ids')) {
+                // Pastikan formatnya selalu array (jika frontend mengirim string tunggal atau null)
+                $spvIds = is_array($request->supervisor_ids) 
+                          ? $request->supervisor_ids 
+                          : [$request->supervisor_ids];
+                
+                $agent->supervisors()->sync($spvIds);
             }
 
             if (class_exists(ProvisionAsteriskAgent::class)) {
@@ -308,85 +314,111 @@ class SupervisorMonitoringController extends Controller
         }
     }
 
-    public function callLogs(Request $request)
-    {
-        $query = Cdr::select([
-            'uniqueid','calldate', 'src', 'dst', 'duration', 
-            'billsec', 'disposition', 'recordingfile', 'cnam', 'cnum', 'sip_code', 'terminated_by','notes'
-        ])->orderBy('calldate', 'desc');
+   public function callLogs(Request $request)
+{
+    $query = Cdr::select([
+        'uniqueid','calldate', 'src', 'dst', 'duration', 
+        'billsec', 'disposition', 'recordingfile', 'cnam', 'cnum', 'sip_code', 'terminated_by','notes'
+    ]);
 
-        if (session()->has('supervisor_extension')) {
-            $spvExt = session('supervisor_extension');
-            $spv = Agent::where('extension', $spvExt)->first();
-
-            if ($spv) {
-                // 🚀 Tarik semua ekstensi agen bawahan via relasi Many-to-Many
-                $managedExtensions = $spv->agents()
-                                        ->pluck('extension')
-                                        ->merge([$spv->extension])
-                                        ->unique()
-                                        ->toArray();
-
-                $query->where(function($q) use ($managedExtensions) {
-                    $q->whereIn('src', $managedExtensions)->orWhereIn('dst', $managedExtensions);
-                });
-            } else {
-                $query->whereRaw('1 = 0');
-            }
-        }
-
-        // ... (sisa filter pencarian & pagination callLogs tetap sama) ...
-
-        if ($request->filled('agent_extension')) {
-            $ext = $request->agent_extension;
-            $query->where(function($q) use ($ext) {
-                $q->where('src', $ext)->orWhere('dst', $ext);
+    if (session()->has('supervisor_extension')) {
+        $spv = Agent::where('extension', session('supervisor_extension'))->first();
+        if ($spv) {
+            $managedExtensions = $spv->agents()->pluck('extension')->merge([$spv->extension])->unique()->toArray();
+            $query->where(function($q) use ($managedExtensions) {
+                $q->whereIn('src', $managedExtensions)->orWhereIn('dst', $managedExtensions);
             });
-        }
-        elseif (session()->has('agent_extension')) {
-            $extension = session('agent_extension');
-            $query->where(function($q) use ($extension) {
-                $q->where('src', $extension)->orWhere('dst', $extension);
-            });
-        }
-
-        if ($request->filled('search')) {
-            $keyword = $request->search;
-            $query->where(function($q) use ($keyword) {
-                $q->where('src', 'like', "%{$keyword}%")
-                  ->orWhere('dst', 'like', "%{$keyword}%")
-                  ->orWhere('cnam', 'like', "%{$keyword}%")
-                  ->orWhere('cnum', 'like', "%{$keyword}%");
-            });
-        }
-
-        if (!$request->filled('start_date') && !$request->filled('end_date')) {
-            $query->whereDate('calldate', '>=', now()->subDays(7));
         } else {
-            if ($request->filled('start_date')) {
-                $query->whereDate('calldate', '>=', $request->start_date);
-            }
-            if ($request->filled('end_date')) {
-                $query->whereDate('calldate', '<=', $request->end_date);
-            }
+            $query->whereRaw('1 = 0');
         }
-
-        $perPage = $request->query('per_page', 15);
-        $paginatedLogs = $query->simplePaginate($perPage);
-        $paginatedLogs->appends($request->except('page'));
-
-        $paginatedLogs->getCollection()->transform(function ($log) {
-            if ($log->src === $log->dst && strlen($log->src) > 5) {
-                $log->src = 'Ext / Agent'; 
-            }
-            return $log;
+    } elseif (session()->has('agent_extension')) {
+        $ext = session('agent_extension');
+        $query->where(function($q) use ($ext) {
+            $q->where('src', $ext)->orWhere('dst', $ext);
         });
-
-        return response()->json([
-            'status' => 'success',
-            'data'   => $paginatedLogs
-        ]);
     }
+
+    if ($request->filled('agent_extension')) {
+        $extFilter = $request->agent_extension;
+        $query->where(function($q) use ($extFilter) {
+            $q->where('src', $extFilter)->orWhere('dst', $extFilter);
+        });
+    }
+
+    if ($request->filled('search')) {
+        $keyword = $request->search;
+        $query->where(function($q) use ($keyword) {
+            $q->where('src', 'like', "%{$keyword}%")
+              ->orWhere('dst', 'like', "%{$keyword}%")
+              ->orWhere('cnam', 'like', "%{$keyword}%")
+              ->orWhere('cnum', 'like', "%{$keyword}%");
+        });
+    }
+
+    // Filter Tanggal
+    if ($request->filled('start_date')) {
+        $query->whereDate('calldate', '>=', $request->start_date);
+    }
+    if ($request->filled('end_date')) {
+        $query->whereDate('calldate', '<=', $request->end_date);
+    }
+
+    // Tentukan Sorting
+    $sort = $request->query('sort', 'oldest');
+    switch ($sort) {
+        case 'oldest': $query->orderBy('calldate', 'asc'); break;
+        case 'longest': $query->orderBy('billsec', 'desc'); break;
+        case 'shortest': $query->orderBy('billsec', 'asc'); break;
+        case 'newest':
+        default: $query->orderBy('calldate', 'desc'); break;
+    }
+
+    $perPage = $request->query('per_page', 15);
+    $page = $request->query('page', 1);
+
+    // 1. Hitung total seluruh data
+    $total = (clone $query)->count();
+
+    // 🚀 2. AMBIL ID DENGAN TETAP MEMBAWA SORTING (Tanpa reorder yang menghapus orderBy)
+    $targetIds = (clone $query)
+        ->select('uniqueid')
+        ->offset(($page - 1) * $perPage)
+        ->limit($perPage)
+        ->pluck('uniqueid');
+
+    // 3. Ambil data lengkap berdasarkan ID yang sudah terurut benar
+    $logsCollection = (clone $query)
+        ->whereIn('uniqueid', $targetIds)
+        ->get();
+
+    // Urutkan ulang collection agar urutannya persis sesuai targetIds dari database
+    $logsCollection = $targetIds->map(function ($id) use ($logsCollection) {
+        return $logsCollection->firstWhere('uniqueid', $id);
+    })->filter()->values();
+
+    // 4. Bungkus ke Paginator
+    $paginatedLogs = new \Illuminate\Pagination\LengthAwarePaginator(
+        $logsCollection,
+        $total,
+        $perPage,
+        $page,
+        ['path' => $request->url(), 'query' => $request->query()]
+    );
+
+    $paginatedLogs->appends($request->except('page'));
+
+    $paginatedLogs->getCollection()->transform(function ($log) {
+        if ($log->src === $log->dst && strlen($log->src) > 5) {
+            $log->src = 'Ext / Agent'; 
+        }
+        return $log;
+    });
+
+    return response()->json([
+        'status' => 'success',
+        'data'   => $paginatedLogs
+    ]);
+}
 
     public function updateStatus(Request $request, $extension)
     {
@@ -659,4 +691,44 @@ class SupervisorMonitoringController extends Controller
         ], 500);
     }
 }
+public function exportZip(Request $request)
+    {
+        try {
+            $filters = $request->all();
+            $exporter = new CallRecordingsZipExport($filters);
+            $filename = $exporter->getFilename();
+
+            Cache::put('zip_status_' . $filename, ['ready' => false], now()->addMinutes(10));
+
+            dispatch(function () use ($exporter, $filename) {
+                try {
+                    $exporter->generate();
+                    Cache::put('zip_status_' . $filename, ['ready' => true, 'url' => asset('storage/exports/' . $filename)], now()->addMinutes(30));
+                } catch (\Throwable $e) {
+                    \Log::error("ZIP Generation Background Error: " . $e->getMessage());
+                }
+            })->afterResponse();
+
+            return response()->json([
+                'status' => 'success',
+                'filename' => $filename
+            ]);
+
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ], 500);
+        }
+    }
+
+    public function exportZipStatus(Request $request)
+    {
+        $filename = $request->query('filename');
+        $status = Cache::get('zip_status_' . $filename, ['ready' => false]);
+
+        return response()->json($status);
+    }
 }

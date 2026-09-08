@@ -9,6 +9,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\SupervisorController;
 use App\Http\Controllers\Api\SupervisorMonitoringController;
 use App\Http\Controllers\ChatController;
+use App\Http\Controllers\CustomerController;
 
 // ==========================================
 // 1. AUTHENTICATION ROUTES
@@ -240,7 +241,23 @@ Route::prefix('dashboard')->group(function () {
         Route::delete('/agents/{id}', [AgentController::class, 'destroy']);
     });
 
-    // 5. API / AJAX Endpoints (Termasuk Chat Bimbingan TL & Agent)
+    // ==========================================
+    // 5. CRM Module (Admin + Supervisor)
+    // ==========================================
+    Route::middleware([\App\Http\Middleware\CrmAccess::class])->group(function () {
+        Route::get('/crm/dashboard', [CustomerController::class, 'dashboard'])->name('crm.dashboard');
+        Route::get('/crm/customers', [CustomerController::class, 'index'])->name('crm.customers.index');
+        Route::post('/crm/customers', [CustomerController::class, 'store']);
+        Route::get('/crm/customers/{customer}', [CustomerController::class, 'show']);
+        Route::put('/crm/customers/{customer}', [CustomerController::class, 'update']);
+        Route::delete('/crm/customers/{customer}', [CustomerController::class, 'destroy']);
+        Route::get('/crm/customers/{customer}/calls', [CustomerController::class, 'getCallHistory']);
+    });
+
+    // CRM API for Agent Workspace (no auth middleware - uses session)
+    Route::get('/crm/agent/{extension}/customers', [CustomerController::class, 'getAssignedCustomers']);
+
+    // 6. API / AJAX Endpoints (Termasuk Chat Bimbingan TL & Agent)
     Route::get('/api/live-agents', [SupervisorMonitoringController::class, 'agentsList']);
     Route::post('/api/spy', [SupervisorMonitoringController::class, 'spyAction']);
     Route::get('/api/call-logs', [SupervisorMonitoringController::class, 'callLogs']);
@@ -258,6 +275,10 @@ Route::prefix('dashboard')->group(function () {
     Route::get('/api/chat/messages/{partnerId}', [ChatController::class, 'fetchMessages']);
     Route::post('/api/chat/send', [ChatController::class, 'sendMessage']);
     Route::get('/api/chat/unread-count', [ChatController::class, 'getUnreadCount']);
+
+    // Rute untuk Export ZIP Rekaman
+Route::get('/api/call-logs/export-zip', [App\Http\Controllers\Api\SupervisorMonitoringController::class, 'exportZip']);
+Route::get('/api/call-logs/export-zip-status', [App\Http\Controllers\Api\SupervisorMonitoringController::class, 'exportZipStatus']);
 });
 
 // ==========================================

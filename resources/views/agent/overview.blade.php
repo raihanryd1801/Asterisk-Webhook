@@ -237,12 +237,11 @@
 
 @section('scripts')
 <script>
-    // Global variable untuk menyimpan instance grafik dan cache browser
+    // Global variable untuk instance grafik
     window.volumeChartInstance = window.volumeChartInstance || null;
-    window.outcomeChartInstance = window.outcomeChartInstance || null;
-    window.dashboardBrowserCache = window.dashboardBrowserCache || {}; 
+    window.outcomeChartInstance = window.outcomeChartInstance || null; 
 
-    // Helper formatter angka (aman dari Turbo)
+    // Helper formatter angka
     if (typeof window.formatNumber === 'undefined') {
         window.formatNumber = (num) => new Intl.NumberFormat('id-ID').format(num);
     }
@@ -257,7 +256,7 @@
             window.outcomeChartInstance.destroy();
         }
 
-        // --- 1. Init Call Volume Chart (Animasi Dinyalakan) ---
+        // --- 1. Init Call Volume Chart ---
         let volumeOptions = {
             series: [{ name: 'Calls', data: {!! json_encode($chartVolumeData ?? []) !!} }],
             chart: { 
@@ -325,7 +324,7 @@
     }
 
     // ========================================================
-    // 🚀 LOGIKA AJAX FETCH INSTAN
+    // 🚀 LOGIKA AJAX FETCH DENGAN SESSIONSTORAGE (PERSISTENT)
     // ========================================================
     async function switchFilter(range, btnElement) {
         
@@ -337,21 +336,24 @@
         btnElement.classList.remove('text-gray-600', 'hover:bg-gray-100');
         btnElement.classList.add('bg-gray-900', 'text-white');
 
-        // 2. Jika Data Sudah Ada di Memori Browser, Render Langsung (0 Detik)
-        if (window.dashboardBrowserCache[range]) {
-            updateDashboardUI(window.dashboardBrowserCache[range]);
+        // 2. Ambil dari sessionStorage browser (Aman saat pindah menu)
+        let storageKey = 'overview_cache_' + range;
+        let cachedData = sessionStorage.getItem(storageKey);
+
+        if (cachedData) {
+            updateDashboardUI(JSON.parse(cachedData));
             return;
         }
 
-        // 3. Jika Belum Ada, Fetch ke Backend (Server)
+        // 3. Jika belum ada, fetch ke backend
         try {
             let response = await fetch(`{{ route('dashboard.overview') }}?range=${range}`, {
                 headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
             });
             let data = await response.json();
 
-            // Simpan data di Memori Browser
-            window.dashboardBrowserCache[range] = data;
+            // Simpan ke sessionStorage
+            sessionStorage.setItem(storageKey, JSON.stringify(data));
             
             // Render UI Baru
             updateDashboardUI(data);
@@ -376,7 +378,7 @@
         if(document.getElementById('period-unanswered')) document.getElementById('period-unanswered').innerText = formatNumber(data.stats.all_unanswered);
         if(document.getElementById('period-rate')) document.getElementById('period-rate').innerText = data.stats.all_time_rate + '%';
 
-        // B. Update Chart Volume (Beranimasi)
+        // B. Update Chart Volume
         if (window.volumeChartInstance) {
             document.getElementById('chart-subtitle').innerText = data.chartSubtitle;
             window.volumeChartInstance.updateOptions({ xaxis: { categories: data.chartVolumeCategories } });
@@ -397,7 +399,6 @@
             window.outcomeChartInstance.updateOptions({ labels: fLabels, colors: fColors });
             window.outcomeChartInstance.updateSeries(fSeries);
 
-            // Update Legend HTML
             let totalOC = data.stats.total_calls > 0 ? data.stats.total_calls : 1;
             for(let i=0; i<5; i++) {
                 let val = data.chartOutcomesCounts[i] || 0;

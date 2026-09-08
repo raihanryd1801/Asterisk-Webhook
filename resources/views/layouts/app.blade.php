@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>OmniDial - Contact Center Dashboard</title>
+    <title>SkykomDial - Contact Center Dashboard</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -114,6 +114,16 @@
                 <a href="{{ route('dashboard.call-history', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('dashboard.call-history') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
                     <i class="fa-solid fa-clock-rotate-left w-5 text-center"></i> Call History
                 </a>
+
+                @if(in_array($userType, ['admin', 'supervisor']))
+                <p class="px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-3 mt-6">CRM</p>
+                <a href="{{ route('crm.dashboard', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('crm.dashboard') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
+                    <i class="fa-solid fa-chart-pie w-5 text-center"></i> Dashboard
+                </a>
+                <a href="{{ route('crm.customers.index', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('crm.customers.*') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
+                    <i class="fa-solid fa-users w-5 text-center"></i> Customers
+                </a>
+                @endif
             @endif
         </nav>
 
@@ -129,10 +139,12 @@
                         {{ $profileRole }} {!! $profileExt ? "(Ext: $profileExt)" : "" !!}
                     </p>
                 </div>
-                <form action="{{ $userType === 'admin' ? url('/logout') : url('/agent/logout') }}" method="POST" data-turbo="false">
-                    @csrf
-                    <button type="submit" class="text-slate-500 hover:text-red-400 transition-colors" title="Logout"><i class="fa-solid fa-right-from-bracket"></i></button>
-                </form>
+                <form action="{{ $userType === 'admin' ? url('/logout') : url('/agent/logout') }}" method="POST" data-turbo="false" onsubmit="sessionStorage.clear();">
+    @csrf
+    <button type="submit" class="text-slate-500 hover:text-red-400 transition-colors" title="Logout">
+        <i class="fa-solid fa-right-from-bracket"></i>
+    </button>
+</form>
             </div>
         </div>
     </aside>

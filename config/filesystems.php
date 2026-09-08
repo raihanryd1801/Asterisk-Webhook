@@ -37,6 +37,15 @@ return [
             'throw' => false,
             'report' => false,
         ],
+        'sftp' => [
+        'driver' => 'sftp',
+        'host' => config('services.freepbx.host'),
+        'username' => config('services.freepbx.user'),
+        'password' => config('services.freepbx.pass'),
+        'root' => '/var/www/html/monitor', // Direktori rekaman di server Asterisk (172.16.1.24)
+        'timeout' => 30,
+        // 'private_key' => env('SFTP_PRIVATE_KEY'), // Aktifkan jika pakai SSH Key, biarkan dikomen jika pakai password
+    ],
 
         'public' => [
             'driver' => 'local',

@@ -21,26 +21,38 @@ class AgentController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'name'          => 'required|string|max:255',
-            'extension'     => 'required|string|unique:agents,extension',
-            'supervisor_id' => 'nullable|exists:agents,id', 
-            'secret'        => 'nullable|string|min:4',
-            'role'          => 'required|in:agent,supervisor',
-            'context'       => 'nullable|string|in:from-internal,blokir-total' // 🚀 Validasi context
+            'name'             => 'required|string|max:255',
+            'extension'        => 'required|string|unique:agents,extension',
+            'secret'           => 'nullable|string|min:4',
+            'role'             => 'required|in:agent,supervisor',
+            'context'          => 'nullable|string|in:from-internal,blokir-total',
+            
+            // 🚀 Ubah ke validasi Array Multi-SPV
+            'supervisor_ids'   => 'nullable|array',
+            'supervisor_ids.*' => 'exists:agents,id'
         ]);
 
         $sipSecret = $request->filled('secret') ? $request->secret : Str::random(12);
-        $context = $request->context ?? 'from-internal'; // 🚀 Default context
+        $context = $request->context ?? 'from-internal';
 
         $agent = Agent::create([
-            'name'          => $request->name,
-            'extension'     => $request->extension,
-            'secret'        => $sipSecret,
-            'role'          => $request->role,
-            'supervisor_id' => $request->supervisor_id,
-            'status'        => 'offline',
-            'context'       => $context, // 🚀 Simpan ke database lokal
+            'name'      => $request->name,
+            'extension' => $request->extension,
+            'secret'    => $sipSecret,
+            'role'      => $request->role,
+            'status'    => 'offline',
+            'context'   => $context,
+            // 🚀 Hapus 'supervisor_id' dari sini karena pakai tabel pivot
         ]);
+
+        // 🚀 Jalankan sinkronisasi Multiple Supervisor ke tabel pivot (VERSI KEBAL)
+        if ($request->filled('supervisor_ids')) {
+            $spvIds = is_array($request->supervisor_ids) 
+                      ? $request->supervisor_ids 
+                      : [$request->supervisor_ids];
+            
+            $agent->supervisors()->sync($spvIds);
+        }
 
         // Lempar ke background queue
         ProvisionAsteriskAgent::dispatch($agent, 'create');
@@ -54,43 +66,45 @@ class AgentController extends Controller
     public function update(Request $request, $id)
     {
         $request->validate([
-            'name'           => 'required|string|max:255',
-            'secret'         => 'nullable|string|min:4',
-            'role'           => 'required|in:agent,supervisor',
-            'context'        => 'nullable|string|in:from-internal,blokir-total',
-            
-            // 🚀 Ubah validasi menjadi array untuk menampung banyak SPV
+            'name'             => 'required|string|max:255',
+            'secret'           => 'nullable|string|min:4',
+            'role'             => 'required|in:agent,supervisor',
+            'context'          => 'nullable|string|in:from-internal,blokir-total',
             'supervisor_ids'   => 'nullable|array',
             'supervisor_ids.*' => 'exists:agents,id' 
         ]);
 
         $agent = Agent::findOrFail($id);
+        
+        // 🚀 1. Rekam data lama sebelum diubah
         $oldSecret = $agent->secret;
         $oldContext = $agent->context; 
+        $oldRole = $agent->role; // Rekam jabatan lamanya
         
         $agent->name          = $request->name;
         $agent->role          = $request->role;
         $agent->context       = $request->context ?? 'from-internal';
         
-        // Hapus baris: $agent->supervisor_id = $request->supervisor_id;
-
         $secretChanged = false;
         if ($request->filled('secret')) {
             $agent->secret = $request->secret;
             $secretChanged = ($request->secret !== $oldSecret);
         }
 
-        $contextChanged = ($agent->context !== $oldContext);
-
-        // 🚀 Simpan data utama agen terlebih dahulu
+        // Simpan data utama agen
         $agent->save();
 
-        // 🚀 Jalankan sinkronisasi Multiple Supervisor ke tabel pivot
+        // 2. Update SPV untuk dirinya sendiri
         if ($request->has('supervisor_ids')) {
             $agent->supervisors()->sync($request->supervisor_ids);
         } else {
-            // Kosongkan SPV jika user menghapus semua pilihan di dropdown
             $agent->supervisors()->detach(); 
+        }
+
+        // 🚀 3. LOGIKA DEMOSI (Turun Jabatan)
+        // Jika tadinya supervisor dan sekarang jadi agent, copot dia dari semua agen bawahannya
+        if ($oldRole === 'supervisor' && $request->role === 'agent') {
+            $agent->agents()->detach(); 
         }
 
         // Lempar proses update ke background queue
