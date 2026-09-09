@@ -16,6 +16,7 @@ class Customer extends Model
         'payment_status', 'payment_notes', 'last_payment_date', 'payment_proof',
         'due_date', 'days_past_due', 'bucket', 'campaign_id', 'collector_id',
         'risk_level', 'promise_to_pay',
+        'handover_status', 'handover_to', 'handover_date', 'handover_notes',
     ];
 
     protected $casts = [
@@ -98,6 +99,23 @@ class Customer extends Model
         return $query->where('days_past_due', '>=', $days);
     }
 
+    public function scopeHandoverStatus($query, $status)
+    {
+        return $query->when($status, fn($q) => $q->where('handover_status', $status));
+    }
+
+    public function scopeBadDebt($query)
+    {
+        // Kandidat busuk: PTP broken ATAU NPL belum lunas ATAU DPD sangat tua
+        return $query->where(function ($q) {
+            $q->whereJsonContains('promise_to_pay->status', 'broken')
+              ->orWhere(function ($sq) {
+                  $sq->where('bucket', 'NPL')->whereIn('payment_status', ['unpaid', 'partial']);
+              })
+              ->orWhere('days_past_due', '>=', 120);
+        })->whereIn('payment_status', ['unpaid', 'partial']);
+    }
+
     public function scopeDueSoon($query, $days = 7)
     {
         return $query->where('due_date', '<=', now()->addDays($days))
@@ -119,6 +137,10 @@ class Customer extends Model
     public function getPromiseToPayAttribute($value)
     {
         if (!$value) return null;
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+            $value = is_array($decoded) ? $decoded : [];
+        }
         return array_merge([
             'amount' => 0,
             'date' => null,
@@ -183,7 +205,7 @@ class Customer extends Model
 
         $dueDate = \Carbon\Carbon::parse($this->due_date);
         $today = now()->startOfDay();
-        $dpd = $dueDate->diffInDays($today, false); // negative = overdue
+        $dpd = $today->diffInDays($dueDate, false); // negative = overdue
 
         $this->days_past_due = max(0, -$dpd);
 

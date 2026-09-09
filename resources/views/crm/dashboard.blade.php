@@ -12,13 +12,13 @@
 <div class="flex flex-col gap-5 font-body p-1" style="background:#EDF0F7;">
 
     <!-- ============ WELCOME BANNER ============ -->
-    <div class="bg-white rounded-[20px] border border-slate-200 shadow-[0_2px_6px_rgba(16,24,40,0.06)] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-6" style="background:#E8FAF1;">
+    <div class="bg-brand-50 border border-brand-100 rounded-2xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-            <h1 class="text-2xl font-bold text-[#0F2B22]">CRM Dashboard</h1>
-            <p class="text-sm text-[#5B6B63] mt-1">Ringkasan pembayaran, pipeline &amp; performa <span class="font-semibold" style="color:#0E8F5F;">koleksi</span></p>
+            <h1 class="text-2xl font-bold text-slate-800">CRM Dashboard</h1>
+            <p class="text-sm text-slate-500 mt-0.5">Welcome back, <span class="font-semibold text-brand-600">{{ $roleTitle ?? 'User' }}</span></p>
         </div>
-        <a href="{{ route('crm.customers.index') }}" class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white border border-slate-200 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 transition-colors">
-            <i class="fa-solid fa-users text-xs text-slate-500"></i> Kelola Customer
+        <a href="{{ route('crm.customers.index') }}" class="inline-flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider hover:bg-slate-50 transition-colors">
+            <i class="fa-solid fa-users"></i> Kelola Customer
         </a>
     </div>
 

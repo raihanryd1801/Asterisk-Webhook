@@ -233,8 +233,8 @@ Route::prefix('dashboard')->group(function () {
         return view('supervisor.call-history');
     })->name('dashboard.call-history');
     
-    // 4. Admin Management (Hanya Admin)
-    Route::middleware(['auth', 'role:admin'])->group(function () {
+    // 4. Admin Management (Admin & Superadmin)
+    Route::middleware(['auth', 'role:admin,superadmin'])->group(function () {
         Route::get('/users', [UserController::class, 'index'])->name('dashboard.users.index');
         Route::get('/agents', [AgentController::class, 'index'])->name('dashboard.agents.index');
         Route::post('/agents/store', [AgentController::class, 'store']);
@@ -242,41 +242,66 @@ Route::prefix('dashboard')->group(function () {
         Route::delete('/agents/{id}', [AgentController::class, 'destroy']);
     });
 
+    // 4b. Premium / Lisensi (Hanya Superadmin)
+    Route::middleware(['auth', 'role:superadmin'])->group(function () {
+        Route::get('/premium', [\App\Http\Controllers\PremiumController::class, 'index'])->name('premium.index');
+        Route::post('/premium/toggle', [\App\Http\Controllers\PremiumController::class, 'toggle'])->name('premium.toggle');
+    });
+
     // ==========================================
     // 5. CRM Module (Admin + Supervisor)
     // ==========================================
+    // Panduan CRM (selalu bisa dibaca admin & supervisor, tanpa gembok)
     Route::middleware([\App\Http\Middleware\CrmAccess::class])->group(function () {
+        Route::get('/crm/panduan', function () {
+            return view('crm.guide');
+        })->name('crm.guide');
+    });
+
+    Route::middleware([\App\Http\Middleware\CrmAccess::class, \App\Http\Middleware\PremiumAccess::class])->group(function () {
         // CRM Dashboard
         Route::get('/crm/dashboard', [CustomerController::class, 'dashboard'])->name('crm.dashboard');
         
         // Customer Management
         Route::get('/crm/customers', [CustomerController::class, 'index'])->name('crm.customers.index');
-        Route::post('/crm/customers', [CustomerController::class, 'store']);
-        Route::get('/crm/customers/{customer}', [CustomerController::class, 'show']);
-        Route::put('/crm/customers/{customer}', [CustomerController::class, 'update']);
-        Route::delete('/crm/customers/{customer}', [CustomerController::class, 'destroy']);
-        Route::get('/crm/customers/{customer}/calls', [CustomerController::class, 'getCallHistory']);
+        Route::get('/crm/customers/export', [CustomerController::class, 'exportCustomers'])->name('crm.customers.export');
+        Route::post('/crm/customers/import', [CustomerController::class, 'importCustomers'])->name('crm.customers.import');
+        Route::post('/crm/customers', [CustomerController::class, 'store'])->name('crm.customers.store');
+        Route::get('/crm/customers/{customer}', [CustomerController::class, 'show'])->name('crm.customers.show');
+        Route::put('/crm/customers/{customer}', [CustomerController::class, 'update'])->name('crm.customers.update');
+        Route::delete('/crm/customers/{customer}', [CustomerController::class, 'destroy'])->name('crm.customers.destroy');
+        Route::get('/crm/customers/{customer}/calls', [CustomerController::class, 'getCallHistory'])->name('crm.customers.calls');
 
         // Collection Banking
         Route::get('/crm/collection/dashboard', [CustomerController::class, 'collectionDashboard'])->name('crm.collection.dashboard');
         Route::get('/crm/collection/aging', [CustomerController::class, 'agingReport'])->name('crm.collection.aging');
+        Route::get('/crm/collection/aging/export', [CustomerController::class, 'exportAging'])->name('crm.collection.aging.export');
         Route::get('/crm/collection/ptp', [CustomerController::class, 'ptpManagement'])->name('crm.collection.ptp');
-        Route::post('/crm/customers/{customer}/ptp', [CustomerController::class, 'setPTP']);
-        Route::post('/crm/customers/{customer}/ptp/{action}', [CustomerController::class, 'updatePTPStatus']);
-        Route::post('/crm/collection/recalculate-buckets', [CustomerController::class, 'recalculateBuckets']);
-        Route::post('/crm/collection/bulk-assign', [CustomerController::class, 'bulkAssignCampaign']);
+        Route::post('/crm/customers/{customer}/ptp', [CustomerController::class, 'setPTP'])->name('crm.customers.ptp.store');
+        Route::post('/crm/customers/{customer}/ptp/{action}', [CustomerController::class, 'updatePTPStatus'])->name('crm.customers.ptp.update');
+        Route::post('/crm/collection/recalculate-buckets', [CustomerController::class, 'recalculateBuckets'])->name('crm.collection.recalculate');
+        Route::post('/crm/collection/bulk-assign', [CustomerController::class, 'bulkAssignCampaign'])->name('crm.collection.bulk-assign');
+        Route::post('/crm/collection/auto-assign', [CustomerController::class, 'autoAssignCampaigns'])->name('crm.collection.auto-assign');
+        Route::post('/crm/collection/sla-check', [CustomerController::class, 'slaCheck'])->name('crm.collection.sla-check');
+        Route::post('/crm/collection/handover-ready', [CustomerController::class, 'markHandoverReady'])->name('crm.collection.handover-ready');
+        Route::post('/crm/collection/handover-submit', [CustomerController::class, 'handoverSubmit'])->name('crm.collection.handover-submit');
+        Route::post('/crm/collection/handover-recall', [CustomerController::class, 'handoverRecall'])->name('crm.collection.handover-recall');
+        Route::get('/crm/collection/handover/export', [CustomerController::class, 'exportHandover'])->name('crm.collection.handover.export');
 
         // Campaign Management
         Route::get('/crm/campaigns', [CampaignController::class, 'index'])->name('crm.campaigns.index');
-        Route::post('/crm/campaigns', [CampaignController::class, 'store']);
-        Route::get('/crm/campaigns/{campaign}', [CampaignController::class, 'show']);
-        Route::put('/crm/campaigns/{campaign}', [CampaignController::class, 'update']);
-        Route::delete('/crm/campaigns/{campaign}', [CampaignController::class, 'destroy']);
+        Route::post('/crm/campaigns', [CampaignController::class, 'store'])->name('crm.campaigns.store');
+        Route::get('/crm/campaigns/{campaign}', [CampaignController::class, 'show'])->name('crm.campaigns.show');
+        Route::put('/crm/campaigns/{campaign}', [CampaignController::class, 'update'])->name('crm.campaigns.update');
+        Route::delete('/crm/campaigns/{campaign}', [CampaignController::class, 'destroy'])->name('crm.campaigns.destroy');
+        Route::get('/crm/campaigns/{campaign}/blast', [CampaignController::class, 'blastPreview'])->name('crm.campaigns.blast.preview');
+        Route::post('/crm/campaigns/{campaign}/blast', [CampaignController::class, 'blastSend'])->name('crm.campaigns.blast.send');
         Route::get('/crm/campaigns/collectors', [CampaignController::class, 'getCollectors']);
     });
 
     // CRM API for Agent Workspace (no auth middleware - uses session)
     Route::get('/crm/agent/{extension}/customers', [CustomerController::class, 'getAssignedCustomers']);
+    Route::post('/crm/agent/{extension}/customers/{customer}/ptp', [CustomerController::class, 'agentSetPTP']);
 
     // 6. API / AJAX Endpoints (Termasuk Chat Bimbingan TL & Agent)
     Route::get('/api/live-agents', [SupervisorMonitoringController::class, 'agentsList']);

@@ -102,68 +102,64 @@
     </div>
 
     <!-- ============================================== -->
-    <!-- BAGIAN 2: DIALER TEPAT DI TENGAH (CENTERED)    -->
+    <!-- BAGIAN 2 & 2.5: DIALER KIRI + CUSTOMER KANAN  -->
     <!-- ============================================== -->
-    <div class="flex justify-center w-full relative z-10 mt-6">
-        <div class="w-full sm:max-w-sm shrink-0">
-            <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 space-y-4 relative overflow-hidden flex flex-col justify-between w-full">
-                
-                <div class="text-center mb-2">
-                    <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-1">Click to Call</h2>
-                    <p class="text-[11px] text-slate-400">Dial outbound via SIP softphone MicroSIP.</p>
+    <div class="grid grid-cols-1 xl:grid-cols-[320px_minmax(0,1fr)] gap-6 items-start w-full relative z-10 mt-4">
+        <div class="w-full max-w-xs mx-auto xl:mx-0 xl:sticky xl:top-4 shrink-0">
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 space-y-3 relative overflow-hidden flex flex-col justify-between w-full">
+
+                <div class="text-center">
+                    <h2 class="text-xs font-bold text-slate-700 uppercase tracking-wider">Click to Call</h2>
                 </div>
 
                 <!-- 🔒 OVERLAY KUNCI -->
                 <template x-if="currentStatus !== 'online'">
-                    <div class="absolute inset-0 bg-white/95 backdrop-blur-[4px] z-20 flex flex-col items-center justify-center p-6 text-center rounded-3xl border border-rose-100/50">
-                        <div class="w-16 h-16 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center mb-4 shadow-sm border border-rose-100">
-                            <i class="fa-solid fa-lock text-2xl"></i>
+                    <div class="absolute inset-0 bg-white/95 backdrop-blur-[4px] z-20 flex flex-col items-center justify-center p-4 text-center rounded-2xl border border-rose-100/50">
+                        <div class="w-11 h-11 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center mb-2 shadow-sm border border-rose-100">
+                            <i class="fa-solid fa-lock text-lg"></i>
                         </div>
-                        <h3 class="text-sm font-bold text-slate-800">Panel Terkunci</h3>
-                        <p class="text-xs text-slate-500 mt-2 max-w-[200px] leading-relaxed">
-                            Status Anda <strong class="uppercase text-slate-700" x-text="currentStatus"></strong>. <br>Ubah ke <strong class="text-emerald-600 font-semibold">Online</strong> di menu atas.
+                        <h3 class="text-xs font-bold text-slate-800">Panel Terkunci</h3>
+                        <p class="text-[11px] text-slate-500 mt-1 max-w-[200px] leading-relaxed">
+                            Status <strong class="uppercase text-slate-700" x-text="currentStatus"></strong> — ubah ke <strong class="text-emerald-600 font-semibold">Online</strong> di menu atas.
                         </p>
                     </div>
                 </template>
 
-                <div class="space-y-4 w-full">
+                <div class="space-y-3 w-full">
                     <div class="relative">
-                        <input type="text" x-model="targetNumber" placeholder="Nomor tujuan..." class="w-full border border-slate-200 rounded-xl p-4 text-center text-2xl outline-none font-mono bg-slate-50 focus:ring-2 focus:ring-brand-500 pr-12 tracking-widest text-slate-800 shadow-inner">
-                        <button @click="targetNumber = targetNumber.slice(0, -1)" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-500 transition-colors">
-                            <i class="fa-solid fa-delete-left text-lg"></i>
+                        <input type="text" x-model="targetNumber" placeholder="Nomor tujuan..." class="w-full border border-slate-200 rounded-xl p-2.5 text-center text-xl outline-none font-mono bg-slate-50 focus:ring-2 focus:ring-brand-500 pr-10 tracking-widest text-slate-800 shadow-inner">
+                        <button @click="targetNumber = targetNumber.slice(0, -1)" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-500 transition-colors">
+                            <i class="fa-solid fa-delete-left"></i>
                         </button>
                     </div>
 
-                    <div class="grid grid-cols-3 gap-3 pt-2">
+                    <div class="grid grid-cols-3 gap-2">
                         <template x-for="num in ['1','2','3','4','5','6','7','8','9','*','0','#']">
-                            <button @click="targetNumber += num" class="w-14 h-14 mx-auto rounded-full border border-slate-200 text-slate-700 font-medium hover:bg-slate-100 hover:border-slate-300 active:scale-95 transition-all num text-lg flex items-center justify-center shadow-sm bg-white" x-text="num"></button>
+                            <button @click="targetNumber += num" class="w-11 h-11 mx-auto rounded-full border border-slate-200 text-slate-700 font-medium hover:bg-slate-100 hover:border-slate-300 active:scale-95 transition-all num text-base flex items-center justify-center shadow-sm bg-white" x-text="num"></button>
                         </template>
                     </div>
 
-                    <div class="flex gap-3 pt-4">
-                        <button @click="makeCall()" :disabled="currentStatus !== 'online'" class="flex-1 bg-brand-600 hover:bg-brand-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-medium text-sm py-3 px-4 rounded-xl transition shadow-md flex items-center justify-center gap-2">
+                    <div class="flex gap-2">
+                        <button @click="makeCall()" :disabled="currentStatus !== 'online'" class="flex-1 bg-brand-600 hover:bg-brand-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-medium text-sm py-2 px-4 rounded-xl transition shadow-md flex items-center justify-center gap-2">
                             <i class="fa-solid fa-phone"></i> Panggil Sekarang
                         </button>
-                        <button @click="targetNumber = ''" class="px-5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-sm rounded-xl transition shadow-sm border border-slate-200">
+                        <button @click="targetNumber = ''" class="px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-sm rounded-xl transition shadow-sm border border-slate-200">
                             Clear
                         </button>
                     </div>
                 </div>
 
-                <div class="p-3 bg-slate-50 rounded-xl border border-slate-100 text-[11px] text-slate-500 flex items-center justify-center gap-2 mt-2">
+                <div class="px-2 py-1.5 bg-slate-50 rounded-lg border border-slate-100 text-[10px] text-slate-500 flex items-center justify-center gap-1.5">
                     <i class="fa-solid fa-tower-cell text-brand-500"></i>
                     <span x-text="infoMessage"></span>
                 </div>
             </div>
         </div>
-    </div>
-
-    <hr class="border-slate-200 border-dashed my-8">
 
     <!-- ============================================== -->
     <!-- BAGIAN 2.5: CUSTOMER ASSIGNED (CLICK TO CALL)  -->
     <!-- ============================================== -->
-    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden w-full">
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden w-full min-w-0">
         <div class="p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/50">
             <div>
                 <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
@@ -176,7 +172,7 @@
             </button>
         </div>
 
-        <div class="p-5 bg-slate-50">
+        <div class="p-5 bg-slate-50 xl:max-h-[calc(100vh-260px)] xl:overflow-y-auto">
             <!-- LOADING -->
             <template x-if="isLoadingCustomers">
                 <div class="flex flex-col items-center justify-center py-8 text-slate-400">
@@ -235,10 +231,26 @@
                                         </div>
                                     </div>
                                 </template>
+
+                                <!-- PTP Badge (kalau sudah ada janji) -->
+                                <template x-if="customer.promise_to_pay">
+                                    <div class="mt-2 p-2 rounded border text-[11px] flex items-center gap-2"
+                                        :class="ptpBadgeClass(customer.promise_to_pay)">
+                                        <i class="fa-solid fa-handshake"></i>
+                                        <span class="font-mono" x-text="'Rp ' + formatCurrency(customer.promise_to_pay.amount)"></span>
+                                        <span x-text="formatPtpDate(customer.promise_to_pay.date)"></span>
+                                        <span class="font-semibold uppercase" x-text="ptpStatusLabel(customer.promise_to_pay)"></span>
+                                    </div>
+                                </template>
                             </div>
-                            
+
                             <div class="shrink-0 flex items-center gap-2">
-                                <button @click="callCustomer(customer.phone, customer.name)" 
+                                <button @click="openPtpModal(customer)"
+                                    class="bg-amber-500 hover:bg-amber-600 text-white text-xs px-3 py-2 rounded-lg transition shadow-sm flex items-center gap-1.5 font-medium whitespace-nowrap"
+                                    :title="'Buat PTP untuk ' + customer.name">
+                                    <i class="fa-solid fa-handshake"></i> PTP
+                                </button>
+                                <button @click="callCustomer(customer.phone, customer.name)"
                                     :disabled="currentStatus !== 'online'"
                                     class="bg-brand-600 hover:bg-brand-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:hover:bg-slate-200 text-white text-xs px-3 py-2 rounded-lg transition shadow-sm flex items-center gap-1.5 font-medium whitespace-nowrap"
                                     :title="currentStatus !== 'online' ? 'Status harus Online untuk menelepon' : 'Panggil ' + customer.name">
@@ -250,6 +262,7 @@
                 </template>
             </div>
         </div>
+    </div>
     </div>
 
     <hr class="border-slate-200 border-dashed my-8">
@@ -376,6 +389,47 @@
 
     </div>
 
+    <!-- ============================================== -->
+    <!-- MODAL BUAT PTP                                 -->
+    <!-- ============================================== -->
+    <div x-show="showPtpModal" x-transition.opacity style="display: none;" class="fixed inset-0 z-[100] overflow-y-auto" x-cloak>
+        <div class="flex min-h-full items-center justify-center p-4">
+            <div class="fixed inset-0 bg-black/50" @click="closePtpModal()"></div>
+            <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+                <div class="flex items-center justify-between p-4 border-b border-slate-200">
+                    <h3 class="text-base font-bold text-slate-800">Buat PTP — <span x-text="ptpCustomer?.name"></span></h3>
+                    <button @click="closePtpModal()" class="text-slate-400 hover:text-slate-600 transition-colors">
+                        <i class="fa-solid fa-xmark text-xl"></i>
+                    </button>
+                </div>
+                <form @submit.prevent="submitPtp()" class="p-4 space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Nominal Janji Bayar (Rp) <span class="text-red-500">*</span></label>
+                        <input type="number" x-model="ptpForm.amount" min="1" step="1" required placeholder="cth: 2000000"
+                            class="w-full border border-slate-300 rounded-lg px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Tanggal Janji <span class="text-red-500">*</span></label>
+                        <input type="date" x-model="ptpForm.date" required :min="ptpMinDate"
+                            class="w-full border border-slate-300 rounded-lg px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Catatan</label>
+                        <textarea x-model="ptpForm.note" rows="3" placeholder="cth: gajian tanggal 10, janji transfer..."
+                            class="w-full border border-slate-300 rounded-lg px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"></textarea>
+                    </div>
+                    <div class="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                        <button type="button" @click="closePtpModal()" class="px-4 py-2 border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition-colors">Batal</button>
+                        <button type="submit" :disabled="ptpSaving" class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2">
+                            <i class="fa-solid" :class="ptpSaving ? 'fa-spinner fa-spin' : 'fa-handshake'"></i>
+                            <span x-text="ptpSaving ? 'Menyimpan...' : 'Simpan PTP'"></span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
 </div>
 @endsection
 
@@ -395,6 +449,12 @@
             // 🚀 CUSTOMER ASSIGNED
             assignedCustomers: [],
             isLoadingCustomers: true,
+            // 🚀 BUAT PTP
+            showPtpModal: false,
+            ptpCustomer: null,
+            ptpForm: { amount: '', date: '', note: '' },
+            ptpSaving: false,
+            ptpMinDate: new Date().toISOString().split('T')[0],
 
             init() {
                 this.fetchAgentStatus();
@@ -600,6 +660,7 @@
                     'unpaid': 'Belum Bayar',
                     'partial': 'Cicilan',
                     'paid': 'Lunas',
+                    'discounted': 'Diskon Lunas',
                 };
                 return labels[status] || status;
             },
@@ -609,8 +670,85 @@
                     'unpaid': 'bg-red-50 text-red-700 border-red-200',
                     'partial': 'bg-yellow-50 text-yellow-700 border-yellow-200',
                     'paid': 'bg-green-50 text-green-700 border-green-200',
+                    'discounted': 'bg-purple-50 text-purple-700 border-purple-200',
                 };
                 return classes[status] || 'bg-slate-50 text-slate-700 border-slate-200';
+            },
+
+            openPtpModal(customer) {
+                this.ptpCustomer = customer;
+                const existing = customer.promise_to_pay || {};
+                this.ptpForm = {
+                    amount: existing.amount || '',
+                    date: existing.date || '',
+                    note: existing.note || '',
+                };
+                this.showPtpModal = true;
+            },
+
+            closePtpModal() {
+                this.showPtpModal = false;
+                this.ptpCustomer = null;
+                this.ptpForm = { amount: '', date: '', note: '' };
+            },
+
+            async submitPtp() {
+                if (!this.ptpCustomer) return;
+                if (!this.ptpForm.amount || !this.ptpForm.date) {
+                    alert('Nominal dan tanggal janji wajib diisi!');
+                    return;
+                }
+                this.ptpSaving = true;
+                try {
+                    const response = await fetch(`/dashboard/crm/agent/${this.extension}/customers/${this.ptpCustomer.id}/ptp`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content'),
+                            'Accept': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            ptp_amount: this.ptpForm.amount,
+                            ptp_date: this.ptpForm.date,
+                            ptp_note: this.ptpForm.note,
+                        }),
+                    });
+                    const data = await response.json();
+                    if (response.ok && data.status === 'success') {
+                        this.closePtpModal();
+                        this.fetchAssignedCustomers();
+                    } else {
+                        alert(data.message || 'Gagal menyimpan PTP');
+                    }
+                } catch (err) {
+                    alert('Gagal menyimpan PTP: ' + err.message);
+                } finally {
+                    this.ptpSaving = false;
+                }
+            },
+
+            ptpStatusLabel(ptp) {
+                if (!ptp) return '';
+                if (ptp.status === 'kept') return 'Ditepati';
+                if (ptp.status === 'broken') return 'Gagal';
+                const today = new Date().toISOString().split('T')[0];
+                return (ptp.date && ptp.date < today) ? 'Overdue' : 'Aktif';
+            },
+
+            ptpBadgeClass(ptp) {
+                if (!ptp) return 'bg-slate-50 text-slate-600 border-slate-200';
+                if (ptp.status === 'kept') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+                if (ptp.status === 'broken') return 'bg-rose-50 text-rose-700 border-rose-200';
+                const today = new Date().toISOString().split('T')[0];
+                return (ptp.date && ptp.date < today)
+                    ? 'bg-red-50 text-red-700 border-red-200'
+                    : 'bg-amber-50 text-amber-700 border-amber-200';
+            },
+
+            formatPtpDate(dateStr) {
+                if (!dateStr) return '';
+                const d = new Date(dateStr);
+                return d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
             },
 
             formatCurrency(amount) {

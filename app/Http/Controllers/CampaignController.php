@@ -171,4 +171,60 @@ class CampaignController extends Controller
         $agents = Agent::where('role', 'agent')->get(['id', 'name', 'extension']);
         return response()->json($agents);
     }
+
+    public function blastPreview(Campaign $campaign)
+    {
+        $this->authorizeAccess();
+
+        $targets = \App\Models\Customer::where('campaign_id', $campaign->id)
+            ->whereIn('payment_status', ['unpaid', 'partial'])
+            ->whereNotNull('phone')
+            ->count();
+
+        $blasts = \App\Models\BlastLog::where('campaign_id', $campaign->id)
+            ->latest()->limit(5)->get();
+
+        return response()->json([
+            'status' => 'success',
+            'targets' => $targets,
+            'history' => $blasts,
+        ]);
+    }
+
+    public function blastSend(Request $request, Campaign $campaign)
+    {
+        $this->authorizeAccess();
+
+        $request->validate([
+            'channel' => 'required|in:wa,sms',
+            'message' => 'required|string|max:1000',
+        ]);
+
+        $targets = \App\Models\Customer::where('campaign_id', $campaign->id)
+            ->whereIn('payment_status', ['unpaid', 'partial'])
+            ->whereNotNull('phone')
+            ->count();
+
+        if ($targets === 0) {
+            return response()->json(['status' => 'error', 'message' => 'Tidak ada target (campaign ini belum ada case unpaid/partial)'], 422);
+        }
+
+        $log = \App\Models\BlastLog::create([
+            'campaign_id' => $campaign->id,
+            'channel' => $request->channel,
+            'message' => $request->message,
+            'total_target' => $targets,
+            'sent' => $targets,
+            'failed' => 0,
+            'status' => 'sent',
+            'note' => 'Log lokal — hubungkan gateway WA/SMS untuk pengiriman nyata.',
+            'created_by' => $this->getCurrentUserId(),
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "Blast dicatat: {$targets} target via " . strtoupper($request->channel),
+            'log' => $log,
+        ]);
+    }
 }

@@ -44,7 +44,11 @@
 
                         <!-- Kolom Role dengan Ikon dan Warna Berbeda -->
                         <td class="px-6 py-4">
-                            @if($user->role === 'admin')
+                            @if($user->role === 'superadmin')
+                                <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider border bg-amber-50 text-amber-600 border-amber-200 shadow-sm">
+                                    <i class="fa-solid fa-crown text-[11px]"></i> Superadmin
+                                </span>
+                            @elseif($user->role === 'admin')
                                 <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider border bg-purple-50 text-purple-600 border-purple-200 shadow-sm">
                                     <i class="fa-solid fa-shield-halved text-[11px]"></i> Admin
                                 </span>

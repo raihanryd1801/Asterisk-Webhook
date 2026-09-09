@@ -67,8 +67,17 @@
             $userType = 'admin';
             $myChatUserId = 99999; // ID dummy agar Admin tidak masuk ke sistem chat Agent-SPV
             $profileName = auth()->user()->name ?? 'Administrator';
-            $profileRole = 'Administrator';
+            $profileRole = (auth()->user()->role ?? '') === 'superadmin' ? 'Superadmin' : 'Administrator';
         }
+
+        // 🚀 Premium gate: hanya superadmin (tabel users) yang boleh buka menu CRM → Campaign
+        $isSuperadmin = auth()->check() && ((auth()->user()->role ?? '') === 'superadmin');
+
+        // Status gembok per modul premium (diatur superadmin di halaman Premium/Lisensi)
+        $premiumStates = \App\Models\FeatureFlag::states();
+        $crmLocked = !$isSuperadmin && empty($premiumStates['crm']);
+        $collectionLocked = !$isSuperadmin && empty($premiumStates['collection']);
+        $campaignLocked = !$isSuperadmin && empty($premiumStates['campaign']);
     @endphp
 
     <aside class="w-[260px] bg-slate-900 text-white flex flex-col shrink-0 hidden md:flex relative z-20 transition-all duration-300 shadow-xl">
@@ -105,6 +114,11 @@
                     <a href="{{ route('dashboard.users.index', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('dashboard.users.*') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
                         <i class="fa-solid fa-users w-5 text-center"></i> User Management
                     </a>
+                    @if($isSuperadmin)
+                    <a href="{{ route('premium.index', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('premium.*') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
+                        <i class="fa-solid fa-crown w-5 text-center text-amber-400"></i> Premium / Lisensi
+                    </a>
+                    @endif
                 @endif
 
                 <p class="px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-3 mt-6">Monitoring & Reports</p>
@@ -117,27 +131,36 @@
 
                 @if(in_array($userType, ['admin', 'supervisor']))
                 <p class="px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-3 mt-6">CRM</p>
+                <a href="{{ route('crm.guide', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('crm.guide') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
+                    <i class="fa-solid fa-book-open w-5 text-center"></i> Panduan CRM
+                </a>
                 <a href="{{ route('crm.dashboard', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('crm.dashboard') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
                     <i class="fa-solid fa-chart-pie w-5 text-center"></i> Dashboard Agent
+                    @if($crmLocked)<i class="fa-solid fa-lock ml-auto text-[10px] text-slate-500" title="Premium Feature"></i>@endif
                 </a>
                 <a href="{{ route('crm.customers.index', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('crm.customers.*') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
                     <i class="fa-solid fa-users w-5 text-center"></i> Customers
+                    @if($crmLocked)<i class="fa-solid fa-lock ml-auto text-[10px] text-slate-500" title="Premium Feature"></i>@endif
                 </a>
 
                 <p class="px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-3 mt-6">Collection Banking</p>
                 <a href="{{ route('crm.collection.dashboard', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('crm.collection.dashboard') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
                     <i class="fa-solid fa-layer-group w-5 text-center"></i> Collection Dashboard
+                    @if($collectionLocked)<i class="fa-solid fa-lock ml-auto text-[10px] text-slate-500" title="Premium Feature"></i>@endif
                 </a>
                 <a href="{{ route('crm.collection.aging', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('crm.collection.aging') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
                     <i class="fa-solid fa-table-columns w-5 text-center"></i> Aging Report
+                    @if($collectionLocked)<i class="fa-solid fa-lock ml-auto text-[10px] text-slate-500" title="Premium Feature"></i>@endif
                 </a>
                 <a href="{{ route('crm.collection.ptp', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('crm.collection.ptp') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
                     <i class="fa-solid fa-handshake w-5 text-center"></i> PTP Management
+                    @if($collectionLocked)<i class="fa-solid fa-lock ml-auto text-[10px] text-slate-500" title="Premium Feature"></i>@endif
                 </a>
 
                 <p class="px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-3 mt-6">Campaign</p>
                 <a href="{{ route('crm.campaigns.index', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('crm.campaigns.*') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
                     <i class="fa-solid fa-bullseye w-5 text-center"></i> Campaign Management
+                    @if($campaignLocked)<i class="fa-solid fa-lock ml-auto text-[10px] text-slate-500" title="Premium Feature"></i>@endif
                 </a>
                 @endif
             @endif

@@ -2,14 +2,21 @@
 
 @section('content')
 <div class="flex flex-col gap-6">
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div class="bg-brand-50 border border-brand-100 rounded-2xl p-5 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
         <div>
-            <h1 class="text-2xl font-bold text-slate-900">Aging Report</h1>
-            <p class="text-slate-500 mt-1">Detail kasus per bucket (DPD)</p>
+            <h1 class="text-xl font-semibold text-slate-800 flex items-center gap-2">
+                <i class="fa-solid fa-layer-group text-brand-600"></i> Aging Report
+            </h1>
+            <p class="text-sm text-slate-500 mt-0.5">Detail kasus per bucket (DPD).</p>
         </div>
-        <a href="{{ route('crm.collection.dashboard') }}" class="bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2">
-            <i class="fa-solid fa-arrow-left"></i> Back to Dashboard
-        </a>
+        <div class="flex items-center gap-2 flex-wrap">
+            <a href="{{ route('crm.collection.aging.export') }}" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-2">
+                <i class="fa-solid fa-file-excel"></i> Export Aging
+            </a>
+            <a href="{{ route('crm.collection.dashboard') }}" class="bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-2">
+                <i class="fa-solid fa-arrow-left"></i> Back to Dashboard
+            </a>
+        </div>
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

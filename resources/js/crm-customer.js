@@ -6,15 +6,32 @@ window.crmCustomers = function () {
         pagination: window.crmCustomerData?.pagination || {},
         agents: window.crmCustomerData?.agents || [],
         statuses: window.crmCustomerData?.statuses || [],
+        campaigns: window.crmCustomerData?.campaigns || [],
+        collectors: window.crmCustomerData?.collectors || [],
         search: '',
         statusFilter: '',
         agentFilter: '',
         showModal: false,
         showCallHistoryModal: false,
+        showImportModal: false,
+        importLoading: false,
+        importResult: null,
+        selectedIds: [],
+        bulkCampaignId: '',
+        bulkCollectorId: '',
+        bulkLoading: false,
+        recalcLoading: false,
         modalTitle: '',
-        form: { id: '', name: '', phone: '', email: '', company: '', status: 'new', assigned_agent_id: '', notes: '', total_amount: '', paid_amount: '', discount_amount: '', payment_status: 'unpaid', payment_notes: '' },
+        form: { id: '', name: '', phone: '', email: '', company: '', status: 'new', assigned_agent_id: '', notes: '', total_amount: '', paid_amount: '', discount_amount: '', payment_status: 'unpaid', payment_notes: '', due_date: '', campaign_id: '', collector_id: '', risk_level: 'low' },
         selectedCustomer: null,
         paymentStatusFilter: '',
+        bucketFilter: '',
+        campaignFilter: '',
+        handoverFilter: '',
+        badDebtOnly: false,
+        showHandoverModal: false,
+        handoverLoading: false,
+        handoverForm: { handover_to: '', handover_date: '', handover_notes: '' },
         callHistory: [],
         callHistoryLoading: false,
         submitting: false,
@@ -24,15 +41,20 @@ window.crmCustomers = function () {
             if (this.search) params.append('search', this.search);
             if (this.statusFilter) params.append('status', this.statusFilter);
             if (this.paymentStatusFilter) params.append('payment_status', this.paymentStatusFilter);
+            if (this.bucketFilter) params.append('bucket', this.bucketFilter);
+            if (this.campaignFilter) params.append('campaign_id', this.campaignFilter);
             if (this.agentFilter) params.append('agent_id', this.agentFilter);
+            if (this.handoverFilter) params.append('handover_status', this.handoverFilter);
+            if (this.badDebtOnly) params.append('bad_debt_only', '1');
             params.append('page', page);
-            
+
             try {
                 const response = await fetch(`${window.crmCustomerData.indexUrl}?${params}`, {
                     headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
                 });
                 const data = await response.json();
                 this.customers = data.data;
+                this.selectedIds = [];
                 this.pagination = {
                     current_page: data.current_page,
                     last_page: data.last_page,
@@ -57,7 +79,7 @@ window.crmCustomers = function () {
 
         openCreateModal() {
             this.modalTitle = 'Tambah Customer';
-            this.form = { id: '', name: '', phone: '', email: '', company: '', status: 'new', assigned_agent_id: '', notes: '', total_amount: '', paid_amount: '', discount_amount: '', payment_status: 'unpaid', payment_notes: '' };
+            this.form = { id: '', name: '', phone: '', email: '', company: '', status: 'new', assigned_agent_id: '', notes: '', total_amount: '', paid_amount: '', discount_amount: '', payment_status: 'unpaid', payment_notes: '', due_date: '', campaign_id: '', collector_id: '', risk_level: 'low' };
             this.showModal = true;
         },
 
@@ -77,13 +99,17 @@ window.crmCustomers = function () {
                 discount_amount: customer.discount_amount || '',
                 payment_status: customer.payment_status || 'unpaid',
                 payment_notes: customer.payment_notes || '',
+                due_date: customer.due_date ? String(customer.due_date).substring(0, 10) : '',
+                campaign_id: customer.campaign_id || '',
+                collector_id: customer.collector_id || '',
+                risk_level: customer.risk_level || 'low',
             };
             this.showModal = true;
         },
 
         closeModal() {
             this.showModal = false;
-            this.form = { id: '', name: '', phone: '', email: '', company: '', status: 'new', assigned_agent_id: '', notes: '', total_amount: '', paid_amount: '', discount_amount: '', payment_status: 'unpaid', payment_notes: '' };
+            this.form = { id: '', name: '', phone: '', email: '', company: '', status: 'new', assigned_agent_id: '', notes: '', total_amount: '', paid_amount: '', discount_amount: '', payment_status: 'unpaid', payment_notes: '', due_date: '', campaign_id: '', collector_id: '', risk_level: 'low' };
         },
 
         async submitForm() {
@@ -100,7 +126,16 @@ window.crmCustomers = function () {
             formData.append('_token', document.querySelector('meta[name="csrf-token"]').content);
 
             try {
-                const response = await fetch(url, { method: 'POST', body: formData });
+                const response = await fetch(url, {
+                    method: 'POST',
+                    body: formData,
+                    headers: { 'Accept': 'application/json' },
+                });
+                if (response.status === 403) {
+                    const data = await response.json().catch(() => null);
+                    alert(data?.message || 'Premium Feature — hubungi admin jika ingin menggunakannya.');
+                    return;
+                }
                 const data = await response.json();
                 if (data.status === 'success') {
                     this.closeModal();
@@ -137,6 +172,150 @@ window.crmCustomers = function () {
             } catch (e) {
                 console.error(e);
                 alert('Terjadi kesalahan');
+            }
+        },
+
+        isSelected(id) {
+            return this.selectedIds.includes(id);
+        },
+
+        toggleSelect(id) {
+            if (this.selectedIds.includes(id)) {
+                this.selectedIds = this.selectedIds.filter(x => x !== id);
+            } else {
+                this.selectedIds.push(id);
+            }
+        },
+
+        toggleSelectAll(event) {
+            if (event.target.checked) {
+                this.selectedIds = this.customers.map(c => c.id);
+            } else {
+                this.selectedIds = [];
+            }
+        },
+
+        clearSelection() {
+            this.selectedIds = [];
+            this.bulkCampaignId = '';
+            this.bulkCollectorId = '';
+        },
+
+        async bulkAssign() {
+            if (!this.bulkCampaignId) {
+                alert('Pilih campaign dulu');
+                return;
+            }
+            if (this.selectedIds.length === 0) {
+                alert('Pilih minimal 1 customer');
+                return;
+            }
+            this.bulkLoading = true;
+            try {
+                const response = await fetch(window.crmCustomerData.bulkAssignUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        customer_ids: this.selectedIds,
+                        campaign_id: this.bulkCampaignId,
+                        collector_id: this.bulkCollectorId || null,
+                    })
+                });
+                const data = await response.json();
+                if (data.status === 'success') {
+                    alert(data.message);
+                    this.clearSelection();
+                    this.fetchCustomers(this.pagination.current_page || 1);
+                } else {
+                    alert(data.message || 'Error');
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Terjadi kesalahan');
+            } finally {
+                this.bulkLoading = false;
+            }
+        },
+
+        async recalculateBuckets() {
+            if (!confirm('Hitung ulang DPD / Bucket / Risk semua customer dari due_date?')) return;
+            this.recalcLoading = true;
+            try {
+                const response = await fetch(window.crmCustomerData.recalcUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        'Accept': 'application/json',
+                    },
+                });
+                const data = await response.json();
+                alert(data.message || 'Selesai');
+                this.fetchCustomers(this.pagination.current_page || 1);
+            } catch (e) {
+                console.error(e);
+                alert('Terjadi kesalahan');
+            } finally {
+                this.recalcLoading = false;
+            }
+        },
+
+        exportHref() {
+            const params = new URLSearchParams();
+            if (this.search) params.append('search', this.search);
+            if (this.statusFilter) params.append('status', this.statusFilter);
+            if (this.paymentStatusFilter) params.append('payment_status', this.paymentStatusFilter);
+            if (this.bucketFilter) params.append('bucket', this.bucketFilter);
+            if (this.campaignFilter) params.append('campaign_id', this.campaignFilter);
+            if (this.agentFilter) params.append('agent_id', this.agentFilter);
+            const q = params.toString();
+            return window.crmCustomerData.exportUrl + (q ? `?${q}` : '');
+        },
+
+        openImportModal() {
+            this.importResult = null;
+            this.showImportModal = true;
+        },
+
+        closeImportModal() {
+            this.showImportModal = false;
+        },
+
+        async submitImport() {
+            const file = this.$refs.importFile?.files?.[0];
+            if (!file) {
+                alert('Pilih file dulu');
+                return;
+            }
+            this.importLoading = true;
+            this.importResult = null;
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                const response = await fetch(window.crmCustomerData.importUrl, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        'Accept': 'application/json',
+                    },
+                    body: formData,
+                });
+                const data = await response.json();
+                if (data.status === 'success') {
+                    this.importResult = data;
+                    this.fetchCustomers(1);
+                } else {
+                    alert(data.message || 'Error');
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Terjadi kesalahan');
+            } finally {
+                this.importLoading = false;
             }
         },
 
@@ -227,7 +406,8 @@ window.crmCustomers = function () {
             const labels = {
                 'unpaid': 'Belum Bayar',
                 'partial': 'Cicilan',
-                'paid': 'Lunas'
+                'paid': 'Lunas',
+                'discounted': 'Diskon Lunas'
             };
             return labels[status] || status;
         },
@@ -236,9 +416,21 @@ window.crmCustomers = function () {
             const classes = {
                 'unpaid': 'bg-red-50 text-red-700 border-red-200',
                 'partial': 'bg-yellow-50 text-yellow-700 border-yellow-200',
-                'paid': 'bg-green-50 text-green-700 border-green-200'
+                'paid': 'bg-green-50 text-green-700 border-green-200',
+                'discounted': 'bg-purple-50 text-purple-700 border-purple-200'
             };
             return classes[status] || 'bg-slate-100 text-slate-800 border-slate-200';
+        },
+
+        getBucketClass(bucket) {
+            const classes = {
+                'Current': 'bg-blue-50 text-blue-700 border-blue-200',
+                'Bucket 1': 'bg-green-50 text-green-700 border-green-200',
+                'Bucket 2': 'bg-yellow-50 text-yellow-700 border-yellow-200',
+                'Bucket 3': 'bg-orange-50 text-orange-700 border-orange-200',
+                'NPL': 'bg-red-50 text-red-700 border-red-200'
+            };
+            return classes[bucket] || 'bg-slate-100 text-slate-800 border-slate-200';
         }
     };
 };
