@@ -272,8 +272,144 @@ window.crmCustomers = function () {
             if (this.bucketFilter) params.append('bucket', this.bucketFilter);
             if (this.campaignFilter) params.append('campaign_id', this.campaignFilter);
             if (this.agentFilter) params.append('agent_id', this.agentFilter);
+            if (this.handoverFilter) params.append('handover_status', this.handoverFilter);
+            if (this.badDebtOnly) params.append('bad_debt_only', '1');
             const q = params.toString();
             return window.crmCustomerData.exportUrl + (q ? `?${q}` : '');
+        },
+
+        exportHandoverHref() {
+            const params = new URLSearchParams();
+            if (this.search) params.append('search', this.search);
+            if (this.bucketFilter) params.append('bucket', this.bucketFilter);
+            if (this.handoverFilter) params.append('handover_status', this.handoverFilter);
+            if (this.badDebtOnly) params.append('bad_debt_only', '1');
+            const q = params.toString();
+            return window.crmCustomerData.handoverExportUrl + (q ? `?${q}` : '');
+        },
+
+        async markHandoverReady() {
+            if (this.selectedIds.length === 0) {
+                alert('Pilih minimal 1 customer');
+                return;
+            }
+            if (!confirm(`Tandai ${this.selectedIds.length} case sebagai SIAP handover ke pihak ketiga?`)) return;
+            this.handoverLoading = true;
+            try {
+                const response = await fetch(window.crmCustomerData.handoverReadyUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify({ customer_ids: this.selectedIds }),
+                });
+                const data = await response.json();
+                alert(data.message || 'Selesai');
+                this.clearSelection();
+                this.fetchCustomers(this.pagination.current_page || 1);
+            } catch (e) {
+                console.error(e);
+                alert('Terjadi kesalahan');
+            } finally {
+                this.handoverLoading = false;
+            }
+        },
+
+        openHandoverModal() {
+            if (this.selectedIds.length === 0) {
+                alert('Pilih minimal 1 customer');
+                return;
+            }
+            this.handoverForm = { handover_to: '', handover_date: new Date().toISOString().split('T')[0], handover_notes: '' };
+            this.showHandoverModal = true;
+        },
+
+        closeHandoverModal() {
+            this.showHandoverModal = false;
+        },
+
+        async submitHandover() {
+            if (!this.handoverForm.handover_to) {
+                alert('Nama pihak ketiga wajib diisi');
+                return;
+            }
+            this.handoverLoading = true;
+            try {
+                const response = await fetch(window.crmCustomerData.handoverSubmitUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        customer_ids: this.selectedIds,
+                        handover_to: this.handoverForm.handover_to,
+                        handover_date: this.handoverForm.handover_date || null,
+                        handover_notes: this.handoverForm.handover_notes || null,
+                    }),
+                });
+                const data = await response.json();
+                alert(data.message || 'Selesai');
+                this.closeHandoverModal();
+                this.clearSelection();
+                this.fetchCustomers(this.pagination.current_page || 1);
+            } catch (e) {
+                console.error(e);
+                alert('Terjadi kesalahan');
+            } finally {
+                this.handoverLoading = false;
+            }
+        },
+
+        async handoverRecall() {
+            if (this.selectedIds.length === 0) {
+                alert('Pilih minimal 1 customer');
+                return;
+            }
+            if (!confirm(`Tarik kembali ${this.selectedIds.length} case dari pihak ketiga?`)) return;
+            this.handoverLoading = true;
+            try {
+                const response = await fetch(window.crmCustomerData.handoverRecallUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify({ customer_ids: this.selectedIds }),
+                });
+                const data = await response.json();
+                alert(data.message || 'Selesai');
+                this.clearSelection();
+                this.fetchCustomers(this.pagination.current_page || 1);
+            } catch (e) {
+                console.error(e);
+                alert('Terjadi kesalahan');
+            } finally {
+                this.handoverLoading = false;
+            }
+        },
+
+        formatHandoverStatus(status) {
+            const labels = {
+                'none': '-',
+                'ready': 'Siap Handover',
+                'handed_over': 'Diserahkan',
+                'returned': 'Ditarik Kembali',
+            };
+            return labels[status] || status;
+        },
+
+        getHandoverClass(status) {
+            const classes = {
+                'ready': 'bg-amber-50 text-amber-700 border-amber-200',
+                'handed_over': 'bg-orange-50 text-orange-700 border-orange-200',
+                'returned': 'bg-slate-100 text-slate-600 border-slate-300',
+            };
+            return classes[status] || 'bg-slate-100 text-slate-800 border-slate-200';
         },
 
         openImportModal() {
