@@ -86,7 +86,7 @@
             @if($userType === 'agent')
                 <p class="px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-3 mt-2">Contact Center</p>
                 <a href="{{ route('dashboard.overview', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('dashboard.overview') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
-                    <i class="fa-solid fa-layer-group w-5 text-center"></i> Overview
+                    <i class="fa-solid fa-layer-group w-5 text-center"></i> Overview Call
                 </a>
                 <a href="{{ route('dashboard.workspace', $profileExt, false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('dashboard.workspace') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
     <i class="fa-solid fa-border-all w-5 text-center"></i> Workspace
@@ -94,7 +94,7 @@
             @else
                 <p class="px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-3 mt-2">Main Menu</p>
                 <a href="{{ route('dashboard.overview', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('dashboard.overview') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
-                    <i class="fa-solid fa-layer-group w-5 text-center"></i> Overview
+                    <i class="fa-solid fa-layer-group w-5 text-center"></i> Overview Call
                 </a>
 
                 @if($userType === 'admin')
@@ -118,10 +118,26 @@
                 @if(in_array($userType, ['admin', 'supervisor']))
                 <p class="px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-3 mt-6">CRM</p>
                 <a href="{{ route('crm.dashboard', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('crm.dashboard') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
-                    <i class="fa-solid fa-chart-pie w-5 text-center"></i> Dashboard
+                    <i class="fa-solid fa-chart-pie w-5 text-center"></i> Dashboard Agent
                 </a>
                 <a href="{{ route('crm.customers.index', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('crm.customers.*') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
                     <i class="fa-solid fa-users w-5 text-center"></i> Customers
+                </a>
+
+                <p class="px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-3 mt-6">Collection Banking</p>
+                <a href="{{ route('crm.collection.dashboard', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('crm.collection.dashboard') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
+                    <i class="fa-solid fa-layer-group w-5 text-center"></i> Collection Dashboard
+                </a>
+                <a href="{{ route('crm.collection.aging', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('crm.collection.aging') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
+                    <i class="fa-solid fa-table-columns w-5 text-center"></i> Aging Report
+                </a>
+                <a href="{{ route('crm.collection.ptp', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('crm.collection.ptp') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
+                    <i class="fa-solid fa-handshake w-5 text-center"></i> PTP Management
+                </a>
+
+                <p class="px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-3 mt-6">Campaign</p>
+                <a href="{{ route('crm.campaigns.index', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('crm.campaigns.*') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
+                    <i class="fa-solid fa-bullseye w-5 text-center"></i> Campaign Management
                 </a>
                 @endif
             @endif

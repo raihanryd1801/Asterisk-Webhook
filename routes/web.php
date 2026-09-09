@@ -10,6 +10,7 @@ use App\Http\Controllers\SupervisorController;
 use App\Http\Controllers\Api\SupervisorMonitoringController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\CampaignController;
 
 // ==========================================
 // 1. AUTHENTICATION ROUTES
@@ -245,13 +246,33 @@ Route::prefix('dashboard')->group(function () {
     // 5. CRM Module (Admin + Supervisor)
     // ==========================================
     Route::middleware([\App\Http\Middleware\CrmAccess::class])->group(function () {
+        // CRM Dashboard
         Route::get('/crm/dashboard', [CustomerController::class, 'dashboard'])->name('crm.dashboard');
+        
+        // Customer Management
         Route::get('/crm/customers', [CustomerController::class, 'index'])->name('crm.customers.index');
         Route::post('/crm/customers', [CustomerController::class, 'store']);
         Route::get('/crm/customers/{customer}', [CustomerController::class, 'show']);
         Route::put('/crm/customers/{customer}', [CustomerController::class, 'update']);
         Route::delete('/crm/customers/{customer}', [CustomerController::class, 'destroy']);
         Route::get('/crm/customers/{customer}/calls', [CustomerController::class, 'getCallHistory']);
+
+        // Collection Banking
+        Route::get('/crm/collection/dashboard', [CustomerController::class, 'collectionDashboard'])->name('crm.collection.dashboard');
+        Route::get('/crm/collection/aging', [CustomerController::class, 'agingReport'])->name('crm.collection.aging');
+        Route::get('/crm/collection/ptp', [CustomerController::class, 'ptpManagement'])->name('crm.collection.ptp');
+        Route::post('/crm/customers/{customer}/ptp', [CustomerController::class, 'setPTP']);
+        Route::post('/crm/customers/{customer}/ptp/{action}', [CustomerController::class, 'updatePTPStatus']);
+        Route::post('/crm/collection/recalculate-buckets', [CustomerController::class, 'recalculateBuckets']);
+        Route::post('/crm/collection/bulk-assign', [CustomerController::class, 'bulkAssignCampaign']);
+
+        // Campaign Management
+        Route::get('/crm/campaigns', [CampaignController::class, 'index'])->name('crm.campaigns.index');
+        Route::post('/crm/campaigns', [CampaignController::class, 'store']);
+        Route::get('/crm/campaigns/{campaign}', [CampaignController::class, 'show']);
+        Route::put('/crm/campaigns/{campaign}', [CampaignController::class, 'update']);
+        Route::delete('/crm/campaigns/{campaign}', [CampaignController::class, 'destroy']);
+        Route::get('/crm/campaigns/collectors', [CampaignController::class, 'getCollectors']);
     });
 
     // CRM API for Agent Workspace (no auth middleware - uses session)

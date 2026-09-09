@@ -78,104 +78,114 @@
             <div class="overflow-x-auto">
                 <table class="w-full">
                     <thead class="bg-slate-50 border-b border-slate-200">
-                        <tr>
-                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Customer</th>
-                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Kontak</th>
-                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Status</th>
-                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Status Bayar</th>
-                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Assigned Agent</th>
-                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Last Contact</th>
-                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Actions</th>
-                        </tr>
-                    </thead>
+    <tr>
+        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Customer</th>
+        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Kontak</th>
+        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Status</th>
+        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Status Bayar</th>
+        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Jumlah Tagihan</th> <!-- Kolom Baru -->
+        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Assigned Agent</th>
+        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Last Contact</th>
+        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Actions</th>
+    </tr>
+</thead>
                     <tbody class="divide-y divide-slate-200" x-ref="tbody">
-                        <template x-for="customer in customers" :key="customer.id">
-                            <tr class="hover:bg-slate-50 transition-colors">
-                                <td class="px-4 py-3">
-                                    <div class="font-medium text-slate-900" x-text="customer.name"></div>
-                                    <div class="text-sm text-slate-500" x-text="customer.company || '-'"></div>
-                                </td>
-                                <td class="px-4 py-3">
-                                    <div class="text-sm text-slate-700 font-mono" x-text="customer.phone"></div>
-                                    <template x-if="customer.email">
-                                        <div class="text-xs text-slate-500" x-text="customer.email"></div>
-                                    </template>
-                                </td>
-                                <td class="px-4 py-3">
-                                    <span 
-                                        class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-                                        :class="getStatusClass(customer.status)"
-                                        x-text="formatStatus(customer.status)"
-                                    ></span>
-                                </td>
-                                <td class="px-4 py-3">
-                                    <span 
-                                        class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-                                        :class="getPaymentStatusClass(customer.payment_status)"
-                                        x-text="formatPaymentStatus(customer.payment_status)"
-                                    ></span>
-                                    <template x-if="customer.total_amount > 0">
-                                        <div class="text-[10px] text-slate-500 mt-0.5 font-mono" x-text="'Rp ' + formatCurrency(customer.paid_amount) + ' / Rp ' + formatCurrency(customer.total_amount)"></div>
-                                        <div class="w-24 h-1.5 bg-slate-200 rounded-full mt-1 overflow-hidden">
-                                            <div class="h-full bg-brand-600 transition-all duration-300" :style="'width: ' + customer.payment_progress + '%'"></div>
-                                        </div>
-                                    </template>
-                                </td>
-                                <td class="px-4 py-3">
-                                    <template x-if="customer.assigned_agent">
-                                        <div>
-                                            <div class="text-sm text-slate-700" x-text="customer.assigned_agent.name"></div>
-                                            <div class="text-xs text-slate-500 font-mono" x-text="'Ext: ' + customer.assigned_agent.extension"></div>
-                                        </div>
-                                    </template>
-                                    <template x-if="!customer.assigned_agent">
-                                        <span class="text-slate-400 text-sm">-</span>
-                                    </template>
-                                </td>
-                                <td class="px-4 py-3 text-sm text-slate-500">
-                                    <template x-if="customer.last_contacted_at">
-                                        <span x-text="formatDate(customer.last_contacted_at)"></span>
-                                    </template>
-                                    <template x-if="!customer.last_contacted_at">
-                                        <span class="text-slate-400">-</span>
-                                    </template>
-                                </td>
-                                <td class="px-4 py-3">
-                                    <div class="flex items-center gap-1">
-                                        <button 
-                                            @click="openEditModal(customer)"
-                                            class="text-brand-600 hover:text-brand-800 p-1.5 rounded hover:bg-brand-50 transition-colors"
-                                            title="Edit"
-                                        >
-                                            <i class="fa-solid fa-pen text-sm"></i>
-                                        </button>
-                                        <button 
-                                            @click="openCallHistoryModal(customer)"
-                                            class="text-slate-600 hover:text-slate-800 p-1.5 rounded hover:bg-slate-100 transition-colors"
-                                            title="Call History"
-                                        >
-                                            <i class="fa-solid fa-phone text-sm"></i>
-                                        </button>
-                                        <button 
-                                            @click="deleteCustomer(customer.id)"
-                                            class="text-red-600 hover:text-red-800 p-1.5 rounded hover:bg-red-50 transition-colors"
-                                            title="Delete"
-                                        >
-                                            <i class="fa-solid fa-trash text-sm"></i>
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        </template>
-                        <template x-if="customers.length === 0">
-                            <tr>
-                                <td colspan="6" class="px-4 py-12 text-center text-slate-500">
-                                    <i class="fa-solid fa-users text-3xl mb-2 block text-slate-300"></i>
-                                    Belum ada data customer
-                                </td>
-                            </tr>
-                        </template>
-                    </tbody>
+    <template x-for="customer in customers" :key="customer.id">
+        <tr class="hover:bg-slate-50 transition-colors">
+            <!-- Kolom Customer -->
+            <td class="px-4 py-3">
+                <div class="font-medium text-slate-900" x-text="customer.name"></div>
+                <div class="text-sm text-slate-500" x-text="customer.company || '-'"></div>
+            </td>
+
+            <!-- Kolom Kontak -->
+            <td class="px-4 py-3">
+                <div class="text-sm text-slate-700 font-mono" x-text="customer.phone"></div>
+                <template x-if="customer.email">
+                    <div class="text-xs text-slate-500" x-text="customer.email"></div>
+                </template>
+            </td>
+
+            <!-- Kolom Status Lead/Customer -->
+            <td class="px-4 py-3">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                    :class="getStatusClass(customer.status)"
+                    x-text="formatStatus(customer.status)"></span>
+            </td>
+
+            <!-- Kolom 1: Status Bayar Saja -->
+            <td class="px-4 py-3">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border"
+                    :class="getPaymentStatusClass(customer.payment_status)"
+                    x-text="formatPaymentStatus(customer.payment_status)"></span>
+            </td>
+
+            <!-- Kolom 2: Jumlah Tagihan & Progress Bar Saja -->
+            <td class="px-4 py-3">
+                <template x-if="customer.total_amount > 0">
+                    <div>
+                        <div class="text-xs font-mono font-medium text-slate-700" x-text="'Rp ' + formatCurrency(customer.paid_amount) + ' / ' + 'Rp ' + formatCurrency(customer.total_amount)"></div>
+                        <div class="w-28 h-1.5 bg-slate-200 rounded-full mt-1.5 overflow-hidden">
+                            <div class="h-full bg-brand-600 transition-all duration-300" :style="'width: ' + (customer.payment_progress || 0) + '%'"></div>
+                        </div>
+                    </div>
+                </template>
+                <template x-if="!customer.total_amount || customer.total_amount == 0">
+                    <span class="text-slate-400 text-xs italic">Tanpa Tagihan</span>
+                </template>
+            </td>
+
+            <!-- Kolom Assigned Agent -->
+            <td class="px-4 py-3">
+                <template x-if="customer.assigned_agent">
+                    <div>
+                        <div class="text-sm text-slate-700" x-text="customer.assigned_agent.name"></div>
+                        <div class="text-xs text-slate-500 font-mono" x-text="'Ext: ' + customer.assigned_agent.extension"></div>
+                    </div>
+                </template>
+                <template x-if="!customer.assigned_agent">
+                    <span class="text-slate-400 text-sm">-</span>
+                </template>
+            </td>
+
+            <!-- Kolom Last Contact -->
+            <td class="px-4 py-3 text-sm text-slate-500">
+                <template x-if="customer.last_contacted_at">
+                    <span x-text="formatDate(customer.last_contacted_at)"></span>
+                </template>
+                <template x-if="!customer.last_contacted_at">
+                    <span class="text-slate-400">-</span>
+                </template>
+            </td>
+
+            <!-- Kolom Actions -->
+            <td class="px-4 py-3">
+                <div class="flex items-center gap-1">
+                    <button @click="openEditModal(customer)" class="text-brand-600 hover:text-brand-800 p-1.5 rounded hover:bg-brand-50 transition-colors" title="Edit">
+                        <i class="fa-solid fa-pen text-sm"></i>
+                    </button>
+                    <button @click="openCallHistoryModal(customer)" class="text-slate-600 hover:text-slate-800 p-1.5 rounded hover:bg-slate-100 transition-colors" title="Call History">
+                        <i class="fa-solid fa-phone text-sm"></i>
+                    </button>
+                    <button @click="deleteCustomer(customer.id)" class="text-red-600 hover:text-red-800 p-1.5 rounded hover:bg-red-50 transition-colors" title="Delete">
+                        <i class="fa-solid fa-trash text-sm"></i>
+                    </button>
+                </div>
+            </td>
+        </tr>
+    </template>
+    
+    <!-- Pastikan colspan disesuaikan menjadi 8 karena ada penambahan kolom -->
+    <template x-if="customers.length === 0">
+        <tr>
+            <td colspan="8" class="px-4 py-12 text-center text-slate-500">
+                <i class="fa-solid fa-users text-3xl mb-2 block text-slate-300"></i>
+                Belum ada data customer
+            </td>
+        </tr>
+    </template>
+</tbody>
+                    
                 </table>
             </div>
 
@@ -366,11 +376,12 @@
         </div>
     </div>
 
-</div> @endsection
+</div> 
+@endsection
 
 @section('scripts')
 <script>
-    // Cegah Turbo melakukan cache pada halaman ini agar script selalu jalan
+    // Cegah Turbo melakukan cache pada halaman ini
     if (!document.querySelector('meta[name="turbo-cache-control"]')) {
         let meta = document.createElement('meta');
         meta.name = 'turbo-cache-control';
@@ -378,263 +389,13 @@
         document.head.appendChild(meta);
     }
 
-    // 🚀 DAFTARKAN KE GLOBAL WINDOW AGAR LANGSUNG DIKENALI OLEH TURBO & ALPINE
-    window.crmCustomers = function () {
-    return {
+    // Oper variabel dari PHP Laravel ke Global Window agar dibaca oleh crm-customers.js
+    window.crmCustomerData = {
         customers: @json($customers->items()),
         pagination: @json($paginationData),
         agents: @json($agents),
         statuses: @json($statuses),
-        search: '',
-        statusFilter: '',
-        agentFilter: '',
-        showModal: false,
-        showCallHistoryModal: false,
-        modalTitle: '',
-        form: { id: '', name: '', phone: '', email: '', company: '', status: 'new', assigned_agent_id: '', notes: '', total_amount: '', paid_amount: '', discount_amount: '', payment_status: 'unpaid', payment_notes: '' },
-        selectedCustomer: null,
-        paymentStatusFilter: '',
-        callHistory: [],
-        callHistoryLoading: false,
-        submitting: false,
-
-        async fetchCustomers(page = 1) {
-            const params = new URLSearchParams();
-            if (this.search) params.append('search', this.search);
-            if (this.statusFilter) params.append('status', this.statusFilter);
-            if (this.paymentStatusFilter) params.append('payment_status', this.paymentStatusFilter);
-            if (this.agentFilter) params.append('agent_id', this.agentFilter);
-            params.append('page', page);
-            
-            try {
-                const response = await fetch(`{{ route('crm.customers.index') }}?${params}`, {
-                    headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
-                });
-                const data = await response.json();
-                this.customers = data.data;
-                this.pagination = {
-                    current_page: data.current_page,
-                    last_page: data.last_page,
-                    per_page: data.per_page,
-                    total: data.total,
-                    from: data.from,
-                    to: data.to,
-                    prev_page_url: data.prev_page_url,
-                    next_page_url: data.next_page_url,
-                };
-            } catch (e) {
-                console.error(e);
-            }
-        },
-
-        prevPage() {
-            if (this.pagination.prev_page_url) this.fetchCustomers(this.pagination.current_page - 1);
-        },
-        nextPage() {
-            if (this.pagination.next_page_url) this.fetchCustomers(this.pagination.current_page + 1);
-        },
-
-        openCreateModal() {
-            this.modalTitle = 'Tambah Customer';
-            this.form = { id: '', name: '', phone: '', email: '', company: '', status: 'new', assigned_agent_id: '', notes: '', total_amount: '', paid_amount: '', discount_amount: '', payment_status: 'unpaid', payment_notes: '' };
-            this.showModal = true;
-        },
-
-        openEditModal(customer) {
-            this.modalTitle = 'Edit Customer';
-            this.form = {
-                id: customer.id,
-                name: customer.name,
-                phone: customer.phone,
-                email: customer.email || '',
-                company: customer.company || '',
-                status: customer.status,
-                assigned_agent_id: customer.assigned_agent_id || '',
-                notes: customer.notes || '',
-                total_amount: customer.total_amount || '',
-                paid_amount: customer.paid_amount || '',
-                discount_amount: customer.discount_amount || '',
-                payment_status: customer.payment_status || 'unpaid',
-                payment_notes: customer.payment_notes || '',
-            };
-            this.showModal = true;
-        },
-
-        closeModal() {
-            this.showModal = false;
-            this.form = { id: '', name: '', phone: '', email: '', company: '', status: 'new', assigned_agent_id: '', notes: '', total_amount: '', paid_amount: '', discount_amount: '', payment_status: 'unpaid', payment_notes: '' };
-        },
-
-        async submitForm() {
-            this.submitting = true;
-            const isEdit = !!this.form.id;
-            const url = isEdit ? `{{ route('crm.customers.index') }}/${this.form.id}` : '{{ route('crm.customers.index') }}';
-            const method = isEdit ? 'PUT' : 'POST';
-            
-            const formData = new FormData();
-            Object.keys(this.form).forEach(key => {
-                if (this.form[key] !== '' && this.form[key] !== null) formData.append(key, this.form[key]);
-            });
-            formData.append('_method', method);
-            formData.append('_token', document.querySelector('meta[name="csrf-token"]').content);
-
-            try {
-                const response = await fetch(url, { method: 'POST', body: formData });
-                const data = await response.json();
-                if (data.status === 'success') {
-                    this.closeModal();
-                    this.fetchCustomers(this.pagination.current_page);
-                } else {
-                    alert(data.message || 'Error');
-                }
-            } catch (e) {
-                console.error(e);
-                alert('Terjadi kesalahan');
-            } finally {
-                this.submitting = false;
-            }
-        },
-
-        async deleteCustomer(id) {
-            if (!confirm('Yakin ingin menghapus customer ini?')) return;
-            try {
-                const response = await fetch(`{{ route('crm.customers.index') }}/${id}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
-                        'Accept': 'application/json',
-                    },
-                    body: JSON.stringify({ _method: 'DELETE' })
-                });
-                const data = await response.json();
-                if (data.status === 'success') {
-                    this.fetchCustomers(this.pagination.current_page);
-                } else {
-                    alert(data.message || 'Error');
-                }
-            } catch (e) {
-                console.error(e);
-                alert('Terjadi kesalahan');
-            }
-        },
-
-        async openCallHistoryModal(customer) {
-            this.selectedCustomer = customer;
-            this.showCallHistoryModal = true;
-            this.callHistoryLoading = true;
-            this.callHistory = [];
-            
-            try {
-                const response = await fetch(`{{ route('crm.customers.index') }}/${customer.id}/calls`, {
-                    headers: { 'Accept': 'application/json' }
-                });
-                this.callHistory = await response.json();
-            } catch (e) {
-                console.error(e);
-            } finally {
-                this.callHistoryLoading = false;
-            }
-        },
-
-        closeCallHistoryModal() {
-            this.showCallHistoryModal = false;
-            this.selectedCustomer = null;
-            this.callHistory = [];
-        },
-
-        formatStatus(status) {
-            const labels = {
-                'new': 'New',
-                'contacted': 'Contacted',
-                'qualified': 'Qualified',
-                'proposal': 'Proposal',
-                'closed_won': 'Closed Won',
-                'closed_lost': 'Closed Lost',
-            };
-            return labels[status] || status;
-        },
-
-        getStatusClass(status) {
-            const classes = {
-                'new': 'bg-blue-100 text-blue-800',
-                'contacted': 'bg-yellow-100 text-yellow-800',
-                'qualified': 'bg-purple-100 text-purple-800',
-                'proposal': 'bg-indigo-100 text-indigo-800',
-                'closed_won': 'bg-green-100 text-green-800',
-                'closed_lost': 'bg-red-100 text-red-800',
-            };
-            return classes[status] || 'bg-slate-100 text-slate-800';
-        },
-
-        getDispositionClass(disposition) {
-            const classes = {
-                'ANSWERED': 'bg-green-100 text-green-800',
-                'NO ANSWER': 'bg-yellow-100 text-yellow-800',
-                'BUSY': 'bg-orange-100 text-orange-800',
-                'FAILED': 'bg-red-100 text-red-800',
-                'CANCEL': 'bg-slate-100 text-slate-800',
-            };
-            return classes[disposition] || 'bg-slate-100 text-slate-800';
-        },
-
-        formatDate(dateStr) {
-            const d = new Date(dateStr);
-            return d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
-        },
-
-        formatDateTime(dateStr) {
-            const d = new Date(dateStr);
-            return d.toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-        },
-
-        formatDuration(seconds) {
-            const h = Math.floor(seconds / 3600);
-            const m = Math.floor((seconds % 3600) / 60);
-            const s = seconds % 60;
-            if (h > 0) return `${h}h ${m}m ${s}s`;
-            if (m > 0) return `${m}m ${s}s`;
-            return `${s}s`;
-        },
-
-        // 🚀 TIGA FUNGSI TAMBAHAN UNTUK STATUS PEMBAYARAN DAN MATA UANG 🚀
-        formatCurrency(value) {
-            if (!value) return '0';
-            return new Intl.NumberFormat('id-ID').format(value);
-        },
-
-        formatPaymentStatus(status) {
-            const labels = {
-                'unpaid': 'Belum Bayar',
-                'partial': 'Cicilan',
-                'paid': 'Lunas'
-            };
-            return labels[status] || status;
-        },
-
-        getPaymentStatusClass(status) {
-            const classes = {
-                'unpaid': 'bg-red-50 text-red-700 border-red-200',
-                'partial': 'bg-yellow-50 text-yellow-700 border-yellow-200',
-                'paid': 'bg-green-50 text-green-700 border-green-200'
-            };
-            return classes[status] || 'bg-slate-100 text-slate-800 border-slate-200';
-        }
+        indexUrl: '{{ route('crm.customers.index') }}'
     };
-};
-</script>
-
-<script>
-    // 🚀 Pastikan Alpine re-init setelah Turbo navigation
-    document.addEventListener('turbo:load', () => {
-        if (window.Alpine) {
-            // Inisialisasi ulang elemen yang belum punya Alpine
-            document.querySelectorAll('[x-data]').forEach(el => {
-                if (!el.__x) {
-                    window.Alpine.initTree(el);
-                }
-            });
-        }
-    });
 </script>
 @endsection

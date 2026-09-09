@@ -8,7 +8,7 @@
 import './echo';
 import './chat-widget.js';
 import './call-history';
-
+import './crm-customer.js';
 // 🚀 TAMBAHKAN BARIS INI
 import './crm-charts.js';
 

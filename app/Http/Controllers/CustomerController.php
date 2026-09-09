@@ -337,4 +337,264 @@ class CustomerController extends Controller
             'data' => $customers
         ]);
     }
+
+    // ============ COLLECTION BANKING METHODS ============
+
+    public function collectionDashboard(Request $request)
+    {
+        $this->authorizeAccess();
+
+        // Bucket Aging Summary
+        $bucketSummary = Customer::selectRaw('
+            COALESCE(bucket, "Unknown") as bucket,
+            COUNT(*) as count,
+            SUM(total_amount) as total_amount,
+            SUM(paid_amount) as paid_amount,
+            SUM(total_amount - paid_amount - discount_amount) as remaining_amount,
+            AVG(days_past_due) as avg_dpd
+        ')
+            ->where('total_amount', '>', 0)
+            ->groupBy('bucket')
+            ->orderByRaw("CASE 
+                WHEN bucket = 'Current' THEN 1
+                WHEN bucket = 'Bucket 1' THEN 2
+                WHEN bucket = 'Bucket 2' THEN 3
+                WHEN bucket = 'Bucket 3' THEN 4
+                WHEN bucket = 'NPL' THEN 5
+                ELSE 6 END")
+            ->get();
+
+        // Risk Level Distribution
+        $riskSummary = Customer::selectRaw('risk_level, COUNT(*) as count, SUM(total_amount) as exposure')
+            ->where('total_amount', '>', 0)
+            ->groupBy('risk_level')
+            ->orderByRaw("CASE risk_level 
+                WHEN 'critical' THEN 1 
+                WHEN 'high' THEN 2 
+                WHEN 'medium' THEN 3 
+                WHEN 'low' THEN 4 
+                ELSE 5 END")
+            ->get();
+
+        // Campaign Performance
+        $campaignPerformance = Customer::selectRaw('
+            c.name as campaign_name, c.type,
+            COUNT(customers.id) as total_cases,
+            SUM(customers.total_amount) as portfolio_value,
+            SUM(customers.paid_amount) as collected,
+            SUM(customers.total_amount - customers.paid_amount - customers.discount_amount) as outstanding,
+            COUNT(CASE WHEN customers.payment_status = "paid" THEN 1 END) as closed_count
+        ')
+            ->leftJoin('campaigns as c', 'customers.campaign_id', '=', 'c.id')
+            ->where('customers.total_amount', '>', 0)
+            ->whereNotNull('customers.campaign_id')
+            ->groupBy('c.id', 'c.name', 'c.type')
+            ->get();
+
+        // Collector Performance
+        $collectorPerformance = Customer::selectRaw('
+            a.name as collector_name, a.extension,
+            COUNT(customers.id) as assigned_cases,
+            SUM(customers.total_amount) as portfolio_value,
+            SUM(customers.paid_amount) as collected,
+            SUM(customers.total_amount - customers.paid_amount - customers.discount_amount) as outstanding,
+            COUNT(CASE WHEN customers.payment_status = "paid" THEN 1 END) as closed_count,
+            AVG(CASE WHEN customers.total_amount > 0 THEN ((customers.paid_amount + customers.discount_amount) / customers.total_amount) * 100 ELSE 0 END) as avg_collection_rate
+        ')
+            ->leftJoin('agents as a', 'customers.collector_id', '=', 'a.id')
+            ->where('customers.total_amount', '>', 0)
+            ->whereNotNull('customers.collector_id')
+            ->groupBy('a.id', 'a.name', 'a.extension')
+            ->orderByDesc('collected')
+            ->get();
+
+        // PTP Summary
+        $ptpStats = [
+            'active' => Customer::whereJsonContains('promise_to_pay->status', 'pending')
+                ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(promise_to_pay, '$.date')) >= ?", [now()->toDateString()])
+                ->count(),
+            'kept_today' => Customer::whereJsonContains('promise_to_pay->status', 'kept')
+                ->whereRaw("DATE(JSON_UNQUOTE(JSON_EXTRACT(promise_to_pay, '$.kept_at'))) = ?", [now()->toDateString()])
+                ->count(),
+            'broken_today' => Customer::whereJsonContains('promise_to_pay->status', 'broken')
+                ->whereRaw("DATE(JSON_UNQUOTE(JSON_EXTRACT(promise_to_pay, '$.broken_at'))) = ?", [now()->toDateString()])
+                ->count(),
+            'overdue' => Customer::whereJsonContains('promise_to_pay->status', 'pending')
+                ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(promise_to_pay, '$.date')) < ?", [now()->toDateString()])
+                ->count(),
+        ];
+
+        // Upcoming Due (next 7 days)
+        $upcomingDue = Customer::dueSoon(7)
+            ->with('collector', 'campaign')
+            ->orderBy('due_date')
+            ->limit(20)
+            ->get(['id', 'name', 'phone', 'due_date', 'total_amount', 'paid_amount', 'discount_amount', 'collector_id', 'campaign_id'])
+            ->map(function ($c) {
+                $c->remaining_amount = max(0, $c->total_amount - $c->paid_amount - $c->discount_amount);
+                return $c;
+            });
+
+        // Top NPL Cases
+        $topNPL = Customer::where('bucket', 'NPL')
+            ->where('total_amount', '>', 0)
+            ->orderByDesc('total_amount')
+            ->limit(15)
+            ->with('collector', 'campaign')
+            ->get(['id', 'name', 'phone', 'total_amount', 'paid_amount', 'discount_amount', 'days_past_due', 'collector_id', 'campaign_id'])
+            ->map(function ($c) {
+                $c->remaining_amount = max(0, $c->total_amount - $c->paid_amount - $c->discount_amount);
+                return $c;
+            });
+
+        return view('crm.collection.dashboard', compact(
+            'bucketSummary', 'riskSummary', 'campaignPerformance',
+            'collectorPerformance', 'ptpStats', 'upcomingDue', 'topNPL'
+        ));
+    }
+
+    public function agingReport(Request $request)
+    {
+        $this->authorizeAccess();
+
+        $buckets = ['Current', 'Bucket 1', 'Bucket 2', 'Bucket 3', 'NPL'];
+        $data = [];
+
+        foreach ($buckets as $bucket) {
+            $cases = Customer::when($bucket !== 'Current', function ($q) use ($bucket) {
+                    $q->where('bucket', $bucket);
+                }, function ($q) {
+                    $q->where(function ($sq) {
+                        $sq->whereNull('bucket')->orWhere('bucket', 'Current');
+                    });
+                })
+                ->where('total_amount', '>', 0)
+                ->with('collector', 'campaign')
+                ->orderByDesc('total_amount')
+                ->paginate(20, ['*'], $bucket . '_page');
+
+            $data[$bucket] = $cases;
+        }
+
+        return view('crm.collection.aging', compact('data', 'buckets'));
+    }
+
+    public function ptpManagement(Request $request)
+    {
+        $this->authorizeAccess();
+
+        $filter = $request->get('filter', 'active'); // active, kept, broken, overdue, all
+
+        $query = Customer::whereNotNull('promise_to_pay')
+            ->where('total_amount', '>', 0)
+            ->with('collector', 'campaign');
+
+        switch ($filter) {
+            case 'active':
+                $query->whereJsonContains('promise_to_pay->status', 'pending')
+                      ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(promise_to_pay, '$.date')) >= ?", [now()->toDateString()]);
+                break;
+            case 'kept':
+                $query->whereJsonContains('promise_to_pay->status', 'kept');
+                break;
+            case 'broken':
+                $query->whereJsonContains('promise_to_pay->status', 'broken');
+                break;
+            case 'overdue':
+                $query->whereJsonContains('promise_to_pay->status', 'pending')
+                      ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(promise_to_pay, '$.date')) < ?", [now()->toDateString()]);
+                break;
+        }
+
+        $ptps = $query->orderByRaw("JSON_UNQUOTE(JSON_EXTRACT(promise_to_pay, '$.date')) ASC")
+            ->paginate(20)->withQueryString();
+
+        return view('crm.collection.ptp', compact('ptps', 'filter'));
+    }
+
+    public function setPTP(Request $request, Customer $customer)
+    {
+        $this->authorizeAccess();
+
+        $request->validate([
+            'ptp_amount' => 'required|numeric|min:1',
+            'ptp_date' => 'required|date|after_or_equal:today',
+            'ptp_note' => 'nullable|string',
+        ]);
+
+        $customer->setPromiseToPay(
+            $request->ptp_amount,
+            $request->ptp_date,
+            $request->ptp_note
+        );
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Promise to Pay berhasil dibuat',
+            'ptp' => $customer->promise_to_pay,
+        ]);
+    }
+
+    public function updatePTPStatus(Request $request, Customer $customer, $action)
+    {
+        $this->authorizeAccess();
+
+        if ($action === 'kept') {
+            $customer->markPromiseKept();
+            $msg = 'PTP ditandai DITEPIL';
+        } elseif ($action === 'broken') {
+            $customer->markPromiseBroken();
+            $msg = 'PTP ditandai BATAL';
+        } else {
+            return response()->json(['status' => 'error', 'message' => 'Invalid action'], 400);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => $msg,
+            'ptp' => $customer->promise_to_pay,
+        ]);
+    }
+
+    public function recalculateBuckets(Request $request)
+    {
+        $this->authorizeAccess();
+
+        $customers = Customer::whereNotNull('due_date')->get();
+        $updated = 0;
+
+        foreach ($customers as $customer) {
+            $oldBucket = $customer->bucket;
+            $customer->recalculateBucket();
+            if ($customer->bucket !== $oldBucket) $updated++;
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "Bucket recalculated. {$updated} cases updated.",
+        ]);
+    }
+
+    public function bulkAssignCampaign(Request $request)
+    {
+        $this->authorizeAccess();
+
+        $request->validate([
+            'customer_ids' => 'required|array|min:1',
+            'customer_ids.*' => 'exists:customers,id',
+            'campaign_id' => 'required|exists:campaigns,id',
+            'collector_id' => 'nullable|exists:agents,id',
+        ]);
+
+        $updated = Customer::whereIn('id', $request->customer_ids)
+            ->update([
+                'campaign_id' => $request->campaign_id,
+                'collector_id' => $request->collector_id,
+            ]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "{$updated} cases assigned to campaign",
+        ]);
+    }
 }
