@@ -205,6 +205,8 @@
         @mousedown="startDrag($event)"
         @touchstart="startDrag($event)"
         @click="handleButtonClick()"
+        @dblclick="resetPosition()"
+        title="Chat tim (double-click untuk kembalikan posisi tombol)"
         class="bg-brand-600 hover:bg-brand-700 text-white w-14 h-14 rounded-full shadow-xl flex items-center justify-center transition-all transform hover:scale-105 relative group cursor-grab active:cursor-grabbing select-none">
         <i class="fa-solid fa-comments text-xl pointer-events-none"></i>
         <span class="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm" x-show="unreadCount > 0" x-text="unreadCount" x-cloak></span>

@@ -35,8 +35,9 @@
                     <span x-text="recalcLoading ? 'Menghitung...' : 'Recalculate Bucket'"></span>
                 </button>
                 
-    <a               
+    <a
     :href="exportHref()"
+    data-turbo="false"
     class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-2"
     title="Export data sesuai filter ke Excel"
 >
@@ -44,6 +45,7 @@
 </a>
                 <a
     :href="exportHandoverHref()"
+    data-turbo="false"
     class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-2"
     title="Export data handover (siap + sudah diserahkan) ke Excel"
 >

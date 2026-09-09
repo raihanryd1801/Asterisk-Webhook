@@ -36,10 +36,20 @@ document.addEventListener('alpine:init', () => {
             if (saved) {
                 try {
                     const { x, y } = JSON.parse(saved);
-                    this.posX = x;
-                    this.posY = y;
+                    // Clamp ke dalam viewport: posisi lama bisa di luar layar
+                    // (beda resolusi/monitor) sehingga tombol "hilang".
+                    const btnSize = 56;
+                    const maxX = window.innerWidth - btnSize;
+                    const maxY = window.innerHeight - btnSize;
+                    if (typeof x === 'number' && typeof y === 'number' && x >= 0 && y >= 0 && x <= maxX && y <= maxY) {
+                        this.posX = x;
+                        this.posY = y;
+                    } else {
+                        localStorage.removeItem('chatWidgetPos');
+                    }
                 } catch (e) {
                     // ignore corrupt data
+                    localStorage.removeItem('chatWidgetPos');
                 }
             }
 
@@ -127,6 +137,12 @@ document.addEventListener('alpine:init', () => {
             if (!this.hasMoved) {
                 this.toggleChat();
             }
+        },
+
+        resetPosition() {
+            this.posX = null;
+            this.posY = null;
+            localStorage.removeItem('chatWidgetPos');
         },
 
         toggleChat() {
