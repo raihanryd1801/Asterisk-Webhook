@@ -7,14 +7,14 @@
         <h1 class="text-2xl font-bold text-slate-900 flex items-center gap-2">
             <i class="fa-solid fa-book-open text-brand-600"></i> Panduan CRM & Collection
         </h1>
-        <p class="text-slate-500 mt-1">Penjelasan semua fitur CRM, Collection Banking, dan Campaign — dibaca saat lupa.</p>
+        <p class="text-slate-500 mt-1">Penjelasan semua fitur CRM, Collection Banking, dan Auto-Dialer — dibaca saat lupa.</p>
     </div>
 
     <!-- Daftar isi -->
     <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
         <h2 class="font-bold text-slate-800 mb-3">Daftar Isi</h2>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-            <a href="#alur" class="text-brand-700 hover:underline">1. Alur besar: CRM → Collection → Campaign</a>
+            <a href="#alur" class="text-brand-700 hover:underline">1. Alur besar: CRM → Collection → Collector</a>
             <a href="#istilah" class="text-brand-700 hover:underline">2. Istilah penting (Bucket, DPD, PTP, Debtor)</a>
             <a href="#menu" class="text-brand-700 hover:underline">3. Fungsi tiap menu</a>
             <a href="#ptp" class="text-brand-700 hover:underline">4. Alur status PTP</a>
@@ -26,15 +26,16 @@
 
     <!-- 1. Alur -->
     <div id="alur" class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 scroll-mt-4">
-        <h2 class="text-lg font-bold text-slate-800 mb-3">1. Alur besar: CRM → Collection → Campaign</h2>
+        <h2 class="text-lg font-bold text-slate-800 mb-3">1. Alur besar: CRM → Collection → Collector</h2>
         <ol class="list-decimal list-inside space-y-2 text-sm text-slate-600 leading-relaxed">
             <li><strong class="text-slate-800">Input debtor di Customers</strong> — nama, phone, total tagihan, dan <strong>jatuh tempo (due date)</strong>. Bucket/DPD/risk dihitung otomatis dari due date.</li>
-            <li><strong class="text-slate-800">Buat strategi di Campaign Management</strong> — tipe (Early/Late/Legal/Recovery), target bucket, channel (CALL/SMS/WA/VISIT), jam & hari kerja, script bicara.</li>
-            <li><strong class="text-slate-800">Assign case</strong> — manual per customer (form Edit), massal via checkbox + <strong>Bulk Assign</strong>, atau otomatis via <strong>Auto-Assign</strong> sesuai bucket. Collector kosong bisa dibagi rata.</li>
-            <li><strong class="text-slate-800">Collector menagih dari Agent Workspace</strong> — list customer assigned + tombol Call (auto isi dialer), catat hasil di Call History, buat PTP saat customer janji bayar.</li>
+            <li><strong class="text-slate-800">Daftarkan debt collector di Debt Collectors</strong> — tim lapangan / desk yang menagih (terpisah dari agent call center).</li>
+            <li><strong class="text-slate-800">Assign case ke collector</strong> — manual per customer (form Edit), massal via checkbox + <strong>Bulk Assign</strong>, atau otomatis via <strong>Auto-Assign</strong> (bagi rata per bucket).</li>
+            <li><strong class="text-slate-800">Blast per bucket bila perlu</strong> — tombol Blast di halaman Buckets (WA/SMS, tercatat sebagai log).</li>
+            <li><strong class="text-slate-800">Agent menagih dari Workspace</strong> — list customer assigned + tombol Call (auto isi dialer) & buat PTP, catat hasil di Call History.</li>
             <li><strong class="text-slate-800">Kelola janji di PTP Management</strong> — tandai ditepati (✓) atau gagal (✕), ubah nominal/tanggal via ✏️.</li>
             <li><strong class="text-slate-800">Catat pembayaran di Customers</strong> — isi paid amount / diskon; status bayar ter-update otomatis.</li>
-            <li><strong class="text-slate-800">Monitor di Collection Dashboard</strong> — bucket aging, performa campaign & collector, PTP, jatuh tempo 7 hari, Top NPL, SLA breach.</li>
+            <li><strong class="text-slate-800">Monitor di Collection Dashboard</strong> — bucket aging, performa collector, PTP, jatuh tempo 7 hari, Top NPL, SLA breach.</li>
         </ol>
     </div>
 
@@ -53,8 +54,7 @@
                     <tr><td class="px-3 py-2 font-medium text-slate-800">Debtor / Borrower</td><td class="px-3 py-2">Customer yang punya hutang (di tabel disebut Customer).</td></tr>
                     <tr><td class="px-3 py-2 font-medium text-slate-800">DPD</td><td class="px-3 py-2"><em>Days Past Due</em> — jumlah hari keterlambatan dari due date. Dihitung otomatis.</td></tr>
                     <tr><td class="px-3 py-2 font-medium text-slate-800">Bucket</td><td class="px-3 py-2">Kelompok umur tunggakan: Current (belum tempo) → Bucket 1 (1–30) → Bucket 2 (31–60) → Bucket 3 (61–90) → NPL (90+).</td></tr>
-                    <tr><td class="px-3 py-2 font-medium text-slate-800">Campaign</td><td class="px-3 py-2">Strategi penagihan per bucket: channel, jam kerja, script, maks. percobaan/hari.</td></tr>
-                    <tr><td class="px-3 py-2 font-medium text-slate-800">Collector</td><td class="px-3 py-2">Penagih. <strong>Desk</strong> = agent call center (Bucket 1–2, via telepon). <strong>Field</strong> = orang lapangan (Bucket 3/NPL, kunjungan).</td></tr>
+                    <tr><td class="px-3 py-2 font-medium text-slate-800">Collector / Debt Collector</td><td class="px-3 py-2">Penagih dari tabel sendiri (menu Debt Collectors, bukan agent). <strong>Desk</strong> = nagih via telepon (Bucket 1–2). <strong>Field</strong> = orang lapangan, kunjungan langsung (Bucket 3/NPL). Opsional per customer.</td></tr>
                     <tr><td class="px-3 py-2 font-medium text-slate-800">PTP</td><td class="px-3 py-2"><em>Promise to Pay</em> — janji bayar: nominal + tanggal + catatan.</td></tr>
                     <tr><td class="px-3 py-2 font-medium text-slate-800">Aging</td><td class="px-3 py-2">Laporan sebaran case per bucket.</td></tr>
                     <tr><td class="px-3 py-2 font-medium text-slate-800">SLA / Eskalasi</td><td class="px-3 py-2">Batas DPD per bucket; case yang melewati batas otomatis naik risk-nya saat <em>Run SLA Check</em>.</td></tr>
@@ -74,23 +74,19 @@
             </div>
             <div>
                 <p class="font-bold text-slate-800"><i class="fa-solid fa-users text-brand-600 w-5"></i> Customers</p>
-                <p>CRUD debtor + tagihan + pembayaran + collection (due date, campaign, collector, risk). Fitur: filter (status bayar/bucket/campaign/agent), checkbox + <strong>Bulk Assign</strong>, <strong>Recalculate Bucket</strong>, <strong>Export/Import Excel</strong>, call history per customer.</p>
+                <p>CRUD debtor + tagihan + pembayaran + collection (due date, collector, risk). Fitur: filter (status bayar/bucket/agent/handover), checkbox + <strong>Bulk Assign Collector</strong>, <strong>Recalculate Bucket</strong>, <strong>Export/Import Excel</strong>, handover pihak ketiga, call history per customer.</p>
             </div>
             <div>
                 <p class="font-bold text-slate-800"><i class="fa-solid fa-layer-group text-brand-600 w-5"></i> Collection Dashboard</p>
-                <p>Monitoring collection: bucket aging, sebaran risiko, performa campaign & collector, statistik PTP, jatuh tempo 7 hari, Top NPL, SLA breach + tombol <strong>Auto-Assign</strong> dan <strong>Run SLA Check</strong>.</p>
+                <p>Monitoring collection: bucket aging, sebaran risiko, performa collector, statistik PTP, jatuh tempo 7 hari, Top NPL, SLA breach + tombol <strong>Auto-Assign Collector</strong> dan <strong>Run SLA Check</strong>.</p>
             </div>
             <div>
-                <p class="font-bold text-slate-800"><i class="fa-solid fa-table-columns text-brand-600 w-5"></i> Aging Report</p>
-                <p>Detail case per bucket (Current s/d NPL) + tombol <strong>Export Aging</strong>.</p>
+                <p class="font-bold text-slate-800"><i class="fa-solid fa-boxes-stacked text-brand-600 w-5"></i> Buckets</p>
+                <p>Ringkasan per bucket (rentang DPD bisa diatur) + tombol <strong>Lihat</strong> untuk buka Customers yang sudah terfilter + tombol <strong>Blast</strong> WA/SMS per bucket.</p>
             </div>
             <div>
                 <p class="font-bold text-slate-800"><i class="fa-solid fa-handshake text-brand-600 w-5"></i> PTP Management</p>
                 <p>Kelola janji bayar dengan tab Active/Overdue/Kept/Broken/All. Tombol ✓ (ditepati), ✕ (gagal), ✏️ (ubah nominal/tanggal — sekaligus mengaktifkan ulang PTP).</p>
-            </div>
-            <div>
-                <p class="font-bold text-slate-800"><i class="fa-solid fa-bullseye text-brand-600 w-5"></i> Campaign Management</p>
-                <p>CRUD strategi + tombol 🪄 auto-assign case sesuai bucket + tombol ✈️ blast WA/SMS (tercatat sebagai log lokal; hubungkan gateway untuk kirim nyata).</p>
             </div>
             <div>
                 <p class="font-bold text-slate-800"><i class="fa-solid fa-headset text-brand-600 w-5"></i> Agent Workspace (login agent)</p>
@@ -140,7 +136,7 @@
         <h2 class="text-lg font-bold text-slate-800 mb-3">6. Gembok Premium & akun Superadmin</h2>
         <div class="text-sm text-slate-600 leading-relaxed space-y-2">
             <ul class="list-disc list-inside space-y-1">
-                <li>Modul <strong>CRM</strong>, <strong>Collection</strong>, <strong>Campaign</strong> adalah fitur premium yang bisa digembok per modul.</li>
+                <li>Modul <strong>CRM</strong>, <strong>Collection</strong>, dan <strong>Auto-Dialer</strong> adalah fitur premium yang bisa digembok per modul.</li>
                 <li>Akun <strong>superadmin</strong> (<code class="bg-slate-100 px-1.5 py-0.5 rounded font-mono text-xs">superadmin@skykom.com</code>) selalu bisa membuka semuanya.</li>
                 <li>Membuka/menutup: login superadmin → menu <strong>👑 Premium / Lisensi</strong> → klik toggle per modul (berlaku ≤ 1 menit).</li>
                 <li>Saat terkunci, admin/supervisor melihat ikon 🔒 di sidebar dan halaman <em>"Premium Feature — hubungi admin jika ingin menggunakannya"</em>.</li>

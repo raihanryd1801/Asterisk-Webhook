@@ -20,11 +20,8 @@
         </div>
         <div class="flex flex-wrap gap-2">
             <button onclick="collectionAutoAssign()" id="btn-auto-assign" class="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 px-4 py-2 rounded-xl text-xs font-bold text-white uppercase tracking-wider transition-colors">
-                <i class="fa-solid fa-wand-magic-sparkles"></i> Auto-Assign Campaign
+                <i class="fa-solid fa-wand-magic-sparkles"></i> Auto-Assign Collector
             </button>
-            <a href="{{ route('crm.collection.aging') }}" class="inline-flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider hover:bg-slate-50 transition-colors">
-                <i class="fa-solid fa-table-columns"></i> Aging Report
-            </a>
             <a href="{{ route('crm.collection.ptp') }}" class="inline-flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider hover:bg-slate-50 transition-colors">
                 <i class="fa-solid fa-handshake"></i> PTP Management
             </a>
@@ -89,7 +86,7 @@
                 <p class="text-xl font-bold text-rose-600 tnum">
                     Rp {{ number_format($bucketSummary->where('bucket', 'NPL')->sum('remaining_amount'), 0, ',', '.') }}
                 </p>
-                <p class="text-xs text-slate-500 mt-0.5">NPL exposure</p>
+                <p class="text-xs text-slate-500 mt-0.5">NPL exposure <span class="tnum">({{ $bucketSummary->where('bucket', 'NPL')->sum('count') }} case)</span></p>
             </div>
         </div>
 
@@ -200,48 +197,8 @@
         </div>
     </div>
 
-    <!-- ============ ROW 3: CAMPAIGN & COLLECTOR PERFORMANCE ============ -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <!-- Campaign Performance -->
-        <div class="bg-white rounded-[20px] border border-slate-200 shadow-[0_2px_6px_rgba(16,24,40,0.06)] p-6">
-            <h3 class="text-base font-bold text-slate-900">Campaign performance</h3>
-            <p class="text-xs text-slate-500 mt-0.5">Recovery rate tiap campaign berjalan.</p>
-            <div class="overflow-x-auto mt-3">
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr>
-                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide">Campaign</th>
-                            <th class="px-3 py-2 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide">Cases</th>
-                            <th class="px-3 py-2 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide">Portfolio</th>
-                            <th class="px-3 py-2 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide">Collected</th>
-                            <th class="px-3 py-2 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide">Recovery %</th>
-                            <th class="px-3 py-2 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide">Closed</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-100">
-                        @foreach($campaignPerformance as $c)
-                            <tr class="hover:bg-slate-50">
-                                <td class="px-3 py-3">
-                                    <div class="font-medium text-slate-900">{{ $c->campaign_name }}</div>
-                                    <div class="text-xs text-slate-400 capitalize">{{ $c->type }}</div>
-                                </td>
-                                <td class="px-3 py-3 text-right tnum">{{ number_format($c->total_cases) }}</td>
-                                <td class="px-3 py-3 text-right text-slate-700 tnum">Rp {{ number_format($c->portfolio_value, 0, ',', '.') }}</td>
-                                <td class="px-3 py-3 text-right text-emerald-600 font-medium tnum">Rp {{ number_format($c->collected, 0, ',', '.') }}</td>
-                                <td class="px-3 py-3 text-right font-semibold text-slate-900 tnum">
-                                    {{ $c->portfolio_value > 0 ? number_format(($c->collected / $c->portfolio_value) * 100, 1) : 0 }}%
-                                </td>
-                                <td class="px-3 py-3 text-right text-indigo-600 tnum">{{ number_format($c->closed_count) }}</td>
-                            </tr>
-                        @endforeach
-                        @if($campaignPerformance->isEmpty())
-                            <tr><td colspan="6" class="px-3 py-8 text-center text-slate-400">Belum ada campaign</td></tr>
-                        @endif
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
+    <!-- ============ ROW 3: COLLECTOR PERFORMANCE ============ -->
+    <div class="grid grid-cols-1 gap-4">
         <!-- Collector Performance -->
         <div class="bg-white rounded-[20px] border border-slate-200 shadow-[0_2px_6px_rgba(16,24,40,0.06)] p-6">
             <h3 class="text-base font-bold text-slate-900">Collector performance</h3>
@@ -263,7 +220,7 @@
                             <tr class="hover:bg-slate-50">
                                 <td class="px-3 py-3">
                                     <div class="font-medium text-slate-900">{{ $c->collector_name }}</div>
-                                    <div class="text-xs text-slate-400 tnum">Ext: {{ $c->extension }}</div>
+                                    <div class="text-xs text-slate-400 tnum">{{ $c->collector_type === 'field' ? 'Lapangan' : 'Desk' }}{{ $c->collector_phone ? ' • ' . $c->collector_phone : '' }}</div>
                                 </td>
                                 <td class="px-3 py-3 text-right tnum">{{ number_format($c->assigned_cases) }}</td>
                                 <td class="px-3 py-3 text-right text-slate-700 tnum">Rp {{ number_format($c->portfolio_value, 0, ',', '.') }}</td>
@@ -387,7 +344,6 @@
                         <th class="px-3 py-2 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide">Outstanding</th>
                         <th class="px-3 py-2 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide">DPD</th>
                         <th class="px-3 py-2 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide">Collector</th>
-                        <th class="px-3 py-2 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide">Campaign</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
@@ -406,17 +362,46 @@
                                     <span class="text-slate-300">-</span>
                                 @endif
                             </td>
-                            <td class="px-3 py-3">
-                                @if($c->campaign)
-                                    <span class="text-indigo-600 text-xs">{{ $c->campaign->name }}</span>
-                                @else
-                                    <span class="text-slate-300">-</span>
-                                @endif
-                            </td>
                         </tr>
                     @endforeach
                 </tbody>
             </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal hasil auto-assign -->
+<div id="assign-result-modal" class="fixed inset-0 z-50 overflow-y-auto" style="display: none;">
+    <div class="flex min-h-full items-center justify-center p-4">
+        <div class="fixed inset-0 bg-black/50" onclick="closeAssignResult()"></div>
+        <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
+            <div class="flex items-center justify-between p-4 border-b border-slate-200">
+                <h3 class="text-lg font-semibold text-slate-900">Hasil Auto-Assign Collector</h3>
+                <button onclick="closeAssignResult()" class="text-slate-400 hover:text-slate-600 transition-colors">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+            <div class="p-4 border-b border-slate-100 text-sm text-slate-600" id="assign-result-summary"></div>
+            <div class="flex-1 overflow-y-auto p-4">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-slate-50">
+                            <tr>
+                                <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase">Customer</th>
+                                <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase">Telepon</th>
+                                <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase">Bucket</th>
+                                <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase">Collector</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-200" id="assign-result-body"></tbody>
+                    </table>
+                </div>
+                <p id="assign-result-truncated" class="text-[11px] text-slate-400 mt-2" style="display: none;">Hanya 200 baris pertama yang ditampilkan.</p>
+            </div>
+            <div class="p-4 border-t border-slate-200 flex justify-end gap-2">
+                <button onclick="closeAssignResult()" class="px-4 py-2 border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition-colors">Tutup</button>
+                <button onclick="window.location.reload()" class="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm hover:bg-brand-700 transition-colors">Tutup & Refresh</button>
+            </div>
         </div>
     </div>
 </div>
@@ -461,7 +446,7 @@ async function collectionSlaCheck() {
 }
 
 async function collectionAutoAssign() {
-    if (!confirm('Auto-assign semua case belum ada campaign ke campaign aktif sesuai bucket? Collector kosong dibagi rata.')) return;
+    if (!confirm('Auto-assign semua case belum ada collector ke debt collector aktif (bagi rata per bucket)?')) return;
     const btn = document.getElementById('btn-auto-assign');
     btn.disabled = true;
     const old = btn.innerHTML;
@@ -474,11 +459,14 @@ async function collectionAutoAssign() {
                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
                 'Accept': 'application/json',
             },
-            body: JSON.stringify({ only_unassigned: true, distribute_collectors: true }),
+            body: JSON.stringify({ only_unassigned: true }),
         });
         const data = await res.json();
-        alert(data.message || 'Selesai');
-        window.location.reload();
+        if (data.status === 'success') {
+            showAssignResult(data);
+        } else {
+            alert(data.message || 'Error');
+        }
     } catch (e) {
         console.error(e);
         alert('Terjadi kesalahan');
@@ -486,6 +474,29 @@ async function collectionAutoAssign() {
         btn.disabled = false;
         btn.innerHTML = old;
     }
+}
+
+function escHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function showAssignResult(data) {
+    document.getElementById('assign-result-summary').textContent = data.message || 'Selesai';
+    const rows = data.assignments || [];
+    document.getElementById('assign-result-body').innerHTML = rows.length === 0
+        ? '<tr><td colspan="4" class="px-3 py-8 text-center text-slate-400">Tidak ada case yang di-assign.</td></tr>'
+        : rows.map(a => `<tr class="hover:bg-slate-50">
+                <td class="px-3 py-2 font-medium text-slate-900">${escHtml(a.name)}</td>
+                <td class="px-3 py-2 font-mono text-slate-600">${escHtml(a.phone)}</td>
+                <td class="px-3 py-2"><span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">${escHtml(a.bucket)}</span></td>
+                <td class="px-3 py-2 text-slate-600">${escHtml(a.collector)}</td>
+            </tr>`).join('');
+    document.getElementById('assign-result-truncated').style.display = data.truncated ? 'block' : 'none';
+    document.getElementById('assign-result-modal').style.display = 'block';
+}
+
+function closeAssignResult() {
+    document.getElementById('assign-result-modal').style.display = 'none';
 }
 </script>
 @endsection

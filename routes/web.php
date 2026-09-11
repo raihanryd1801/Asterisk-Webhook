@@ -10,7 +10,6 @@ use App\Http\Controllers\SupervisorController;
 use App\Http\Controllers\Api\SupervisorMonitoringController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\CustomerController;
-use App\Http\Controllers\CampaignController;
 
 // ==========================================
 // 1. AUTHENTICATION ROUTES
@@ -259,6 +258,20 @@ Route::prefix('dashboard')->group(function () {
     });
 
     Route::middleware([\App\Http\Middleware\CrmAccess::class, \App\Http\Middleware\PremiumAccess::class])->group(function () {
+        // WhatsApp milik sendiri (ikut flag CRM)
+        Route::get('/crm/whatsapp', [\App\Http\Controllers\WaController::class, 'index'])->name('crm.whatsapp');
+        Route::post('/crm/whatsapp/connect', [\App\Http\Controllers\WaController::class, 'connect'])->name('crm.whatsapp.connect');
+        Route::get('/crm/whatsapp/status', [\App\Http\Controllers\WaController::class, 'status'])->name('crm.whatsapp.status');
+        Route::delete('/crm/whatsapp/disconnect', [\App\Http\Controllers\WaController::class, 'disconnect'])->name('crm.whatsapp.disconnect');
+        Route::get('/crm/whatsapp/sender', [\App\Http\Controllers\WaController::class, 'senderInfo'])->name('crm.whatsapp.sender');
+        Route::get('/crm/whatsapp/csrf', [\App\Http\Controllers\WaController::class, 'csrf'])->name('crm.whatsapp.csrf');
+        Route::get('/crm/whatsapp/inbox', [\App\Http\Controllers\WaController::class, 'inbox'])->name('crm.whatsapp.inbox');
+        Route::get('/crm/whatsapp/conversations', [\App\Http\Controllers\WaController::class, 'conversations'])->name('crm.whatsapp.conversations');
+        Route::get('/crm/whatsapp/thread', [\App\Http\Controllers\WaController::class, 'thread'])->name('crm.whatsapp.thread');
+        Route::post('/crm/whatsapp/reply', [\App\Http\Controllers\WaController::class, 'reply'])->name('crm.whatsapp.reply');
+        Route::get('/crm/whatsapp/unread', [\App\Http\Controllers\WaController::class, 'unreadCount'])->name('crm.whatsapp.unread');
+        Route::post('/crm/whatsapp/link', [\App\Http\Controllers\WaController::class, 'linkCustomer'])->name('crm.whatsapp.link');
+
         // CRM Dashboard
         Route::get('/crm/dashboard', [CustomerController::class, 'dashboard'])->name('crm.dashboard');
         
@@ -274,34 +287,48 @@ Route::prefix('dashboard')->group(function () {
 
         // Collection Banking
         Route::get('/crm/collection/dashboard', [CustomerController::class, 'collectionDashboard'])->name('crm.collection.dashboard');
-        Route::get('/crm/collection/aging', [CustomerController::class, 'agingReport'])->name('crm.collection.aging');
-        Route::get('/crm/collection/aging/export', [CustomerController::class, 'exportAging'])->name('crm.collection.aging.export');
+        Route::get('/crm/collection/buckets', [CustomerController::class, 'buckets'])->name('crm.collection.buckets');
+        Route::put('/crm/collection/buckets/ranges', [CustomerController::class, 'updateBucketRanges'])->name('crm.collection.buckets.ranges');
         Route::get('/crm/collection/ptp', [CustomerController::class, 'ptpManagement'])->name('crm.collection.ptp');
         Route::post('/crm/customers/{customer}/ptp', [CustomerController::class, 'setPTP'])->name('crm.customers.ptp.store');
         Route::post('/crm/customers/{customer}/ptp/{action}', [CustomerController::class, 'updatePTPStatus'])->name('crm.customers.ptp.update');
         Route::post('/crm/collection/recalculate-buckets', [CustomerController::class, 'recalculateBuckets'])->name('crm.collection.recalculate');
-        Route::post('/crm/collection/bulk-assign', [CustomerController::class, 'bulkAssignCampaign'])->name('crm.collection.bulk-assign');
-        Route::post('/crm/collection/auto-assign', [CustomerController::class, 'autoAssignCampaigns'])->name('crm.collection.auto-assign');
+        Route::post('/crm/collection/bulk-assign-collector', [CustomerController::class, 'bulkAssignCollector'])->name('crm.collection.bulk-assign-collector');
+        Route::post('/crm/collection/auto-assign', [CustomerController::class, 'autoAssignCollectors'])->name('crm.collection.auto-assign');
+        Route::get('/crm/collection/blast/preview', [CustomerController::class, 'blastBucketPreview'])->name('crm.collection.blast.preview');
+        Route::post('/crm/collection/blast/send', [CustomerController::class, 'blastBucketSend'])->name('crm.collection.blast.send');
         Route::post('/crm/collection/sla-check', [CustomerController::class, 'slaCheck'])->name('crm.collection.sla-check');
         Route::post('/crm/collection/handover-ready', [CustomerController::class, 'markHandoverReady'])->name('crm.collection.handover-ready');
         Route::post('/crm/collection/handover-submit', [CustomerController::class, 'handoverSubmit'])->name('crm.collection.handover-submit');
         Route::post('/crm/collection/handover-recall', [CustomerController::class, 'handoverRecall'])->name('crm.collection.handover-recall');
         Route::get('/crm/collection/handover/export', [CustomerController::class, 'exportHandover'])->name('crm.collection.handover.export');
 
-        // Campaign Management
-        Route::get('/crm/campaigns', [CampaignController::class, 'index'])->name('crm.campaigns.index');
-        Route::post('/crm/campaigns', [CampaignController::class, 'store'])->name('crm.campaigns.store');
-        Route::get('/crm/campaigns/{campaign}', [CampaignController::class, 'show'])->name('crm.campaigns.show');
-        Route::put('/crm/campaigns/{campaign}', [CampaignController::class, 'update'])->name('crm.campaigns.update');
-        Route::delete('/crm/campaigns/{campaign}', [CampaignController::class, 'destroy'])->name('crm.campaigns.destroy');
-        Route::get('/crm/campaigns/{campaign}/blast', [CampaignController::class, 'blastPreview'])->name('crm.campaigns.blast.preview');
-        Route::post('/crm/campaigns/{campaign}/blast', [CampaignController::class, 'blastSend'])->name('crm.campaigns.blast.send');
-        Route::get('/crm/campaigns/collectors', [CampaignController::class, 'getCollectors']);
+        // Debt Collector Management (orang lapangan, terpisah dari agent)
+        Route::get('/crm/collectors', [\App\Http\Controllers\DebtCollectorController::class, 'index'])->name('crm.collectors.index');
+        Route::post('/crm/collectors', [\App\Http\Controllers\DebtCollectorController::class, 'store'])->name('crm.collectors.store');
+        Route::get('/crm/collectors/{collector}', [\App\Http\Controllers\DebtCollectorController::class, 'show'])->name('crm.collectors.show');
+        Route::put('/crm/collectors/{collector}', [\App\Http\Controllers\DebtCollectorController::class, 'update'])->name('crm.collectors.update');
+        Route::delete('/crm/collectors/{collector}', [\App\Http\Controllers\DebtCollectorController::class, 'destroy'])->name('crm.collectors.destroy');
+
+        // Auto-Dialer (PDS)
+        Route::get('/crm/dialer', [\App\Http\Controllers\DialerController::class, 'index'])->name('crm.dialer.index');
+        Route::post('/crm/dialer', [\App\Http\Controllers\DialerController::class, 'store'])->name('crm.dialer.store');
+        Route::get('/crm/dialer/jobs/{job}', [\App\Http\Controllers\DialerController::class, 'show'])->name('crm.dialer.show');
+        Route::post('/crm/dialer/jobs/{job}/start', [\App\Http\Controllers\DialerController::class, 'start'])->name('crm.dialer.start');
+        Route::post('/crm/dialer/jobs/{job}/pause', [\App\Http\Controllers\DialerController::class, 'pause'])->name('crm.dialer.pause');
+        Route::post('/crm/dialer/jobs/{job}/stop', [\App\Http\Controllers\DialerController::class, 'stop'])->name('crm.dialer.stop');
+        Route::post('/crm/dialer/jobs/{job}/repeat', [\App\Http\Controllers\DialerController::class, 'repeat'])->name('crm.dialer.repeat');
+        Route::delete('/crm/dialer/jobs/{job}', [\App\Http\Controllers\DialerController::class, 'destroy'])->name('crm.dialer.destroy');
+        Route::get('/crm/dialer/rotation', [\App\Http\Controllers\DialerController::class, 'rotationList'])->name('crm.dialer.rotation');
+
     });
 
     // CRM API for Agent Workspace (no auth middleware - uses session)
     Route::get('/crm/agent/{extension}/customers', [CustomerController::class, 'getAssignedCustomers']);
     Route::post('/crm/agent/{extension}/customers/{customer}/ptp', [CustomerController::class, 'agentSetPTP']);
+    Route::get('/crm/dialer/rotation/status', [\App\Http\Controllers\DialerController::class, 'rotationStatus']);
+    Route::post('/crm/dialer/rotation/join', [\App\Http\Controllers\DialerController::class, 'rotationJoin']);
+    Route::delete('/crm/dialer/rotation/leave', [\App\Http\Controllers\DialerController::class, 'rotationLeave']);
 
     // 6. API / AJAX Endpoints (Termasuk Chat Bimbingan TL & Agent)
     Route::get('/api/live-agents', [SupervisorMonitoringController::class, 'agentsList']);

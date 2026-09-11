@@ -135,6 +135,9 @@
                                     </span>
                                 </div>
                                 <p class="text-sm font-bold font-mono text-slate-800 tracking-tight" x-text="agent.current_destination ?? 'No Destination'"></p>
+                                <span x-show="agent.pds" class="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-100 text-indigo-700 border border-indigo-200" title="Panggilan dari PDS Auto-Dialer">
+                                    <i class="fa-solid fa-robot"></i> PDS                                <span x-show="agent.pds && agent.pds.job_name" x-text="agent.pds ? ' • ' + (agent.pds.job_name || '') : ''"></span>
+                                </span>
                             </div>
                         </div>
 
@@ -227,6 +230,7 @@
                                     this.agents[index].call_status = null;
                                     this.agents[index].current_destination = null;
                                     this.agents[index].call_duration = 0;
+                                    this.agents[index].pds = null;
                                 } else {
                                     this.agents[index].is_calling = true;
                                     

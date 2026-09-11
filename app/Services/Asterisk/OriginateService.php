@@ -54,6 +54,43 @@ class OriginateService
     }
 
     /**
+     * Originate khusus PDS (predictive/progressive dialer).
+     * Sama seperti clickToDial (kaki AGENT ditelepon DULUAN, kaki customer
+     * baru jalan setelah agent angkat) sehingga secara struktur tidak mungkin
+     * customer tersambung tanpa agent. Bedanya: CallerID bertanda PDS dan
+     * membawa variable __PDS_JOB untuk traceability di AMI/CDR.
+     */
+    public function pdsDial($agentExt, $targetNumber, $jobId = null)
+    {
+        try {
+            $this->ami->connect();
+
+            $parameters = [
+                'Channel'  => "PJSIP/" . $agentExt,
+                'Exten'    => $targetNumber,
+                'Context'  => 'from-internal',
+                'Priority' => 1,
+                'Timeout'  => 30000,
+                'CallerID' => "PDS Job {$jobId} <{$agentExt}>",
+                'Async'    => 'true',
+            ];
+
+            if ($jobId !== null) {
+                $parameters['Variable'] = "__PDS_JOB={$jobId}";
+            }
+
+            $this->ami->sendAction('Originate', $parameters);
+            $response = $this->ami->readResponse();
+
+            $this->ami->disconnect();
+
+            return $response;
+        } catch (Exception $e) {
+            throw new Exception("Gagal melakukan PDS Originate: " . $e->getMessage());
+        }
+    }
+
+    /**
      * Fitur Supervisor Action (Listen, Whisper, Join)
      * 
     * @param string $supervisorExt Extension milik supervisor (misal: "201")

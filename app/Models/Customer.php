@@ -14,7 +14,7 @@ class Customer extends Model
         'assigned_agent_id', 'created_by', 'last_contacted_at',
         'total_amount', 'paid_amount', 'discount_amount',
         'payment_status', 'payment_notes', 'last_payment_date', 'payment_proof',
-        'due_date', 'days_past_due', 'bucket', 'campaign_id', 'collector_id',
+        'due_date', 'days_past_due', 'bucket', 'collector_id',
         'risk_level', 'promise_to_pay',
         'handover_status', 'handover_to', 'handover_date', 'handover_notes',
     ];
@@ -36,17 +36,12 @@ class Customer extends Model
 
     public function collector()
     {
-        return $this->belongsTo(Agent::class, 'collector_id');
+        return $this->belongsTo(DebtCollector::class, 'collector_id');
     }
 
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
-    }
-
-    public function campaign()
-    {
-        return $this->belongsTo(Campaign::class, 'campaign_id');
     }
 
     public function scopeSearch($query, $search)
@@ -72,11 +67,6 @@ class Customer extends Model
     public function scopeCollectedBy($query, $collectorId)
     {
         return $query->when($collectorId, fn($q) => $q->where('collector_id', $collectorId));
-    }
-
-    public function scopeInCampaign($query, $campaignId)
-    {
-        return $query->when($campaignId, fn($q) => $q->where('campaign_id', $campaignId));
     }
 
     public function scopePaymentStatus($query, $status)
@@ -209,23 +199,10 @@ class Customer extends Model
 
         $this->days_past_due = max(0, -$dpd);
 
-        if ($dpd >= 0) {
-            // Belum jatuh tempo
-            $this->bucket = 'Current';
-            $this->risk_level = 'low';
-        } elseif ($dpd >= -30) {
-            $this->bucket = 'Bucket 1'; // 1-30 dpd
-            $this->risk_level = 'low';
-        } elseif ($dpd >= -60) {
-            $this->bucket = 'Bucket 2'; // 31-60 dpd
-            $this->risk_level = 'medium';
-        } elseif ($dpd >= -90) {
-            $this->bucket = 'Bucket 3'; // 61-90 dpd
-            $this->risk_level = 'high';
-        } else {
-            $this->bucket = 'NPL'; // 90+ dpd
-            $this->risk_level = 'critical';
-        }
+        // Rentang bucket bisa diatur dari menu Buckets (tabel bucket_ranges)
+        [$bucket, $risk] = BucketRange::resolve($this->days_past_due);
+        $this->bucket = $bucket;
+        $this->risk_level = $risk;
 
         $this->save();
         return $this->bucket;

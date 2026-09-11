@@ -70,14 +70,14 @@
             $profileRole = (auth()->user()->role ?? '') === 'superadmin' ? 'Superadmin' : 'Administrator';
         }
 
-        // 🚀 Premium gate: hanya superadmin (tabel users) yang boleh buka menu CRM → Campaign
+        // 🚀 Premium gate: hanya superadmin (tabel users) yang boleh buka menu premium
         $isSuperadmin = auth()->check() && ((auth()->user()->role ?? '') === 'superadmin');
 
         // Status gembok per modul premium (diatur superadmin di halaman Premium/Lisensi)
         $premiumStates = \App\Models\FeatureFlag::states();
         $crmLocked = !$isSuperadmin && empty($premiumStates['crm']);
         $collectionLocked = !$isSuperadmin && empty($premiumStates['collection']);
-        $campaignLocked = !$isSuperadmin && empty($premiumStates['campaign']);
+        $dialerLocked = !$isSuperadmin && empty($premiumStates['dialer']);
     @endphp
 
     <aside class="w-[260px] bg-slate-900 text-white flex flex-col shrink-0 hidden md:flex relative z-20 transition-all duration-300 shadow-xl">
@@ -134,6 +134,15 @@
                 <a href="{{ route('crm.guide', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('crm.guide') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
                     <i class="fa-solid fa-book-open w-5 text-center"></i> Panduan CRM
                 </a>
+                <a href="{{ route('crm.whatsapp', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('crm.whatsapp') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
+                    <i class="fa-brands fa-whatsapp w-5 text-center"></i> WhatsApp Saya
+                    @if($crmLocked)<i class="fa-solid fa-lock ml-auto text-[10px] text-slate-500" title="Premium Feature"></i>@endif
+                </a>
+                <a href="{{ route('crm.whatsapp.inbox', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('crm.whatsapp.inbox') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
+                    <i class="fa-solid fa-inbox w-5 text-center"></i> Inbox WA
+                    <span id="wa-unread-badge" class="ml-auto bg-red-500 text-white text-[10px] font-bold min-w-[20px] h-5 px-1 rounded-full items-center justify-center" style="display: none;">0</span>
+                    @if($crmLocked)<i class="fa-solid fa-lock ml-auto text-[10px] text-slate-500" title="Premium Feature"></i>@endif
+                </a>
                 <a href="{{ route('crm.dashboard', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('crm.dashboard') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
                     <i class="fa-solid fa-chart-pie w-5 text-center"></i> Dashboard Agent
                     @if($crmLocked)<i class="fa-solid fa-lock ml-auto text-[10px] text-slate-500" title="Premium Feature"></i>@endif
@@ -142,25 +151,29 @@
                     <i class="fa-solid fa-users w-5 text-center"></i> Customers
                     @if($crmLocked)<i class="fa-solid fa-lock ml-auto text-[10px] text-slate-500" title="Premium Feature"></i>@endif
                 </a>
+                <a href="{{ route('crm.collection.buckets', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('crm.collection.buckets') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
+                    <i class="fa-solid fa-boxes-stacked w-5 text-center"></i> Buckets
+                    @if($crmLocked)<i class="fa-solid fa-lock ml-auto text-[10px] text-slate-500" title="Premium Feature"></i>@endif
+                </a>
 
                 <p class="px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-3 mt-6">Collection Banking</p>
                 <a href="{{ route('crm.collection.dashboard', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('crm.collection.dashboard') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
                     <i class="fa-solid fa-layer-group w-5 text-center"></i> Collection Dashboard
                     @if($collectionLocked)<i class="fa-solid fa-lock ml-auto text-[10px] text-slate-500" title="Premium Feature"></i>@endif
                 </a>
-                <a href="{{ route('crm.collection.aging', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('crm.collection.aging') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
-                    <i class="fa-solid fa-table-columns w-5 text-center"></i> Aging Report
-                    @if($collectionLocked)<i class="fa-solid fa-lock ml-auto text-[10px] text-slate-500" title="Premium Feature"></i>@endif
-                </a>
                 <a href="{{ route('crm.collection.ptp', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('crm.collection.ptp') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
                     <i class="fa-solid fa-handshake w-5 text-center"></i> PTP Management
                     @if($collectionLocked)<i class="fa-solid fa-lock ml-auto text-[10px] text-slate-500" title="Premium Feature"></i>@endif
                 </a>
+                <a href="{{ route('crm.collectors.index', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('crm.collectors.*') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
+                    <i class="fa-solid fa-user-shield w-5 text-center"></i> Debt Collectors
+                    @if($collectionLocked)<i class="fa-solid fa-lock ml-auto text-[10px] text-slate-500" title="Premium Feature"></i>@endif
+                </a>
 
-                <p class="px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-3 mt-6">Campaign</p>
-                <a href="{{ route('crm.campaigns.index', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('crm.campaigns.*') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
-                    <i class="fa-solid fa-bullseye w-5 text-center"></i> Campaign Management
-                    @if($campaignLocked)<i class="fa-solid fa-lock ml-auto text-[10px] text-slate-500" title="Premium Feature"></i>@endif
+                <p class="px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-3 mt-6">Dialer</p>
+                <a href="{{ route('crm.dialer.index', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('crm.dialer.*') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
+                    <i class="fa-solid fa-phone-volume w-5 text-center"></i> Auto-Dialer
+                    @if($dialerLocked)<i class="fa-solid fa-lock ml-auto text-[10px] text-slate-500" title="Premium Feature"></i>@endif
                 </a>
                 @endif
             @endif
@@ -302,5 +315,29 @@
     @endif
 
     @yield('scripts')
+
+    @if(in_array($userType, ['admin', 'supervisor']))
+    <script>
+    // Badge unread WhatsApp di sidebar (sesi milik sendiri)
+    (function () {
+        const badge = document.getElementById('wa-unread-badge');
+        if (!badge) return;
+        async function waPollUnread() {
+            try {
+                const res = await fetch('{{ url('/dashboard/crm/whatsapp/unread') }}', {
+                    headers: { 'Accept': 'application/json' }
+                });
+                if (!res.ok) return;
+                const data = await res.json();
+                const n = (data && data.unread) || 0;
+                badge.textContent = n > 99 ? '99+' : n;
+                badge.style.display = n > 0 ? 'inline-flex' : 'none';
+            } catch (e) {}
+        }
+        waPollUnread();
+        setInterval(waPollUnread, 30000);
+    })();
+    </script>
+    @endif
 </body>
 </html>

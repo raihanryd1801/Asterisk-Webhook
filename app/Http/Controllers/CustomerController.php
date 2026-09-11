@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Customer;
 use App\Models\Agent;
+use App\Models\DebtCollector;
 use Illuminate\Support\Facades\Auth;
 use Rap2hpoutre\FastExcel\FastExcel;
 
@@ -12,13 +13,11 @@ class CustomerController extends Controller
 {
     protected function getCurrentUserId()
     {
+        // created_by merujuk ke tabel users -> hanya isi ID user asli.
+        // Supervisor login via session agent tidak punya users.id, jadi null
+        // (sebelumnya mengisi ID agent -> FK violation 1452).
         if (Auth::check()) {
             return Auth::id();
-        }
-        $ext = session('supervisor_extension');
-        if ($ext) {
-            $spv = Agent::where('extension', $ext)->first();
-            return $spv?->id;
         }
         return null;
     }
@@ -157,7 +156,7 @@ class CustomerController extends Controller
     {
         $this->authorizeAccess();
         
-        $query = Customer::with(['assignedAgent', 'collector', 'campaign', 'creator']);
+        $query = Customer::with(['assignedAgent', 'collector', 'creator']);
 
         if ($request->filled('search')) {
             $query->search($request->search);
@@ -179,10 +178,6 @@ class CustomerController extends Controller
             $query->bucket($request->bucket);
         }
 
-        if ($request->filled('campaign_id')) {
-            $query->inCampaign($request->campaign_id);
-        }
-
         if ($request->filled('handover_status')) {
             $query->handoverStatus($request->handover_status);
         }
@@ -196,14 +191,13 @@ class CustomerController extends Controller
         $statuses = ['new', 'contacted', 'qualified', 'proposal', 'closed_won', 'closed_lost'];
         $paymentStatuses = ['unpaid', 'partial', 'paid', 'discounted'];
         $buckets = ['Current', 'Bucket 1', 'Bucket 2', 'Bucket 3', 'NPL'];
-        $campaigns = \App\Models\Campaign::active()->orderBy('name')->get(['id', 'name', 'code', 'type']);
-        $collectors = Agent::where('role', 'agent')->orderBy('name')->get(['id', 'name', 'extension']);
+        $collectors = DebtCollector::active()->orderBy('name')->get(['id', 'name', 'phone', 'type']);
 
         if ($request->wantsJson() || $request->ajax()) {
             return response()->json($customers);
         }
 
-        return view('crm.customers.index', compact('customers', 'agents', 'statuses', 'paymentStatuses', 'buckets', 'campaigns', 'collectors'));
+        return view('crm.customers.index', compact('customers', 'agents', 'statuses', 'paymentStatuses', 'buckets', 'collectors'));
     }
 
     public function store(Request $request)
@@ -224,8 +218,7 @@ class CustomerController extends Controller
             'payment_status' => 'nullable|in:unpaid,partial,paid,discounted',
             'payment_notes' => 'nullable|string',
             'due_date' => 'nullable|date',
-            'campaign_id' => 'nullable|exists:campaigns,id',
-            'collector_id' => 'nullable|exists:agents,id',
+            'collector_id' => 'nullable|exists:debt_collectors,id',
             'risk_level' => 'nullable|in:low,medium,high,critical',
         ]);
 
@@ -245,7 +238,6 @@ class CustomerController extends Controller
             'payment_status' => $request->payment_status ?? 'unpaid',
             'payment_notes' => $request->payment_notes,
             'due_date' => $request->due_date ?: null,
-            'campaign_id' => $request->campaign_id ?: null,
             'collector_id' => $request->collector_id ?: null,
             'risk_level' => $request->risk_level ?? 'low',
         ]);
@@ -284,8 +276,7 @@ class CustomerController extends Controller
             'payment_status' => 'nullable|in:unpaid,partial,paid,discounted',
             'payment_notes' => 'nullable|string',
             'due_date' => 'nullable|date',
-            'campaign_id' => 'nullable|exists:campaigns,id',
-            'collector_id' => 'nullable|exists:agents,id',
+            'collector_id' => 'nullable|exists:debt_collectors,id',
             'risk_level' => 'nullable|in:low,medium,high,critical',
         ]);
 
@@ -307,7 +298,6 @@ class CustomerController extends Controller
             'payment_status' => $request->payment_status ?? $customer->payment_status,
             'payment_notes' => $request->payment_notes ?? $customer->payment_notes,
             'due_date' => $request->filled('due_date') ? $request->due_date : $customer->due_date,
-            'campaign_id' => $request->has('campaign_id') ? ($request->campaign_id ?: null) : $customer->campaign_id,
             'collector_id' => $request->has('collector_id') ? ($request->collector_id ?: null) : $customer->collector_id,
             'risk_level' => $request->risk_level ?? $customer->risk_level,
         ]);
@@ -372,10 +362,7 @@ class CustomerController extends Controller
             ], 404);
         }
 
-        $customers = Customer::where(function ($q) use ($agent) {
-                $q->where('assigned_agent_id', $agent->id)
-                  ->orWhere('collector_id', $agent->id);
-            })
+        $customers = Customer::where('assigned_agent_id', $agent->id)
             ->whereIn('status', ['new', 'contacted', 'qualified', 'proposal'])
             ->latest()
             ->get(['id', 'name', 'phone', 'email', 'company', 'status', 'notes', 'last_contacted_at', 'total_amount', 'paid_amount', 'discount_amount', 'payment_status', 'payment_notes', 'last_payment_date', 'due_date', 'days_past_due', 'bucket', 'risk_level', 'promise_to_pay']);
@@ -399,7 +386,7 @@ class CustomerController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Agent tidak ditemukan'], 404);
         }
 
-        if ($customer->assigned_agent_id !== $agent->id && $customer->collector_id !== $agent->id) {
+        if ($customer->assigned_agent_id !== $agent->id) {
             return response()->json(['status' => 'error', 'message' => 'Customer ini bukan assigned Anda'], 403);
         }
 
@@ -460,24 +447,9 @@ class CustomerController extends Controller
                 ELSE 5 END")
             ->get();
 
-        // Campaign Performance
-        $campaignPerformance = Customer::selectRaw('
-            c.name as campaign_name, c.type,
-            COUNT(customers.id) as total_cases,
-            SUM(customers.total_amount) as portfolio_value,
-            SUM(customers.paid_amount) as collected,
-            SUM(customers.total_amount - customers.paid_amount - customers.discount_amount) as outstanding,
-            COUNT(CASE WHEN customers.payment_status = "paid" THEN 1 END) as closed_count
-        ')
-            ->leftJoin('campaigns as c', 'customers.campaign_id', '=', 'c.id')
-            ->where('customers.total_amount', '>', 0)
-            ->whereNotNull('customers.campaign_id')
-            ->groupBy('c.id', 'c.name', 'c.type')
-            ->get();
-
         // Collector Performance
         $collectorPerformance = Customer::selectRaw('
-            a.name as collector_name, a.extension,
+            d.name as collector_name, d.phone as collector_phone, d.type as collector_type,
             COUNT(customers.id) as assigned_cases,
             SUM(customers.total_amount) as portfolio_value,
             SUM(customers.paid_amount) as collected,
@@ -485,10 +457,10 @@ class CustomerController extends Controller
             COUNT(CASE WHEN customers.payment_status = "paid" THEN 1 END) as closed_count,
             AVG(CASE WHEN customers.total_amount > 0 THEN ((customers.paid_amount + customers.discount_amount) / customers.total_amount) * 100 ELSE 0 END) as avg_collection_rate
         ')
-            ->leftJoin('agents as a', 'customers.collector_id', '=', 'a.id')
+            ->leftJoin('debt_collectors as d', 'customers.collector_id', '=', 'd.id')
             ->where('customers.total_amount', '>', 0)
             ->whereNotNull('customers.collector_id')
-            ->groupBy('a.id', 'a.name', 'a.extension')
+            ->groupBy('d.id', 'd.name', 'd.phone', 'd.type')
             ->orderByDesc('collected')
             ->get();
 
@@ -510,10 +482,10 @@ class CustomerController extends Controller
 
         // Upcoming Due (next 7 days)
         $upcomingDue = Customer::dueSoon(7)
-            ->with('collector', 'campaign')
+            ->with('collector')
             ->orderBy('due_date')
             ->limit(20)
-            ->get(['id', 'name', 'phone', 'due_date', 'total_amount', 'paid_amount', 'discount_amount', 'collector_id', 'campaign_id'])
+            ->get(['id', 'name', 'phone', 'due_date', 'total_amount', 'paid_amount', 'discount_amount', 'collector_id'])
             ->map(function ($c) {
                 $c->remaining_amount = max(0, $c->total_amount - $c->paid_amount - $c->discount_amount);
                 return $c;
@@ -524,8 +496,8 @@ class CustomerController extends Controller
             ->where('total_amount', '>', 0)
             ->orderByDesc('total_amount')
             ->limit(15)
-            ->with('collector', 'campaign')
-            ->get(['id', 'name', 'phone', 'total_amount', 'paid_amount', 'discount_amount', 'days_past_due', 'collector_id', 'campaign_id'])
+            ->with('collector')
+            ->get(['id', 'name', 'phone', 'total_amount', 'paid_amount', 'discount_amount', 'days_past_due', 'collector_id'])
             ->map(function ($c) {
                 $c->remaining_amount = max(0, $c->total_amount - $c->paid_amount - $c->discount_amount);
                 return $c;
@@ -550,7 +522,7 @@ class CustomerController extends Controller
         }
 
         return view('crm.collection.dashboard', compact(
-            'bucketSummary', 'riskSummary', 'campaignPerformance',
+            'bucketSummary', 'riskSummary',
             'collectorPerformance', 'ptpStats', 'upcomingDue', 'topNPL',
             'slaBreaches'
         ));
@@ -607,30 +579,95 @@ class CustomerController extends Controller
         ]);
     }
 
-    public function agingReport(Request $request)
+    public function buckets(Request $request)
+    {
+        $buckets = Customer::selectRaw('
+            COALESCE(bucket, "Tanpa Bucket") as bucket,
+            COUNT(*) as count,
+            SUM(total_amount) as total_amount,
+            SUM(paid_amount) as paid_amount,
+            SUM(total_amount - paid_amount - discount_amount) as remaining_amount,
+            AVG(days_past_due) as avg_dpd
+        ')
+            ->groupBy('bucket')
+            ->orderByRaw("CASE COALESCE(bucket, '')
+                WHEN 'Current' THEN 1
+                WHEN 'Bucket 1' THEN 2
+                WHEN 'Bucket 2' THEN 3
+                WHEN 'Bucket 3' THEN 4
+                WHEN 'NPL' THEN 5
+                ELSE 6 END")
+            ->get();
+
+        $ranges = \App\Models\BucketRange::allRules();
+
+        return view('crm.collection.buckets', compact('buckets', 'ranges'));
+    }
+
+    public function updateBucketRanges(Request $request)
     {
         $this->authorizeAccess();
 
-        $buckets = ['Current', 'Bucket 1', 'Bucket 2', 'Bucket 3', 'NPL'];
-        $data = [];
+        $request->validate([
+            'ranges' => 'required|array|min:1',
+            'ranges.*.bucket' => 'required|string|max:50',
+            'ranges.*.min_dpd' => 'required|integer|min:0|max:3650',
+            'ranges.*.max_dpd' => 'nullable|integer|min:0|max:3650',
+            'ranges.*.risk_level' => 'required|in:low,medium,high,critical',
+        ]);
 
-        foreach ($buckets as $bucket) {
-            $cases = Customer::when($bucket !== 'Current', function ($q) use ($bucket) {
-                    $q->where('bucket', $bucket);
-                }, function ($q) {
-                    $q->where(function ($sq) {
-                        $sq->whereNull('bucket')->orWhere('bucket', 'Current');
-                    });
-                })
-                ->where('total_amount', '>', 0)
-                ->with('collector', 'campaign')
-                ->orderByDesc('total_amount')
-                ->paginate(20, ['*'], $bucket . '_page');
+        $ranges = collect($request->ranges)->values();
+        $unbounded = $ranges->whereNull('max_dpd');
 
-            $data[$bucket] = $cases;
+        if ($unbounded->count() !== 1) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Harus ada tepat 1 bucket tanpa batas atas (untuk DPD terbesar, mis. NPL).',
+            ], 422);
         }
 
-        return view('crm.collection.aging', compact('data', 'buckets'));
+        if ($unbounded->keys()->first() !== $ranges->count() - 1) {
+            // Pindahkan yang unbounded ke akhir agar konsisten
+            $ranges = $ranges->reject(fn($r) => $r['max_dpd'] === null)->values()->push($unbounded->first());
+        }
+
+        // Validasi tiap baris + tidak boleh overlap/terbalik
+        $prevMax = null;
+        foreach ($ranges as $i => $r) {
+            if ($r['max_dpd'] !== null && $r['min_dpd'] > $r['max_dpd']) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => "Baris '{$r['bucket']}': min DPD tidak boleh lebih besar dari max DPD.",
+                ], 422);
+            }
+            if ($prevMax !== null && $r['min_dpd'] <= $prevMax) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => "Rentang '{$r['bucket']}' overlap dengan baris sebelumnya. Urutkan min DPD menaik tanpa tumpang tindih.",
+                ], 422);
+            }
+            $prevMax = $r['max_dpd'];
+        }
+
+        foreach ($ranges as $i => $r) {
+            \App\Models\BucketRange::updateOrCreate(
+                ['bucket' => $r['bucket']],
+                [
+                    'min_dpd' => $r['min_dpd'],
+                    'max_dpd' => $r['max_dpd'],
+                    'risk_level' => $r['risk_level'],
+                    'sort' => $i + 1,
+                ]
+            );
+        }
+        // Hapus bucket yang tidak ada di daftar baru
+        \App\Models\BucketRange::whereNotIn('bucket', $ranges->pluck('bucket'))->delete();
+        \App\Models\BucketRange::forgetCache();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Rentang DPD tersimpan. Klik Recalculate Bucket agar case ikut aturan baru.',
+        ]);
     }
 
     public function ptpManagement(Request $request)
@@ -641,7 +678,7 @@ class CustomerController extends Controller
 
         $query = Customer::whereNotNull('promise_to_pay')
             ->where('total_amount', '>', 0)
-            ->with('collector', 'campaign');
+            ->with('collector');
 
         switch ($filter) {
             case 'active':
@@ -714,41 +751,54 @@ class CustomerController extends Controller
     {
         $this->authorizeAccess();
 
-        $customers = Customer::whereNotNull('due_date')->get();
+        $customers = Customer::whereNotNull('due_date')->get(['id', 'name', 'phone', 'bucket', 'due_date']);
         $updated = 0;
+        $changes = [];
 
         foreach ($customers as $customer) {
             $oldBucket = $customer->bucket;
             $customer->recalculateBucket();
-            if ($customer->bucket !== $oldBucket) $updated++;
+            if ($customer->bucket !== $oldBucket) {
+                $updated++;
+                if (count($changes) < 200) {
+                    $changes[] = [
+                        'name' => $customer->name,
+                        'phone' => $customer->phone,
+                        'from' => $oldBucket ?: '-',
+                        'to' => $customer->bucket ?: '-',
+                    ];
+                }
+            }
         }
 
         return response()->json([
             'status' => 'success',
-            'message' => "Bucket recalculated. {$updated} cases updated.",
+            'message' => "Bucket recalculated. {$updated} dari {$customers->count()} cases pindah bucket.",
+            'checked' => $customers->count(),
+            'updated' => $updated,
+            'changes' => $changes,
+            'truncated' => $updated > count($changes),
         ]);
     }
 
-    public function bulkAssignCampaign(Request $request)
+    public function bulkAssignCollector(Request $request)
     {
         $this->authorizeAccess();
 
         $request->validate([
             'customer_ids' => 'required|array|min:1',
             'customer_ids.*' => 'exists:customers,id',
-            'campaign_id' => 'required|exists:campaigns,id',
-            'collector_id' => 'nullable|exists:agents,id',
+            'collector_id' => 'required|exists:debt_collectors,id',
         ]);
 
+        $collector = DebtCollector::find($request->collector_id);
+
         $updated = Customer::whereIn('id', $request->customer_ids)
-            ->update([
-                'campaign_id' => $request->campaign_id,
-                'collector_id' => $request->collector_id,
-            ]);
+            ->update(['collector_id' => $request->collector_id]);
 
         return response()->json([
             'status' => 'success',
-            'message' => "{$updated} cases assigned to campaign",
+            'message' => "{$updated} cases assigned ke {$collector->name}.",
         ]);
     }
 
@@ -819,7 +869,7 @@ class CustomerController extends Controller
     {
         $this->authorizeAccess();
 
-        $query = Customer::with(['collector', 'campaign', 'assignedAgent'])
+        $query = Customer::with(['collector', 'assignedAgent'])
             ->when($request->filled('handover_status'), fn($q) => $q->where('handover_status', $request->handover_status))
             ->when(!$request->filled('handover_status'), fn($q) => $q->whereIn('handover_status', ['ready', 'handed_over']))
             ->when($request->filled('handover_to'), fn($q) => $q->where('handover_to', 'like', '%' . $request->handover_to . '%'))
@@ -846,7 +896,6 @@ class CustomerController extends Controller
                 'ptp_amount' => isset($ptp['amount']) ? (float) $ptp['amount'] : null,
                 'ptp_date' => $ptp['date'] ?? null,
                 'ptp_note' => $ptp['note'] ?? null,
-                'campaign' => $c->campaign?->code,
                 'collector' => $c->collector?->name,
                 'assigned_agent' => $c->assignedAgent?->name,
                 'handover_status' => $c->handover_status,
@@ -863,72 +912,164 @@ class CustomerController extends Controller
         return (new FastExcel($rows))->download($filename);
     }
 
-    public function autoAssignCampaigns(Request $request)
+    public function autoAssignCollectors(Request $request)
     {
         $this->authorizeAccess();
 
         $request->validate([
-            'campaign_id' => 'nullable|exists:campaigns,id',
+            'buckets' => 'nullable|array',
+            'buckets.*' => 'string|max:50',
             'only_unassigned' => 'nullable|boolean',
-            'distribute_collectors' => 'nullable|boolean',
         ]);
 
         $onlyUnassigned = $request->boolean('only_unassigned', true);
-        $distribute = $request->boolean('distribute_collectors', true);
 
-        $campaigns = $request->filled('campaign_id')
-            ? \App\Models\Campaign::where('id', $request->campaign_id)->active()->get()
-            : \App\Models\Campaign::active()->get();
+        $buckets = $request->filled('buckets')
+            ? $request->buckets
+            : \App\Models\BucketRange::orderBy('sort')->pluck('bucket')->toArray();
 
-        if ($campaigns->isEmpty()) {
-            return response()->json(['status' => 'error', 'message' => 'Tidak ada campaign aktif'], 422);
+        $collectors = DebtCollector::active()->orderBy('id')->get(['id', 'name']);
+        $collectorIds = $collectors->pluck('id')->values();
+
+        if ($collectorIds->isEmpty()) {
+            return response()->json(['status' => 'error', 'message' => 'Belum ada debt collector aktif. Tambahkan dulu di menu Debt Collectors.'], 422);
         }
 
-        $collectors = Agent::where('role', 'agent')->orderBy('id')->get(['id']);
-        $collectorIds = $collectors->pluck('id')->values();
-        $roundRobin = 0;
+        $collectorNames = $collectors->pluck('name', 'id')->toArray();
 
         $result = [];
+        $assignments = [];
         $total = 0;
+        $roundRobin = 0;
 
-        foreach ($campaigns as $campaign) {
-            $buckets = $campaign->target_buckets ?: [];
-            if (empty($buckets)) continue;
-
-            $q = Customer::whereIn('bucket', $buckets)
+        foreach ($buckets as $bucket) {
+            $q = Customer::where('bucket', $bucket)
                 ->where('payment_status', '!=', 'paid');
             if ($onlyUnassigned) {
-                $q->whereNull('campaign_id');
+                $q->whereNull('collector_id');
             }
 
-            $customers = $q->orderBy('id')->get(['id', 'collector_id']);
+            $customers = $q->orderBy('id')->get(['id', 'name', 'phone', 'bucket']);
             $count = 0;
 
             foreach ($customers as $customer) {
-                $update = ['campaign_id' => $campaign->id];
-                if ($distribute && !$customer->collector_id && $collectorIds->isNotEmpty()) {
-                    $update['collector_id'] = $collectorIds[$roundRobin % $collectorIds->count()];
-                    $roundRobin++;
-                }
-                $customer->update($update);
+                $collectorId = $collectorIds[$roundRobin % $collectorIds->count()];
+                $roundRobin++;
+                $customer->update(['collector_id' => $collectorId]);
                 $count++;
+
+                if (count($assignments) < 200) {
+                    $assignments[] = [
+                        'name' => $customer->name,
+                        'phone' => $customer->phone,
+                        'bucket' => $customer->bucket ?: '-',
+                        'collector' => $collectorNames[$collectorId] ?? '-',
+                    ];
+                }
             }
 
-            $result[] = ['campaign' => $campaign->code, 'assigned' => $count];
+            $result[] = ['bucket' => $bucket, 'assigned' => $count];
             $total += $count;
         }
 
         return response()->json([
             'status' => 'success',
-            'message' => "Auto-assign selesai: {$total} case ke " . count($result) . " campaign.",
+            'message' => "Auto-assign selesai: {$total} case ke collector.",
             'total' => $total,
             'detail' => $result,
+            'assignments' => $assignments,
+            'truncated' => $total > count($assignments),
+        ]);
+    }
+
+    public function blastBucketPreview(Request $request)
+    {
+        $this->authorizeAccess();
+
+        $request->validate(['bucket' => 'required|string|max:50']);
+
+        $targets = Customer::where('bucket', $request->bucket)
+            ->whereIn('payment_status', ['unpaid', 'partial'])
+            ->whereNotNull('phone')
+            ->count();
+
+        $history = \App\Models\BlastLog::where('bucket', $request->bucket)
+            ->latest()->limit(5)->get();
+
+        $gateway = app(\App\Services\WhatsAppGateway::class);
+        $sessionId = \App\Services\WhatsAppGateway::sessionIdForCurrentUser();
+        $wa = $sessionId ? $gateway->status($sessionId) : null;
+
+        return response()->json([
+            'status' => 'success',
+            'targets' => $targets,
+            'history' => $history,
+            'sender' => [
+                'connected' => ($wa['status'] ?? null) === 'connected',
+                'phone' => $wa['phone'] ?? null,
+            ],
+        ]);
+    }
+
+    public function blastBucketSend(Request $request)
+    {
+        $this->authorizeAccess();
+
+        $request->validate([
+            'bucket' => 'required|string|max:50',
+            'channel' => 'required|in:wa',
+            'message' => 'required|string|max:1000',
+        ]);
+
+        $gateway = app(\App\Services\WhatsAppGateway::class);
+        $sessionId = \App\Services\WhatsAppGateway::sessionIdForCurrentUser();
+
+        if (!$sessionId) {
+            return response()->json(['status' => 'error', 'message' => 'Silakan login dulu.'], 401);
+        }
+
+        $wa = $gateway->status($sessionId);
+        if (($wa['status'] ?? null) !== 'connected') {
+            return response()->json(['status' => 'error', 'message' => 'WhatsApp Anda belum terhubung. Scan QR dulu di menu WhatsApp.'], 409);
+        }
+
+        $targets = Customer::where('bucket', $request->bucket)
+            ->whereIn('payment_status', ['unpaid', 'partial'])
+            ->whereNotNull('phone')
+            ->count();
+
+        if ($targets === 0) {
+            return response()->json(['status' => 'error', 'message' => 'Tidak ada target (bucket ini belum ada case unpaid/partial bernomor)'], 422);
+        }
+
+        $senderLabel = (auth()->check() ? (auth()->user()->name . ' (admin)') : ('SPV ' . session('supervisor_extension')))
+            . ' / ' . ($wa['phone'] ?? '?');
+
+        $log = \App\Models\BlastLog::create([
+            'bucket' => $request->bucket,
+            'channel' => $request->channel,
+            'message' => $request->message,
+            'total_target' => $targets,
+            'sent' => 0,
+            'failed' => 0,
+            'status' => 'queued',
+            'note' => 'Dikirim via sesi ' . $sessionId,
+            'sender' => $senderLabel,
+            'created_by' => $this->getCurrentUserId(),
+        ]);
+
+        \App\Jobs\ProcessWaBlast::dispatch($log->id, $sessionId);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "Blast {$targets} nomor {$request->bucket} masuk antrean dan dikirim dari nomor Anda ({$wa['phone']}). Pantau di riwayat.",
+            'log' => $log,
         ]);
     }
 
     protected function filteredCustomerQuery(Request $request)
     {
-        $query = Customer::with(['assignedAgent', 'collector', 'campaign']);
+        $query = Customer::with(['assignedAgent', 'collector']);
 
         if ($request->filled('search')) {
             $query->search($request->search);
@@ -944,9 +1085,6 @@ class CustomerController extends Controller
         }
         if ($request->filled('bucket')) {
             $query->bucket($request->bucket);
-        }
-        if ($request->filled('campaign_id')) {
-            $query->inCampaign($request->campaign_id);
         }
 
         return $query;
@@ -976,8 +1114,7 @@ class CustomerController extends Controller
                 'payment_status' => $c->payment_status,
                 'payment_notes' => $c->payment_notes,
                 'last_payment_date' => $c->last_payment_date?->toDateTimeString(),
-                'campaign' => $c->campaign?->code,
-                'collector' => $c->collector?->extension,
+                'collector' => $c->collector?->name,
                 'assigned_agent' => $c->assignedAgent?->extension,
                 'risk_level' => $c->risk_level,
                 'notes' => $c->notes,
@@ -1097,46 +1234,4 @@ class CustomerController extends Controller
         ]);
     }
 
-    public function exportAging(Request $request)
-    {
-        $this->authorizeAccess();
-
-        $query = Customer::with(['collector', 'campaign'])
-            ->where('total_amount', '>', 0);
-
-        if ($request->filled('bucket')) {
-            if ($request->bucket === 'Current') {
-                $query->where(function ($q) {
-                    $q->whereNull('bucket')->orWhere('bucket', 'Current');
-                });
-            } else {
-                $query->where('bucket', $request->bucket);
-            }
-        }
-
-        $rows = $query->orderByDesc('total_amount')->get()->map(function ($c) {
-            return [
-                'bucket' => $c->bucket ?? 'Current',
-                'days_past_due' => $c->days_past_due,
-                'due_date' => $c->due_date?->toDateString(),
-                'name' => $c->name,
-                'phone' => $c->phone,
-                'company' => $c->company,
-                'total_amount' => (float) $c->total_amount,
-                'paid_amount' => (float) $c->paid_amount,
-                'discount_amount' => (float) $c->discount_amount,
-                'remaining_amount' => (float) max(0, $c->total_amount - $c->paid_amount - $c->discount_amount),
-                'payment_status' => $c->payment_status,
-                'risk_level' => $c->risk_level,
-                'campaign' => $c->campaign?->code,
-                'collector' => $c->collector?->name,
-                'collector_ext' => $c->collector?->extension,
-            ];
-        });
-
-        $suffix = $request->filled('bucket') ? strtolower(str_replace(' ', '_', $request->bucket)) . '_' : '';
-        $filename = 'aging_' . $suffix . now()->format('Ymd_His') . '.xlsx';
-
-        return (new FastExcel($rows))->download($filename);
-    }
 }

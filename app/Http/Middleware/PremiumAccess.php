@@ -54,9 +54,13 @@ class PremiumAccess
         $path = '/' . ltrim($request->path(), '/');
 
         return match (true) {
-            str_starts_with($routeName, 'crm.campaigns') || str_contains($path, 'crm/campaigns') => 'campaign',
+            // Buckets ikut flag CRM (bukan Collection)
+            str_starts_with($routeName, 'crm.collection.buckets') || str_contains($path, 'crm/collection/buckets') => 'crm',
+            // Debt Collectors ikut flag Collection
+            str_starts_with($routeName, 'crm.collectors') || str_contains($path, 'crm/collectors') => 'collection',
             str_starts_with($routeName, 'crm.collection') || str_contains($path, 'crm/collection') => 'collection',
-            str_starts_with($routeName, 'crm.') || str_contains($path, 'crm/customers') || str_contains($path, 'crm/dashboard') => 'crm',
+            str_starts_with($routeName, 'crm.dialer') || str_contains($path, 'crm/dialer') => 'dialer',
+            str_starts_with($routeName, 'crm.') || str_contains($path, 'crm/customers') || str_contains($path, 'crm/dashboard') || str_contains($path, 'crm/whatsapp') => 'crm',
             default => null,
         };
     }
@@ -67,9 +71,12 @@ class PremiumAccess
         $path = '/' . ltrim($request->path(), '/');
 
         return match (true) {
-            str_starts_with($routeName, 'crm.campaigns') || str_contains($path, 'crm/campaigns') => 'Campaigns',
+            str_starts_with($routeName, 'crm.collection.buckets') || str_contains($path, 'crm/collection/buckets') => 'Buckets',
+            str_starts_with($routeName, 'crm.collectors') || str_contains($path, 'crm/collectors') => 'Debt Collectors',
             str_starts_with($routeName, 'crm.collection') || str_contains($path, 'crm/collection') => 'Collection',
+            str_starts_with($routeName, 'crm.dialer') || str_contains($path, 'crm/dialer') => 'Auto-Dialer',
             str_starts_with($routeName, 'crm.customers') || str_contains($path, 'crm/customers') => 'Customers',
+            str_starts_with($routeName, 'crm.whatsapp') || str_contains($path, 'crm/whatsapp') => 'WhatsApp Saya',
             str_starts_with($routeName, 'crm.') || str_contains($path, 'crm/dashboard') => 'CRM',
             default => 'Fitur ini',
         };

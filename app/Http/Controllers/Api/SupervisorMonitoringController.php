@@ -68,6 +68,8 @@ class SupervisorMonitoringController extends Controller
                 $data['is_calling']          = $callState['is_calling'] ?? false;
                 $data['call_status']         = $callState['call_status'] ?? null;
                 $data['current_destination'] = $callState['destination'] ?? null;
+                // Penanda call dari PDS Auto-Dialer (di-set worker saat originate)
+                $data['pds']                 = Cache::get('pds_call_' . $agent->extension);
             
                 return $data;
             }); 

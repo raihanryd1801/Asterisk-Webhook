@@ -20,7 +20,7 @@ class PremiumController extends Controller
     public function toggle(Request $request)
     {
         $request->validate([
-            'key' => 'required|in:crm,collection,campaign',
+            'key' => 'required|in:crm,collection,dialer',
             'enabled' => 'required|boolean',
         ]);
 

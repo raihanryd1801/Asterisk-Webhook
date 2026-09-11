@@ -65,13 +65,13 @@
 <script>
 window.premiumManager = function(initialStates) {
     return {
-        states: initialStates || { crm: false, collection: false, campaign: false },
+        states: initialStates || { crm: false, collection: false, dialer: false },
         loading: null,
         modules: @json(\App\Models\FeatureFlag::MODULES),
         descriptions: {
-            crm: 'Dashboard Agent + Customers: kelola debtor, tagihan, pembayaran, dan assignment agent.',
-            collection: 'Collection Dashboard, Aging Report, PTP Management: bucket, DPD, risiko, dan janji bayar.',
-            campaign: 'Campaign Management + blast WA/SMS + auto-assign strategi koleksi.',
+            crm: 'Dashboard Agent + Customers + Buckets + WhatsApp Saya: kelola debtor, tagihan, bucket, dan sesi WA.',
+            collection: 'Collection Dashboard, PTP Management, Debt Collectors: risiko, janji bayar, dan handover.',
+            dialer: 'Auto-Dialer (PDS): dial otomatis bucket ke agent rotation.',
         },
 
         async toggle(key) {

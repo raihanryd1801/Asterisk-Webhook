@@ -113,17 +113,7 @@
                         <option value="NPL">NPL</option>
                     </select>
                     <select
-                        x-model="campaignFilter"
-                        @change="fetchCustomers()"
-                        class="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent"
-                    >
-                        <option value="">Semua Campaign</option>
-                        <template x-for="c in campaigns" :key="c.id">
-                            <option :value="c.id" x-text="c.code + ' - ' + c.name"></option>
-                        </template>
-                    </select>
-                    <select
-                        x-model="agentFilter"
+                        x-model="agentFilter" 
                         @change="fetchCustomers()"
                         class="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                     >
@@ -153,21 +143,15 @@
 
             <div x-show="selectedIds.length > 0" class="px-4 py-3 bg-brand-50 border-b border-brand-100 flex flex-col md:flex-row md:items-center gap-3">
                 <span class="text-sm font-medium text-slate-700"><span x-text="selectedIds.length"></span> dipilih</span>
-                <select x-model="bulkCampaignId" class="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent">
-                    <option value="">Pilih Campaign...</option>
-                    <template x-for="c in campaigns" :key="c.id">
-                        <option :value="c.id" x-text="c.name + ' (' + c.code + ')'"></option>
-                    </template>
-                </select>
                 <select x-model="bulkCollectorId" class="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent">
-                    <option value="">Pilih Collector (opsional)...</option>
+                    <option value="">Pilih Debt Collector...</option>
                     <template x-for="a in collectors" :key="a.id">
-                        <option :value="a.id" x-text="a.name + ' (Ext: ' + a.extension + ')'"></option>
+                        <option :value="a.id" x-text="a.name + (a.type === 'field' ? ' (Lapangan)' : ' (Desk)') + (a.phone ? ' - ' + a.phone : '')"></option>
                     </template>
                 </select>
-                <button @click="bulkAssign()" :disabled="bulkLoading || !bulkCampaignId" class="bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+                <button @click="bulkAssign()" :disabled="bulkLoading || !bulkCollectorId" class="bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
                     <i class="fa-solid" :class="bulkLoading ? 'fa-spinner fa-spin' : 'fa-bullseye'"></i>
-                    <span x-text="bulkLoading ? 'Assign...' : 'Assign ke Campaign'"></span>
+                    <span x-text="bulkLoading ? 'Assign...' : 'Assign Collector'"></span>
                 </button>
                 <span class="hidden md:inline text-slate-300">|</span>
                 <button @click="markHandoverReady()" :disabled="handoverLoading" class="bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2" title="Tandai case busuk siap dilempar ke pihak ketiga">
@@ -196,7 +180,7 @@
         <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Status Bayar</th>
         <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Jumlah Tagihan</th> <!-- Kolom Baru -->
         <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Jatuh Tempo</th>
-        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Campaign / Collector</th>
+        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Collector</th>
         <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Terakhir Bayar</th>
         <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Assigned Agent</th>
         <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Last Contact</th>
@@ -272,15 +256,12 @@
                 </template>
             </td>
 
-            <!-- Kolom Campaign / Collector -->
+            <!-- Kolom Collector -->
             <td class="px-4 py-3">
-                <template x-if="customer.campaign">
-                    <div class="text-xs font-medium text-brand-700" x-text="customer.campaign.code || customer.campaign.name"></div>
-                </template>
                 <template x-if="customer.collector">
-                    <div class="text-xs text-slate-600" x-text="customer.collector.name"></div>
+                    <div class="text-xs text-slate-600" x-text="customer.collector.name + (customer.collector.type === 'field' ? ' (Lapangan)' : ' (Desk)')"></div>
                 </template>
-                <template x-if="!customer.campaign && !customer.collector">
+                <template x-if="!customer.collector">
                     <span class="text-slate-400 text-xs">-</span>
                 </template>
                 <template x-if="customer.handover_status && customer.handover_status !== 'none'">
@@ -483,20 +464,11 @@
                                 </select>
                             </div>
                             <div>
-                                <label class="block text-sm font-medium text-slate-700 mb-1">Campaign</label>
-                                <select name="campaign_id" x-model="form.campaign_id" class="w-full border border-slate-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-brand-500 focus:border-transparent">
-                                    <option value="">Tanpa Campaign</option>
-                                    <template x-for="c in campaigns" :key="c.id">
-                                        <option :value="c.id" x-text="c.code + ' - ' + c.name"></option>
-                                    </template>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-slate-700 mb-1">Collector</label>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Debt Collector <span class="text-slate-400 font-normal">(Opsional)</span></label>
                                 <select name="collector_id" x-model="form.collector_id" class="w-full border border-slate-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-brand-500 focus:border-transparent">
-                                    <option value="">Tanpa Collector</option>
+                                    <option value="">Tanpa Debt Collector</option>
                                     <template x-for="a in collectors" :key="a.id">
-                                        <option :value="a.id" x-text="a.name + ' (Ext: ' + a.extension + ')'"></option>
+                                        <option :value="a.id" x-text="a.name + (a.type === 'field' ? ' (Lapangan)' : ' (Desk)') + (a.phone ? ' - ' + a.phone : '')"></option>
                                     </template>
                                 </select>
                             </div>
@@ -506,7 +478,7 @@
                     <div>
                         <label class="block text-sm font-medium text-slate-700 mb-1">Assigned Agent</label>
                         <select name="assigned_agent_id" x-model="form.assigned_agent_id" class="w-full border border-slate-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-brand-500 focus:border-transparent">
-                            <option value="">Pilih Agent (Opsional)</option>
+                            <option value="">Pilih Agent</option>
                             <template x-for="agent in agents" :key="agent.id">
                                 <option :value="agent.id" x-text="agent.name + ' (Ext: ' + agent.extension + ')'"></option>
                             </template>
@@ -651,6 +623,54 @@
         </div>
     </div>
 
+    <div x-show="showResultModal" class="fixed inset-0 z-50 overflow-y-auto" style="display: none;" x-cloak>
+        <div class="flex min-h-full items-center justify-center p-4">
+            <div class="fixed inset-0 bg-black/50" @click="closeResultModal()"></div>
+            <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+                <div class="flex items-center justify-between p-4 border-b border-slate-200">
+                    <h3 class="text-lg font-semibold text-slate-900" x-text="resultTitle"></h3>
+                    <button @click="closeResultModal()" class="text-slate-400 hover:text-slate-600 transition-colors">
+                        <i class="fa-solid fa-xmark text-xl"></i>
+                    </button>
+                </div>
+                <div class="p-4 border-b border-slate-100 text-sm text-slate-600" x-text="resultSummary"></div>
+                <div class="flex-1 overflow-y-auto p-4">
+                    <template x-if="resultRows.length === 0">
+                        <div class="text-center py-8 text-slate-400 text-sm">Tidak ada perubahan.</div>
+                    </template>
+                    <template x-if="resultRows.length > 0">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead class="bg-slate-50">
+                                    <tr>
+                                        <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase">Customer</th>
+                                        <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase">Telepon</th>
+                                        <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase">Dari</th>
+                                        <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase">Ke</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-200">
+                                    <template x-for="(row, idx) in resultRows" :key="idx">
+                                        <tr class="hover:bg-slate-50">
+                                            <td class="px-3 py-2 font-medium text-slate-900" x-text="row.name"></td>
+                                            <td class="px-3 py-2 font-mono text-slate-600" x-text="row.phone"></td>
+                                            <td class="px-3 py-2"><span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200" x-text="row.from"></span></td>
+                                            <td class="px-3 py-2"><span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200" x-text="row.to"></span></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </template>
+                    <p x-show="resultTruncated" class="text-[11px] text-slate-400 mt-2">Hanya 200 baris pertama yang ditampilkan.</p>
+                </div>
+                <div class="p-4 border-t border-slate-200 flex justify-end">
+                    <button @click="closeResultModal()" class="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm hover:bg-brand-700 transition-colors">Tutup</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </div>
 @endsection
 
@@ -670,7 +690,6 @@
         pagination: @json($paginationData),
         agents: @json($agents),
         statuses: @json($statuses),
-        campaigns: @json($campaigns ?? []),
         collectors: @json($collectors ?? []),
         indexUrl: '{{ route('crm.customers.index') }}',
         bulkAssignUrl: '{{ url('/dashboard/crm/collection/bulk-assign') }}',

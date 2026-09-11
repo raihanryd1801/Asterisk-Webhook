@@ -87,10 +87,22 @@
 
             <!-- Queue Indicator -->
             <div class="flex items-center gap-3">
-                <span class="text-[11px] font-bold text-slate-500 tracking-widest uppercase">Queue</span>
-                <span class="px-3 py-1.5 bg-slate-800 rounded-md text-xs font-bold text-white shadow-sm flex items-center gap-2">
-                    <i class="fa-solid fa-headphones-simple text-[10px]"></i> Manual Dial
+                <span class="text-[11px] font-bold text-slate-500 tracking-wider uppercase">Queue</span>
+                <span class="px-3 py-1.5 rounded-md text-xs font-bold shadow-sm flex items-center gap-2 transition-colors"
+                      :class="rotationJoined ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-white'">
+                    <i class="fa-solid text-[10px]" :class="rotationJoined ? 'fa-rotate' : 'fa-headphones-simple'"></i>
+                    <span x-text="rotationJoined ? 'PDS Rotation' : 'Manual Dial'"></span>
                 </span>
+                <template x-if="!rotationJoined">
+                    <button @click="openRotationModal()" class="px-3 py-1.5 rounded-md bg-white border border-indigo-200 text-[11px] font-bold text-indigo-600 hover:bg-indigo-50 shadow-sm transition-all flex items-center gap-1.5">
+                        <i class="fa-solid fa-right-to-bracket text-[10px]"></i> Join Rotation
+                    </button>
+                </template>
+                <template x-if="rotationJoined">
+                    <button @click="leaveRotation()" class="px-3 py-1.5 rounded-md bg-white border border-slate-200 text-[11px] font-bold text-slate-500 hover:bg-slate-50 hover:text-rose-500 shadow-sm transition-all flex items-center gap-1.5" title="Keluar dari rotation (kembali manual)">
+                        <i class="fa-solid fa-right-from-bracket text-[10px]"></i> Leave
+                    </button>
+                </template>
             </div>
         </div>
 
@@ -390,6 +402,39 @@
     </div>
 
     <!-- ============================================== -->
+    <!-- MODAL JOIN ROTATION PDS                        -->
+    <!-- ============================================== -->
+    <div x-show="showRotationModal" x-transition.opacity style="display: none;" class="fixed inset-0 z-[100] overflow-y-auto" x-cloak>
+        <div class="flex min-h-full items-center justify-center p-4">
+            <div class="fixed inset-0 bg-black/50" @click="closeRotationModal()"></div>
+            <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+                <div class="flex items-center justify-between p-4 border-b border-slate-200">
+                    <h3 class="text-base font-bold text-slate-800">Join PDS Rotation</h3>
+                    <button @click="closeRotationModal()" class="text-slate-400 hover:text-slate-600 transition-colors">
+                        <i class="fa-solid fa-xmark text-xl"></i>
+                    </button>
+                </div>
+                <div class="p-4 space-y-3 text-sm text-slate-600 leading-relaxed">
+                    <p>Dengan join rotation, Anda menyatakan <strong class="text-slate-800">siap menerima panggilan otomatis</strong> dari Auto-Dialer setiap kali standby (Online + idle + MicroSIP terdaftar).</p>
+                    <ul class="list-disc list-inside space-y-1 text-[13px]">
+                        <li>MicroSIP Anda akan <strong>berdering otomatis</strong> — angkat seperti biasa, lalu sistem menyambungkan ke customer.</li>
+                        <li>Aktifkan <strong>auto-answer di MicroSIP</strong> agar benar-benar otomatis ngangkat.</li>
+                        <li>Customer <strong>tidak mungkin tersambung tanpa agent</strong>: kaki telepon Anda selalu didial duluan.</li>
+                        <li>Bisa keluar kapan saja via tombol <strong>Leave</strong> (kembali ke Manual Call).</li>
+                    </ul>
+                    <div class="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                        <button @click="closeRotationModal()" class="px-4 py-2 border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition-colors">Batal</button>
+                        <button @click="joinRotation()" :disabled="rotationLoading" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2">
+                            <i class="fa-solid" :class="rotationLoading ? 'fa-spinner fa-spin' : 'fa-check'"></i>
+                            <span x-text="rotationLoading ? 'Memproses...' : 'Saya Siap, Join'"></span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
     <!-- MODAL BUAT PTP                                 -->
     <!-- ============================================== -->
     <div x-show="showPtpModal" x-transition.opacity style="display: none;" class="fixed inset-0 z-[100] overflow-y-auto" x-cloak>
@@ -438,9 +483,11 @@
     document.addEventListener('alpine:init', () => {
         Alpine.data('agentWorkspaceData', (extension) => ({
             extension: extension,
-            currentStatus: 'offline', 
+            currentStatus: 'offline',
             targetNumber: '',
             infoMessage: 'MikroSIP siap digunakan...',
+            activeCall: null,
+            wasCalling: false,
             logs: [],
             pagination: { current_page: 1, last_page: 1, total: 0 },
             filters: { search: '' },
@@ -455,12 +502,17 @@
             ptpForm: { amount: '', date: '', note: '' },
             ptpSaving: false,
             ptpMinDate: new Date().toISOString().split('T')[0],
+            // 🚀 PDS ROTATION
+            rotationJoined: false,
+            rotationLoading: false,
+            showRotationModal: false,
 
             init() {
                 this.fetchAgentStatus();
                 this.statusInterval = setInterval(() => { this.fetchAgentStatus(); }, 5000);
                 this.fetchLogs(1);
                 this.fetchAssignedCustomers();
+                this.fetchRotationStatus();
             },
 
             destroy() {
@@ -477,8 +529,31 @@
                     let currentAgent = agentList.find(a => String(a.extension) === String(this.extension));
                     if (currentAgent) {
                         this.currentStatus = currentAgent.status;
+                        // 🚀 State call live dari ami:listen (sumber yang sama dengan live monitoring)
+                        this.activeCall = currentAgent.is_calling
+                            ? { status: currentAgent.call_status, destination: currentAgent.current_destination }
+                            : null;
+                        this.refreshInfoFromCall();
                     }
                 }).catch(err => console.error("Gagal sinkronisasi status"));
+            },
+
+            // Samakan tulisan status web dengan live monitoring (ringing -> connected)
+            refreshInfoFromCall() {
+                if (this.activeCall) {
+                    this.wasCalling = true;
+                    if (this.activeCall.status === 'connected') {
+                        this.infoMessage = `Terhubung dengan ${this.activeCall.destination || ''} — bicara via MicroSIP.`;
+                    } else if (this.activeCall.status === 'ringing') {
+                        this.infoMessage = `Berdering... menghubungi ${this.activeCall.destination || ''}.`;
+                    } else if (this.activeCall.status) {
+                        this.infoMessage = `Status panggilan: ${this.activeCall.status} ${this.activeCall.destination || ''}`.trim();
+                    }
+                } else if (this.wasCalling) {
+                    // Call baru saja selesai -> kembalikan ke default
+                    this.wasCalling = false;
+                    this.infoMessage = 'MikroSIP siap digunakan...';
+                }
             },
 
             updateStatus(newStatus) {
@@ -520,6 +595,8 @@
                 .then(res => res.json().then(data => ({ ok: res.ok, data })))
                 .then(({ ok, data }) => {
                     this.infoMessage = data.message;
+                    // Refresh state call lebih cepat setelah originate (max 3x percobaan)
+                    [1500, 3500, 6000].forEach(ms => setTimeout(() => { this.fetchAgentStatus(); }, ms));
                     setTimeout(() => { this.fetchLogs(1); }, 5000);
                 })
                 .catch(err => {
@@ -653,6 +730,72 @@
                     'closed_lost': 'bg-red-50 text-red-700 border-red-200',
                 };
                 return classes[status] || 'bg-slate-50 text-slate-700 border-slate-200';
+            },
+
+            async fetchRotationStatus() {
+                try {
+                    const response = await fetch(`/dashboard/crm/dialer/rotation/status`, {
+                        headers: { 'Accept': 'application/json' }
+                    });
+                    const data = await response.json();
+                    if (data.status === 'success') {
+                        this.rotationJoined = !!data.joined;
+                    }
+                } catch (err) {
+                    console.error('Gagal cek rotation:', err);
+                }
+            },
+
+            openRotationModal() { this.showRotationModal = true; },
+            closeRotationModal() { this.showRotationModal = false; },
+
+            async joinRotation() {
+                this.rotationLoading = true;
+                try {
+                    const response = await fetch(`/dashboard/crm/dialer/rotation/join`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content'),
+                            'Accept': 'application/json',
+                        },
+                    });
+                    const data = await response.json();
+                    if (response.ok && data.status === 'success') {
+                        this.rotationJoined = true;
+                        this.closeRotationModal();
+                        this.infoMessage = data.message;
+                    } else {
+                        alert(data.message || 'Gagal join rotation');
+                    }
+                } catch (err) {
+                    alert('Gagal join rotation: ' + err.message);
+                } finally {
+                    this.rotationLoading = false;
+                }
+            },
+
+            async leaveRotation() {
+                if (!confirm('Keluar dari rotation PDS? (kembali ke Manual Call)')) return;
+                try {
+                    const response = await fetch(`/dashboard/crm/dialer/rotation/leave`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content'),
+                            'Accept': 'application/json',
+                        },
+                    });
+                    const data = await response.json();
+                    if (response.ok && data.status === 'success') {
+                        this.rotationJoined = false;
+                        this.infoMessage = data.message;
+                    } else {
+                        alert(data.message || 'Gagal leave rotation');
+                    }
+                } catch (err) {
+                    alert('Gagal leave rotation: ' + err.message);
+                }
             },
 
             formatPaymentStatus(status) {

@@ -197,6 +197,15 @@ class AmiListenCommand extends Command
 
                         $this->line("📞 Agen Ext {$extension} CONNECTED ke {$dest}");
                         broadcast(new AgentCallActivity($agent, $dest, 'connected'));
+
+                        // 🚀 Update cache ke connected (sebelumnya cuma ditulis saat
+                        // ringing dan tidak pernah naik status). Cache ini yang dibaca
+                        // agentsList -> live monitoring (polling) & workspace agent.
+                        Cache::put('active_call_' . $extension, [
+                            'is_calling'  => true,
+                            'call_status' => 'connected',
+                            'destination' => $dest
+                        ], now()->addHours(2));
                     }
                 }
 

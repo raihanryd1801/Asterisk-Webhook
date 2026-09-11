@@ -6,7 +6,6 @@ window.crmCustomers = function () {
         pagination: window.crmCustomerData?.pagination || {},
         agents: window.crmCustomerData?.agents || [],
         statuses: window.crmCustomerData?.statuses || [],
-        campaigns: window.crmCustomerData?.campaigns || [],
         collectors: window.crmCustomerData?.collectors || [],
         search: '',
         statusFilter: '',
@@ -17,16 +16,14 @@ window.crmCustomers = function () {
         importLoading: false,
         importResult: null,
         selectedIds: [],
-        bulkCampaignId: '',
         bulkCollectorId: '',
         bulkLoading: false,
         recalcLoading: false,
         modalTitle: '',
-        form: { id: '', name: '', phone: '', email: '', company: '', status: 'new', assigned_agent_id: '', notes: '', total_amount: '', paid_amount: '', discount_amount: '', payment_status: 'unpaid', payment_notes: '', due_date: '', campaign_id: '', collector_id: '', risk_level: 'low' },
+        form: { id: '', name: '', phone: '', email: '', company: '', status: 'new', assigned_agent_id: '', notes: '', total_amount: '', paid_amount: '', discount_amount: '', payment_status: 'unpaid', payment_notes: '', due_date: '', collector_id: '', risk_level: 'low' },
         selectedCustomer: null,
         paymentStatusFilter: '',
         bucketFilter: '',
-        campaignFilter: '',
         handoverFilter: '',
         badDebtOnly: false,
         showHandoverModal: false,
@@ -36,13 +33,40 @@ window.crmCustomers = function () {
         callHistoryLoading: false,
         submitting: false,
 
+        init() {
+            // Hydrate filter dari query string agar halaman lain (mis. Buckets)
+            // bisa deep-link ke Customers yang sudah terfilter.
+            try {
+                const q = new URLSearchParams(window.location.search);
+                const map = {
+                    search: 'search', status: 'statusFilter',
+                    payment_status: 'paymentStatusFilter', bucket: 'bucketFilter',
+                    agent_id: 'agentFilter',
+                    handover_status: 'handoverFilter',
+                };
+                let hasFilter = false;
+                for (const [param, key] of Object.entries(map)) {
+                    if (q.has(param)) {
+                        this[key] = q.get(param);
+                        hasFilter = true;
+                    }
+                }
+                if (q.get('bad_debt_only') === '1') {
+                    this.badDebtOnly = true;
+                    hasFilter = true;
+                }
+                if (hasFilter) this.fetchCustomers(1);
+            } catch (e) {
+                console.error(e);
+            }
+        },
+
         async fetchCustomers(page = 1) {
             const params = new URLSearchParams();
             if (this.search) params.append('search', this.search);
             if (this.statusFilter) params.append('status', this.statusFilter);
             if (this.paymentStatusFilter) params.append('payment_status', this.paymentStatusFilter);
             if (this.bucketFilter) params.append('bucket', this.bucketFilter);
-            if (this.campaignFilter) params.append('campaign_id', this.campaignFilter);
             if (this.agentFilter) params.append('agent_id', this.agentFilter);
             if (this.handoverFilter) params.append('handover_status', this.handoverFilter);
             if (this.badDebtOnly) params.append('bad_debt_only', '1');
@@ -79,7 +103,7 @@ window.crmCustomers = function () {
 
         openCreateModal() {
             this.modalTitle = 'Tambah Customer';
-            this.form = { id: '', name: '', phone: '', email: '', company: '', status: 'new', assigned_agent_id: '', notes: '', total_amount: '', paid_amount: '', discount_amount: '', payment_status: 'unpaid', payment_notes: '', due_date: '', campaign_id: '', collector_id: '', risk_level: 'low' };
+            this.form = { id: '', name: '', phone: '', email: '', company: '', status: 'new', assigned_agent_id: '', notes: '', total_amount: '', paid_amount: '', discount_amount: '', payment_status: 'unpaid', payment_notes: '', due_date: '', collector_id: '', risk_level: 'low' };
             this.showModal = true;
         },
 
@@ -100,7 +124,6 @@ window.crmCustomers = function () {
                 payment_status: customer.payment_status || 'unpaid',
                 payment_notes: customer.payment_notes || '',
                 due_date: customer.due_date ? String(customer.due_date).substring(0, 10) : '',
-                campaign_id: customer.campaign_id || '',
                 collector_id: customer.collector_id || '',
                 risk_level: customer.risk_level || 'low',
             };
@@ -109,7 +132,7 @@ window.crmCustomers = function () {
 
         closeModal() {
             this.showModal = false;
-            this.form = { id: '', name: '', phone: '', email: '', company: '', status: 'new', assigned_agent_id: '', notes: '', total_amount: '', paid_amount: '', discount_amount: '', payment_status: 'unpaid', payment_notes: '', due_date: '', campaign_id: '', collector_id: '', risk_level: 'low' };
+            this.form = { id: '', name: '', phone: '', email: '', company: '', status: 'new', assigned_agent_id: '', notes: '', total_amount: '', paid_amount: '', discount_amount: '', payment_status: 'unpaid', payment_notes: '', due_date: '', collector_id: '', risk_level: 'low' };
         },
 
         async submitForm() {
@@ -197,13 +220,12 @@ window.crmCustomers = function () {
 
         clearSelection() {
             this.selectedIds = [];
-            this.bulkCampaignId = '';
             this.bulkCollectorId = '';
         },
 
         async bulkAssign() {
-            if (!this.bulkCampaignId) {
-                alert('Pilih campaign dulu');
+            if (!this.bulkCollectorId) {
+                alert('Pilih debt collector dulu');
                 return;
             }
             if (this.selectedIds.length === 0) {
@@ -221,8 +243,7 @@ window.crmCustomers = function () {
                     },
                     body: JSON.stringify({
                         customer_ids: this.selectedIds,
-                        campaign_id: this.bulkCampaignId,
-                        collector_id: this.bulkCollectorId || null,
+                        collector_id: this.bulkCollectorId,
                     })
                 });
                 const data = await response.json();
@@ -241,6 +262,25 @@ window.crmCustomers = function () {
             }
         },
 
+        showResultModal: false,
+        resultTitle: '',
+        resultSummary: '',
+        resultRows: [],
+        resultTruncated: false,
+
+        openResultModal(title, summary, rows, truncated) {
+            this.resultTitle = title;
+            this.resultSummary = summary;
+            this.resultRows = rows || [];
+            this.resultTruncated = !!truncated;
+            this.showResultModal = true;
+        },
+
+        closeResultModal() {
+            this.showResultModal = false;
+            this.resultRows = [];
+        },
+
         async recalculateBuckets() {
             if (!confirm('Hitung ulang DPD / Bucket / Risk semua customer dari due_date?')) return;
             this.recalcLoading = true;
@@ -254,7 +294,16 @@ window.crmCustomers = function () {
                     },
                 });
                 const data = await response.json();
-                alert(data.message || 'Selesai');
+                if (data.status === 'success') {
+                    this.openResultModal(
+                        'Hasil Recalculate Bucket',
+                        data.message || 'Selesai',
+                        (data.changes || []).map(c => ({ name: c.name, phone: c.phone, from: c.from, to: c.to })),
+                        data.truncated
+                    );
+                } else {
+                    alert(data.message || 'Error');
+                }
                 this.fetchCustomers(this.pagination.current_page || 1);
             } catch (e) {
                 console.error(e);
@@ -270,7 +319,6 @@ window.crmCustomers = function () {
             if (this.statusFilter) params.append('status', this.statusFilter);
             if (this.paymentStatusFilter) params.append('payment_status', this.paymentStatusFilter);
             if (this.bucketFilter) params.append('bucket', this.bucketFilter);
-            if (this.campaignFilter) params.append('campaign_id', this.campaignFilter);
             if (this.agentFilter) params.append('agent_id', this.agentFilter);
             if (this.handoverFilter) params.append('handover_status', this.handoverFilter);
             if (this.badDebtOnly) params.append('bad_debt_only', '1');

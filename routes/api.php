@@ -20,3 +20,6 @@ Route::prefix('supervisor')->group(function () {
 });
 
 Route::post('/call-logs/store', [CallLogController::class, 'store']);
+
+// Webhook pesan masuk dari sidecar wa-gateway (otorisasi via token, tanpa login)
+Route::post('/wa/inbound', [\App\Http\Controllers\WaController::class, 'inbound']);

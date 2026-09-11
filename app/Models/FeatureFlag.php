@@ -10,7 +10,7 @@ class FeatureFlag extends Model
     public const MODULES = [
         'crm' => 'CRM (Dashboard + Customers)',
         'collection' => 'Collection Banking',
-        'campaign' => 'Campaign Management',
+        'dialer' => 'Auto-Dialer (PDS)',
     ];
 
     protected $fillable = ['key', 'label', 'is_enabled', 'updated_by'];
