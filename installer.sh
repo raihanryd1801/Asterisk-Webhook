@@ -45,7 +45,7 @@ fi
 echo "==> [1/6] Install package sistem..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
-apt-get install -y software-properties-common curl git unzip ca-certificates lsb-release gnupg
+apt-get install -y software-properties-common curl git unzip ca-certificates lsb-release gnupg build-essential autoconf
 add-apt-repository -y ppa:ondrej/php
 mkdir -p /etc/apt/keyrings
 curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
@@ -57,7 +57,13 @@ apt-get install -y \
   php${PHP_VER}-curl php${PHP_VER}-zip php${PHP_VER}-bcmath \
   php${PHP_VER}-gd php${PHP_VER}-pcntl php${PHP_VER}-redis \
   php${PHP_VER}-dev php-pear \
-  nodejs mysql-server supervisor
+  nodejs supervisor
+# MySQL 8 (Ubuntu <= 22.04) atau MariaDB 10.6+ (Ubuntu 24.04 tidak lagi menyediakan paket mysql-server)
+if apt-cache show mysql-server >/dev/null 2>&1; then
+  apt-get install -y mysql-server
+else
+  apt-get install -y mariadb-server
+fi
 
 echo "==> [2/6] Install Composer + Swoole (untuk Octane)..."
 if ! command -v composer >/dev/null 2>&1; then
