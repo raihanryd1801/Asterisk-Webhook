@@ -461,15 +461,24 @@
                         <div class="grid grid-cols-2 gap-3">
                             <div>
                                 <label class="block text-sm font-medium text-slate-700 mb-1">Total Tagihan</label>
-                                <input type="number" name="total_amount" x-model="form.total_amount" step="0.01" min="0" class="w-full border border-slate-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-brand-500 focus:border-transparent" placeholder="0">
+                                <div class="relative">
+                                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">Rp</span>
+                                    <input type="text" inputmode="numeric" name="total_amount" :value="formatRupiah(form.total_amount)" @input="form.total_amount = parseRupiah($event.target.value); $event.target.value = formatRupiah(form.total_amount)" class="w-full border border-slate-300 rounded-lg pl-9 pr-4 py-2 focus:ring-2 focus:ring-brand-500 focus:border-transparent font-mono" placeholder="Rp 0">
+                                </div>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-slate-700 mb-1">Sudah Dibayar</label>
-                                <input type="number" name="paid_amount" x-model="form.paid_amount" step="0.01" min="0" class="w-full border border-slate-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-brand-500 focus:border-transparent" placeholder="0">
+                                <div class="relative">
+                                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">Rp</span>
+                                    <input type="text" inputmode="numeric" name="paid_amount" :value="formatRupiah(form.paid_amount)" @input="form.paid_amount = parseRupiah($event.target.value); $event.target.value = formatRupiah(form.paid_amount)" class="w-full border border-slate-300 rounded-lg pl-9 pr-4 py-2 focus:ring-2 focus:ring-brand-500 focus:border-transparent font-mono" placeholder="Rp 0">
+                                </div>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-slate-700 mb-1">Diskon Pelunasan</label>
-                                <input type="number" name="discount_amount" x-model="form.discount_amount" step="0.01" min="0" class="w-full border border-slate-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-brand-500 focus:border-transparent" placeholder="0">
+                                <div class="relative">
+                                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">Rp</span>
+                                    <input type="text" inputmode="numeric" name="discount_amount" :value="formatRupiah(form.discount_amount)" @input="form.discount_amount = parseRupiah($event.target.value); $event.target.value = formatRupiah(form.discount_amount)" class="w-full border border-slate-300 rounded-lg pl-9 pr-4 py-2 focus:ring-2 focus:ring-brand-500 focus:border-transparent font-mono" placeholder="Rp 0">
+                                </div>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-slate-700 mb-1">Status Pembayaran</label>

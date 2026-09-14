@@ -21,6 +21,10 @@ Route::prefix('supervisor')->group(function () {
 
 Route::post('/call-logs/store', [CallLogController::class, 'store']);
 
+// PDS customer-first: dipakai AGI pds-bridge.php (otorisasi via X-Pds-Token)
+Route::post('/pds/bridge', [\App\Http\Controllers\Api\PdsBridgeController::class, 'bridge']);
+Route::post('/pds/result', [\App\Http\Controllers\Api\PdsBridgeController::class, 'result']);
+
 // Webhook pesan masuk dari sidecar wa-gateway (otorisasi via token, tanpa login)
 Route::post('/wa/inbound', [\App\Http\Controllers\WaController::class, 'inbound']);
 // Status keterkiriman (delivered/read) dari sidecar

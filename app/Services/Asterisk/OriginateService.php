@@ -91,9 +91,92 @@ class OriginateService
     }
 
     /**
+     * Originate PDS MURNI (customer-first / predictive).
+     * Kaki CUSTOMER didial duluan lewat outbound route (Local channel),
+     * context tujuan = [pds-connect] di extensions_custom.conf. Ketika
+     * customer mengangkat, dialplan memanggil AGI pds-bridge.php yang
+     * menanyakan ext agent ke Laravel, lalu Dial ke agent tersebut.
+     *
+     * Reservasi agent TETAP dicatat di dial_queue_items.agent_extension
+     * oleh PdsDialService::tick() — AGI memakainya sebagai pilihan utama
+     * dan memvalidasi ulang sebelum Dial.
+     */
+    public function pdsCustomerFirst($targetNumber, $jobId, $itemId)
+    {
+        try {
+            $this->ami->connect();
+
+            $context = config('services.pds.connect_context', 'pds-connect');
+            $callerid = config('services.pds.callerid', '');
+            $channel = 'Local/' . $targetNumber . '@from-internal';
+
+            $parameters = [
+                'Channel'  => $channel,
+                'Exten'    => 's',
+                'Context'  => $context,
+                'Priority' => 1,
+                'Timeout'  => 45000,
+                'Async'    => 'true',
+                'Variable' => "__PDS_JOB={$jobId},__PDS_ITEM={$itemId}",
+            ];
+
+            if ($callerid !== '') {
+                $parameters['CallerID'] = $callerid;
+            }
+
+            $this->ami->sendAction('Originate', $parameters);
+            $response = $this->ami->readResponse();
+
+            $this->ami->disconnect();
+
+            return $response;
+        } catch (Exception $e) {
+            throw new Exception("Gagal melakukan PDS customer-first Originate: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Daftarkan agent sebagai member queue PDS (dipanggil saat JOIN rotation).
+     * Best-effort: gagal AMI tidak boleh menggagalkan join rotation.
+     */
+    public function queueAdd($queue, $extension, $memberName = null): bool
+    {
+        try {
+            $this->ami->connect();
+            $this->ami->sendAction('QueueAdd', [
+                'Queue' => $queue,
+                'Interface' => 'PJSIP/' . $extension,
+                'MemberName' => $memberName ?: $extension,
+                'Paused' => 'false',
+            ]);
+            $response = $this->ami->readResponse();
+            $this->ami->disconnect();
+            return str_contains($response, 'Success');
+        } catch (Exception $e) {
+            return false;
+        }
+    }
+
+    public function queueRemove($queue, $extension): bool
+    {
+        try {
+            $this->ami->connect();
+            $this->ami->sendAction('QueueRemove', [
+                'Queue' => $queue,
+                'Interface' => 'PJSIP/' . $extension,
+            ]);
+            $response = $this->ami->readResponse();
+            $this->ami->disconnect();
+            return str_contains($response, 'Success');
+        } catch (Exception $e) {
+            return false;
+        }
+    }
+
+    /**
      * Fitur Supervisor Action (Listen, Whisper, Join)
      * 
-    * @param string $supervisorExt Extension milik supervisor (misal: "201")
+     * @param string $supervisorExt Extension milik supervisor (misal: "201")
      * @param string $targetChannel Channel milik agent yang sedang telepon (misal: "PJSIP/101")
      * @param string $mode Mode spy: '' (Listen), 'w' (Whisper), 'B' (Barge/Join)
      */

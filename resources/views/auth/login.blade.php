@@ -29,7 +29,7 @@
                 <i class="fa-solid fa-shield-halved"></i>
             </div>
             <h1 class="text-xl font-bold text-white tracking-tight">Administrator Login</h1>
-            <p class="text-slate-400 text-xs mt-1">PT. Dankom Mitra Abadi</p>
+            <p class="text-slate-400 text-xs mt-1">PT. Yesta Palguna Abadi</p>
         </div>
 
         <!-- Body Section -->

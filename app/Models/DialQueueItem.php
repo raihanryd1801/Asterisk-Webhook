@@ -11,11 +11,13 @@ class DialQueueItem extends Model
 
     protected $fillable = [
         'job_id', 'customer_id', 'phone', 'bucket', 'status',
-        'attempts', 'agent_extension', 'last_attempt_at', 'note',
+        'attempts', 'agent_extension', 'amd_verdict', 'bridged_agent',
+        'last_attempt_at', 'answered_at', 'note',
     ];
 
     protected $casts = [
         'last_attempt_at' => 'datetime',
+        'answered_at' => 'datetime',
     ];
 
     public function job()

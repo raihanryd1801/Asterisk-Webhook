@@ -694,6 +694,44 @@ window.crmCustomers = function () {
             return new Intl.NumberFormat('id-ID').format(value);
         },
 
+        // Tampil: "Rp 10.000.000" — simpan: "10000000" mentah (desimal pakai titik) untuk backend.
+        formatRupiah(value) {
+            if (value === '' || value === null || value === undefined) return '';
+            let s = String(value).trim();
+            if (s === '') return '';
+            let dec = '';
+            const lastDot = s.lastIndexOf('.');
+            const lastComma = s.lastIndexOf(',');
+            if (lastComma > lastDot && lastComma !== -1) {
+                dec = s.slice(lastComma + 1).replace(/\D/g, '').substring(0, 2);
+                s = s.slice(0, lastComma);
+            } else if (lastDot !== -1) {
+                const frac = s.slice(lastDot + 1).replace(/\D/g, '');
+                if (frac.length > 0 && frac.length <= 2) {
+                    dec = frac;
+                    s = s.slice(0, lastDot);
+                }
+            }
+            s = s.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+            if (s === '') s = '0';
+            s = s.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+            if (dec !== '' && !/^0+$/.test(dec)) return 'Rp ' + s + ',' + dec;
+            return 'Rp ' + s;
+        },
+
+        parseRupiah(text) {
+            if (!text) return '';
+            const s = String(text);
+            const lastComma = s.lastIndexOf(',');
+            const lastDot = s.lastIndexOf('.');
+            if (lastComma !== -1 && lastComma > lastDot) {
+                const int = s.slice(0, lastComma).replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+                const dec = s.slice(lastComma + 1).replace(/\D/g, '').substring(0, 2);
+                return (int === '' ? '0' : int) + (dec !== '' ? '.' + dec : '');
+            }
+            return s.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+        },
+
         formatPaymentStatus(status) {
             const labels = {
                 'unpaid': 'Belum Bayar',

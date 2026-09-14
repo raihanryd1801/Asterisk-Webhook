@@ -245,9 +245,22 @@ class DialerController extends Controller
             ['extension' => $agent->extension, 'joined_at' => now()]
         );
 
+        // Sinkron ke member queue PDS (untuk mode customer-first: customer yang
+        // angkat dan kehabisan reservasi akan antre di queue ini). Best-effort.
+        $queueMsg = '';
+        try {
+            $queue = config('services.pds.queue', '9000');
+            $ok = app(\App\Services\Asterisk\OriginateService::class)
+                ->queueAdd($queue, $agent->extension, $agent->name);
+            $queueMsg = $ok ? " Terdaftar di queue {$queue}." : " (Queue {$queue}: gagal daftar, hubungi IT — mode agent-first tetap jalan.)";
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("PDS rotation join: QueueAdd gagal ext {$agent->extension}: " . $e->getMessage());
+            $queueMsg = ' (Queue: tidak terjangkau — mode agent-first tetap jalan.)';
+        }
+
         return response()->json([
             'status' => 'success',
-            'message' => 'Anda JOIN rotation PDS. Pastikan status Online & auto-answer MicroSIP aktif.',
+            'message' => 'Anda JOIN rotation PDS. Pastikan status Online & auto-answer MicroSIP aktif.' . $queueMsg,
         ]);
     }
 
@@ -259,6 +272,14 @@ class DialerController extends Controller
         }
 
         PdsRotation::where('agent_id', $agent->id)->delete();
+
+        // Lepas dari member queue PDS (best-effort).
+        try {
+            $queue = config('services.pds.queue', '9000');
+            app(\App\Services\Asterisk\OriginateService::class)->queueRemove($queue, $agent->extension);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("PDS rotation leave: QueueRemove gagal ext {$agent->extension}: " . $e->getMessage());
+        }
 
         return response()->json(['status' => 'success', 'message' => 'Anda keluar dari rotation (kembali Manual Call).']);
     }

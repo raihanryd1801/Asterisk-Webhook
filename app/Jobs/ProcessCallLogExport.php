@@ -35,8 +35,11 @@ class ProcessCallLogExport implements ShouldQueue
 
         // 🚀 2. UBAH SORTING: Gunakan 'id' alih-alih 'calldate' agar kueri langsung meluncur instan
         $query = DB::table('cdr_live')
-                    ->select('calldate', 'src', 'dst', 'disposition', 'billsec', 'recordingfile')
-                    ->orderBy('id', 'desc'); 
+                    ->select('calldate', 'src', 'dst', 'disposition', 'billsec', 'recordingfile', 'cnam')
+                    ->orderBy('id', 'desc');
+
+        // Peta extension => nama agent (1x query, dipakai untuk kolom Nama Agent)
+        $agentNames = Agent::pluck('name', 'extension')->toArray(); 
 
         // --- FILTER HAK AKSES ---
         if (!empty($this->filters['supervisor_extension'])) {
@@ -84,11 +87,24 @@ class ProcessCallLogExport implements ShouldQueue
 
         // ❌ JANGAN GUNAKAN $finalPath / $fullPath DI SINI
         // ✅ GUNAKAN $tmpPath
-        (new \Rap2hpoutre\FastExcel\FastExcel($query->cursor()))->export($tmpPath, function ($row) {
+        (new \Rap2hpoutre\FastExcel\FastExcel($query->cursor()))->export($tmpPath, function ($row) use ($agentNames) {
             $src = ($row->src === $row->dst && strlen($row->src) > 5) ? 'Ext / Agent' : $row->src;
-            
+
+            // Sisi agent: src bila outbound dari ext, dst bila inbound ke ext.
+            // Nama diambil dari tabel agents (akurat), fallback ke cnam CDR.
+            $agentExt = null;
+            if (isset($agentNames[$row->src])) {
+                $agentExt = $row->src;
+            } elseif (isset($agentNames[$row->dst])) {
+                $agentExt = $row->dst;
+            }
+            $agentName = $agentExt !== null
+                ? $agentNames[$agentExt]
+                : (trim((string) ($row->cnam ?? '')) !== '' ? $row->cnam : '-');
+
             return [
                 'Waktu'               => $row->calldate,
+                'Nama Agent'          => $agentName,
                 'Asal (SRC)'          => $src,
                 'Tujuan (DST)'        => $row->dst,
                 'Status'              => $row->disposition,

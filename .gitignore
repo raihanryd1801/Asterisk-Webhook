@@ -20,6 +20,7 @@
 /public/storage
 /storage/*.key
 /storage/pail
+/wa-gateway/sessions/*
 /vendor
 _ide_helper.php
 Homestead.json

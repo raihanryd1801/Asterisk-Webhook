@@ -118,6 +118,27 @@ class PdsDialService
     }
 
     /**
+     * Cek satu extension masih layak menerima sambungan PDS saat ini:
+     * join rotation + online + tidak sedang call + MicroSIP terdaftar.
+     * Dipakai endpoint bridge AGI untuk validasi ulang reservasi.
+     */
+    public function agentStillIdle(string $extension): bool
+    {
+        $member = PdsRotation::where('extension', $extension)->first();
+        if (!$member) {
+            return false;
+        }
+        $agent = $member->agent;
+        if (!$agent || $agent->status !== 'online') {
+            return false;
+        }
+        if (Cache::get('active_call_' . $extension)) {
+            return false;
+        }
+        return $this->isMicrosipRegistered($extension);
+    }
+
+    /**
      * Satu tick worker untuk sebuah job running.
      * Return array info: dialed, skipped_reason, completed.
      */
@@ -169,7 +190,14 @@ class PdsDialService
             }
 
             try {
-                $this->originate->pdsDial($agent->extension, $item->phone, $job->id);
+                if (config('services.pds.mode', 'agent_first') === 'customer_first') {
+                    // PDS murni: dial kaki customer dulu. Reservasi agent dicatat
+                    // seperti biasa — AGI pds-bridge.php memvalidasi ulang saat
+                    // customer mengangkat, lalu Dial ke agent tersebut.
+                    $this->originate->pdsCustomerFirst($item->phone, $job->id, $item->id);
+                } else {
+                    $this->originate->pdsDial($agent->extension, $item->phone, $job->id);
+                }
 
                 $item->update([
                     'status' => 'dialing',

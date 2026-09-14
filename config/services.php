@@ -41,4 +41,18 @@ return [
         'pass' => env('FREEPBX_SSH_PASS'), // 🚀 Kosongkan parameter kedua agar password mentah tidak terekspos
     ],
 
+    'pds' => [
+        // agent_first = kaki agent didial dulu (perilaku lama, aman).
+        // customer_first = kaki customer didial dulu via trunk, yang angkat
+        // diteruskan ke agent oleh context [pds-connect] di extensions_custom.conf.
+        // Ganti ke customer_first HANYA setelah dialplan + AGI + queue 9000 siap.
+        'mode' => env('PDS_DIAL_MODE', 'agent_first'),
+        'connect_context' => env('PDS_CONNECT_CONTEXT', 'pds-connect'),
+        'queue' => env('PDS_QUEUE', '9000'),
+        // CallerID yang disodorkan ke trunk untuk kaki customer.
+        'callerid' => env('PDS_CALLERID', ''),
+        // Token untuk AGI pds-bridge.php (header X-Pds-Token).
+        'bridge_token' => env('PDS_BRIDGE_TOKEN', ''),
+    ],
+
 ];
