@@ -23,3 +23,5 @@ Route::post('/call-logs/store', [CallLogController::class, 'store']);
 
 // Webhook pesan masuk dari sidecar wa-gateway (otorisasi via token, tanpa login)
 Route::post('/wa/inbound', [\App\Http\Controllers\WaController::class, 'inbound']);
+// Status keterkiriman (delivered/read) dari sidecar
+Route::post('/wa/receipt', [\App\Http\Controllers\WaController::class, 'receipt']);

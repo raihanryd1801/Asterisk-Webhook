@@ -86,7 +86,7 @@
                 <div class="w-8 h-8 rounded-lg bg-brand-500 flex items-center justify-center text-white"><i class="fa-solid fa-headset text-base"></i></div>
                 <div class="flex flex-col">
                     <span class="text-lg font-bold text-white tracking-wider leading-tight">SKYKOM</span>
-                    <span class="text-[10px] text-slate-400">PT Dankom Mitra Abadi</span>
+                    <span class="text-[10px] text-slate-400">PT Yesta Palguna Abadi</span>
                 </div>
             </div>
         </div>
@@ -100,6 +100,10 @@
                 <a href="{{ route('dashboard.workspace', $profileExt, false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('dashboard.workspace') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
     <i class="fa-solid fa-border-all w-5 text-center"></i> Workspace
 </a>
+                <a href="{{ route('crm.whatsapp.inbox', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('crm.whatsapp.inbox') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
+                    <i class="fa-brands fa-whatsapp w-5 text-center"></i> Inbox WA
+                    <span id="wa-unread-badge" class="ml-auto bg-red-500 text-white text-[10px] font-bold min-w-[20px] h-5 px-1 rounded-full items-center justify-center" style="display: none;">0</span>
+                </a>
             @else
                 <p class="px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-3 mt-2">Main Menu</p>
                 <a href="{{ route('dashboard.overview', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('dashboard.overview') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
@@ -316,9 +320,9 @@
 
     @yield('scripts')
 
-    @if(in_array($userType, ['admin', 'supervisor']))
+    @if(in_array($userType, ['admin', 'supervisor', 'agent']))
     <script>
-    // Badge unread WhatsApp di sidebar (sesi milik sendiri)
+    // Badge unread WhatsApp di sidebar (sesi sendiri, atau sesi SPV bersama untuk agent)
     (function () {
         const badge = document.getElementById('wa-unread-badge');
         if (!badge) return;

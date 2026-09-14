@@ -65,9 +65,10 @@ class ProcessWaBlast implements ShouldQueue
                             'jid_server' => $existing?->jid_server ?? 's.whatsapp.net',
                             'name' => $existing?->name ?? $t->name,
                             'customer_id' => $t->id,
+                            'replied_by_label' => 'Blast ' . ($log->bucket ?? '') . ' oleh ' . ($log->sender ?? 'SPV'),
                             'message' => $log->message,
+                            'external_id' => $result['id'],
                             'occurred_at' => now(),
-                            'read_at' => now(),
                         ]);
                     } catch (\Throwable $e) {
                         Log::warning("WA blast #{$log->id} gagal catat inbox {$t->phone}: " . $e->getMessage());

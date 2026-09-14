@@ -8,8 +8,34 @@ class WaMessage extends Model
 {
     protected $fillable = [
         'session_id', 'direction', 'phone', 'jid_server', 'name', 'customer_id',
+        'replied_by_agent_id', 'replied_by_label',
         'message', 'media_path', 'media_mime', 'external_id', 'occurred_at', 'read_at',
+        'delivered_at',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'occurred_at' => 'datetime',
+            'read_at' => 'datetime',
+            'delivered_at' => 'datetime',
+        ];
+    }
+
+    /** Status centang pesan keluar: sent / delivered / read. */
+    public function getTickAttribute(): string
+    {
+        if ($this->direction !== 'out') {
+            return '';
+        }
+        if ($this->read_at) {
+            return 'read';
+        }
+        if ($this->delivered_at) {
+            return 'delivered';
+        }
+        return 'sent';
+    }
 
     public function getMediaUrlAttribute()
     {
@@ -36,14 +62,14 @@ class WaMessage extends Model
         };
     }
 
-    protected $casts = [
-        'occurred_at' => 'datetime',
-        'read_at' => 'datetime',
-    ];
-
     public function customer()
     {
         return $this->belongsTo(Customer::class);
+    }
+
+    public function repliedByAgent()
+    {
+        return $this->belongsTo(Agent::class, 'replied_by_agent_id');
     }
 
     /** Normalisasi nomor ke format 62xxxxxxxxxx untuk pencocokan. */

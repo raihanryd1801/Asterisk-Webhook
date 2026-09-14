@@ -30,7 +30,7 @@ if (!fs.existsSync(SESSIONS_DIR)) fs.mkdirSync(SESSIONS_DIR, { recursive: true }
 const sessions = new Map(); // id -> { sock, qr, status, phone, queue }
 
 const app = express();
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '12mb' }));
 
 // ---- auth sederhana antar service ----
 app.use((req, res, next) => {
@@ -186,6 +186,32 @@ async function startSession(id) {
     s.sock = sock;
 
     sock.ev.on('creds.update', saveCreds);
+
+    // Teruskan status keterkiriman pesan KELUAR kita ke Laravel
+    // (terkirim ke server / sampai ke HP / dibaca) agar UI bisa tampilkan centang.
+    sock.ev.on('message-receipt.update', (updates) => {
+        for (const u of updates || []) {
+            try {
+                if (!u.key?.fromMe || !u.key?.id) continue;
+                let stage = null;
+                if (u.receipt?.playedTimestamp || u.receipt?.readTimestamp) stage = 'read';
+                else if (u.receipt?.receiptTimestamp) stage = 'delivered';
+                if (!stage) continue;
+                fetch(`${LARAVEL_URL}/api/wa/receipt`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Gateway-Token': TOKEN,
+                    },
+                    body: JSON.stringify({
+                        session_id: id,
+                        message_id: u.key.id,
+                        stage,
+                    }),
+                }).catch(() => {});
+            } catch (e) {}
+        }
+    });
 
     // Teruskan pesan MASUK ke Laravel (abaikan pesan sendiri & status).
     // Media (gambar/video/dokumen/audio) diunduh lalu dikirim multipart.
@@ -392,19 +418,51 @@ app.post('/sessions/:id/send', async (req, res) => {
     if (!/^\d{9,16}$/.test(to)) {
         return res.status(422).json({ ok: false, message: 'Nomor tujuan tidak valid' });
     }
-    if (!message) {
+
+    const jid = `${to}@${server}`;
+    console.log(`[${id}] sending to ${jid}`);
+
+    // Media opsional (base64): { data, mimetype, filename, kind }
+    let media = null;
+    if (req.body.media && typeof req.body.media === 'object') {
+        const m = req.body.media;
+        if (typeof m.data === 'string' && m.data.length > 0 && m.data.length <= 12 * 1024 * 1024) {
+            try {
+                media = {
+                    buffer: Buffer.from(m.data, 'base64'),
+                    mimetype: String(m.mimetype || 'application/octet-stream').slice(0, 100),
+                    filename: String(m.filename || 'file').slice(0, 120),
+                    kind: ['image', 'video', 'document', 'audio'].includes(m.kind) ? m.kind : 'document',
+                };
+            } catch (e) {
+                return res.status(422).json({ ok: false, message: 'File media tidak valid' });
+            }
+        }
+    }
+
+    if (!message && !media) {
         return res.status(422).json({ ok: false, message: 'Pesan kosong' });
     }
 
-    const jid = `${to}@${server}`;
+    let sentId = null;
     s.queue = s.queue.then(async () => {
         await sleep(randDelay());
-        await s.sock.sendMessage(jid, { text: message });
+        let content;
+        if (media) {
+            if (media.kind === 'image') content = { image: media.buffer, caption: message || undefined, mimetype: media.mimetype };
+            else if (media.kind === 'video') content = { video: media.buffer, caption: message || undefined, mimetype: media.mimetype };
+            else if (media.kind === 'audio') content = { audio: media.buffer, mimetype: media.mimetype, ptt: true };
+            else content = { document: media.buffer, caption: message || undefined, mimetype: media.mimetype, fileName: media.filename };
+        } else {
+            content = { text: message };
+        }
+        const sent = await s.sock.sendMessage(jid, content);
+        sentId = sent?.key?.id || null;
     });
 
     try {
         await s.queue;
-        res.json({ ok: true, to });
+        res.json({ ok: true, to, jid, id: sentId });
     } catch (e) {
         res.status(502).json({ ok: false, to, message: e.message || 'Gagal kirim' });
     }
@@ -412,4 +470,20 @@ app.post('/sessions/:id/send', async (req, res) => {
 
 app.listen(PORT, '127.0.0.1', () => {
     console.log(`WA gateway listening on 127.0.0.1:${PORT}`);
+    // Pulihkan sesi yang pernah terhubung agar tidak perlu scan ulang tiap restart
+    try {
+        const entries = fs.readdirSync(SESSIONS_DIR, { withFileTypes: true });
+        for (const e of entries) {
+            if (!e.isDirectory()) continue;
+            const id = decodeURIComponent(e.name);
+            const hasCreds = fs.existsSync(path.join(SESSIONS_DIR, e.name, 'creds.json'));
+            if (hasCreds) {
+                startSession(id).catch((err) =>
+                    console.error(`[${id}] auto-restore failed:`, err.message)
+                );
+            }
+        }
+    } catch (e) {
+        console.error('auto-restore failed:', e.message);
+    }
 });
