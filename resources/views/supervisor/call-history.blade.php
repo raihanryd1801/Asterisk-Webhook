@@ -131,6 +131,7 @@
             <thead class="bg-slate-50/50 border-b border-slate-100">
                 <tr class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
                     <th class="px-6 py-4">Waktu</th>
+                    <th class="px-6 py-4">Agent</th>
                     <th class="px-6 py-4">Asal (SRC)</th>
                     <th class="px-6 py-4">Tujuan (DST)</th>
                     <th class="px-6 py-4">Status</th>
@@ -146,6 +147,7 @@
                 <template x-for="(log, index) in logs" :key="log.uniqueid || index">
                     <tr class="hover:bg-slate-50/70 transition-colors">
                         <td class="px-6 py-4 text-slate-600 num text-xs" x-text="log.calldate"></td>
+                        <td class="px-6 py-4 text-sm font-medium text-slate-800" x-text="log.agent_name || '-'"></td>
                         <td class="px-6 py-4 font-mono font-medium text-slate-800" x-text="log.src"></td>
                         <td class="px-6 py-4 font-mono text-brand-600" x-text="log.dst"></td>
                         <td class="px-6 py-4">

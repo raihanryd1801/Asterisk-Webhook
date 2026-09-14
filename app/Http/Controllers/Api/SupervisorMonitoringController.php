@@ -416,6 +416,22 @@ class SupervisorMonitoringController extends Controller
         return $log;
     });
 
+    // Nama agent penelepon: sisi ext (src outbound / dst inbound) dipetakan
+    // sekali via tabel agents, fallback ke cnam CDR.
+    $agentNames = \App\Models\Agent::pluck('name', 'extension')->toArray();
+    $paginatedLogs->getCollection()->transform(function ($log) use ($agentNames) {
+        $ext = null;
+        if (isset($agentNames[$log->src])) {
+            $ext = $log->src;
+        } elseif (isset($agentNames[$log->dst])) {
+            $ext = $log->dst;
+        }
+        $log->agent_name = $ext !== null
+            ? $agentNames[$ext]
+            : (trim((string) ($log->cnam ?? '')) !== '' ? $log->cnam : '-');
+        return $log;
+    });
+
     return response()->json([
         'status' => 'success',
         'data'   => $paginatedLogs

@@ -320,6 +320,31 @@
 
     @yield('scripts')
 
+    <script>
+    // 419 global: submit Turbo yang kena Page Expired -> reload sekali untuk
+    // token fresh. Guard anti-loop: kalau habis reload masih 419 dalam 15 detik,
+    // berarti sesi mati total -> lempar ke halaman login.
+    document.addEventListener('turbo:submit-end', (e) => {
+        try {
+            const status = e.detail && e.detail.fetchResponse
+                ? e.detail.fetchResponse.statusCode
+                : (e.detail && e.detail.formSubmission && e.detail.formSubmission.result && e.detail.formSubmission.result.fetchResponse
+                    ? e.detail.formSubmission.result.fetchResponse.statusCode : null);
+            if (status !== 419) return;
+            const last = parseInt(sessionStorage.getItem('turbo419at') || '0', 10);
+            if (Date.now() - last < 15000) {
+                sessionStorage.removeItem('turbo419at');
+                window.location.href = '/login';
+                return;
+            }
+            sessionStorage.setItem('turbo419at', String(Date.now()));
+            window.location.reload();
+        } catch (err) {
+            window.location.reload();
+        }
+    });
+    </script>
+
     @if(in_array($userType, ['admin', 'supervisor', 'agent']))
     <script>
     // Badge unread WhatsApp di sidebar (sesi sendiri, atau sesi SPV bersama untuk agent)
