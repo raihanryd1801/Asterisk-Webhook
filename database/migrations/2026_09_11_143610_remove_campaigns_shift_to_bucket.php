@@ -11,6 +11,11 @@ return new class extends Migration
         // Blast log pindah dari campaign_id ke bucket (baris lama: 0 rows, aman)
         $this->dropForeignIfExists('blast_logs', 'campaign_id');
         Schema::table('blast_logs', function (Blueprint $table) {
+            // Lepas index yang merujuk campaign_id dulu (wajib di sqlite rebuild)
+            try {
+                $table->dropIndex(['campaign_id', 'status']);
+            } catch (\Throwable $e) {
+            }
             if (Schema::hasColumn('blast_logs', 'campaign_id')) {
                 $table->dropColumn('campaign_id');
             }
@@ -22,6 +27,10 @@ return new class extends Migration
         // Customers: lepas FK campaign, hapus kolomnya
         $this->dropForeignIfExists('customers', 'campaign_id');
         Schema::table('customers', function (Blueprint $table) {
+            try {
+                $table->dropIndex(['campaign_id', 'collector_id']);
+            } catch (\Throwable $e) {
+            }
             if (Schema::hasColumn('customers', 'campaign_id')) {
                 $table->dropColumn('campaign_id');
             }
@@ -32,6 +41,18 @@ return new class extends Migration
 
     protected function dropForeignIfExists(string $table, string $column): void
     {
+        // information_schema hanya ada di MySQL — di driver lain (mis. sqlite
+        // saat testing) cukup coba lepas FK dan abaikan bila tidak ada.
+        if (\Illuminate\Support\Facades\DB::getDriverName() !== 'mysql') {
+            try {
+                Schema::table($table, function (Blueprint $table) use ($column) {
+                    $table->dropForeign([$column]);
+                });
+            } catch (\Throwable $e) {
+            }
+            return;
+        }
+
         $db = \Illuminate\Support\Facades\DB::getDatabaseName();
         $fk = \Illuminate\Support\Facades\DB::table('information_schema.KEY_COLUMN_USAGE')
             ->where('TABLE_SCHEMA', $db)

@@ -9,16 +9,28 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('customers', function (Blueprint $table) {
-            $table->renameColumn('payment_date', 'last_payment_date');
-            $table->string('payment_proof')->nullable()->after('last_payment_date');
+            if (Schema::hasColumn('customers', 'payment_date')) {
+                $table->renameColumn('payment_date', 'last_payment_date');
+            } elseif (!Schema::hasColumn('customers', 'last_payment_date')) {
+                // Fresh install: kolom payment_date tidak pernah ada
+                // (create table versi final langsung pakai last_payment_date).
+                $table->timestamp('last_payment_date')->nullable();
+            }
+            if (!Schema::hasColumn('customers', 'payment_proof')) {
+                $table->string('payment_proof')->nullable()->after('last_payment_date');
+            }
         });
     }
 
     public function down(): void
     {
         Schema::table('customers', function (Blueprint $table) {
-            $table->renameColumn('last_payment_date', 'payment_date');
-            $table->dropColumn('payment_proof');
+            if (Schema::hasColumn('customers', 'payment_date')) {
+                $table->renameColumn('last_payment_date', 'payment_date');
+            }
+            if (Schema::hasColumn('customers', 'payment_proof')) {
+                $table->dropColumn('payment_proof');
+            }
         });
     }
 };
