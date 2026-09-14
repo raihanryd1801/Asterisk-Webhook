@@ -96,7 +96,7 @@
             </div>
             <div>
                 <p class="text-xl font-bold text-yellow-600 tnum">{{ $ptpStats['active'] }}</p>
-                <p class="text-xs text-slate-500 mt-0.5">Active PTP</p>
+                <p class="text-xs text-slate-500 mt-0.5">New PTP</p>
             </div>
         </div>
 
@@ -115,8 +115,8 @@
                 <i class="fa-solid fa-xmark-circle text-sm"></i>
             </div>
             <div>
-                <p class="text-xl font-bold text-red-600 tnum">{{ $ptpStats['broken_today'] }}</p>
-                <p class="text-xs text-slate-500 mt-0.5">PTP broken today</p>
+                <p class="text-xl font-bold text-red-600 tnum">{{ $ptpStats['rolling_today'] }}</p>
+                <p class="text-xs text-slate-500 mt-0.5">PTP rolling today</p>
             </div>
         </div>
     </div>
@@ -247,7 +247,7 @@
             <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
                 <div class="p-4 rounded-2xl bg-green-50 text-center">
                     <div class="text-2xl font-bold text-green-600 tnum">{{ $ptpStats['active'] }}</div>
-                    <div class="text-xs text-green-600 mt-1">Active PTP</div>
+                    <div class="text-xs text-green-600 mt-1">New PTP</div>
                 </div>
                 <div class="p-4 rounded-2xl bg-red-50 text-center">
                     <div class="text-2xl font-bold text-red-600 tnum">{{ $ptpStats['overdue'] }}</div>
@@ -258,8 +258,8 @@
                     <div class="text-xs text-emerald-600 mt-1">Kept today</div>
                 </div>
                 <div class="p-4 rounded-2xl bg-rose-50 text-center">
-                    <div class="text-2xl font-bold text-rose-600 tnum">{{ $ptpStats['broken_today'] }}</div>
-                    <div class="text-xs text-rose-600 mt-1">Broken today</div>
+                    <div class="text-2xl font-bold text-rose-600 tnum">{{ $ptpStats['rolling_today'] }}</div>
+                    <div class="text-xs text-rose-600 mt-1">Rolling today</div>
                 </div>
             </div>
         </div>

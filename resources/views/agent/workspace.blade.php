@@ -214,7 +214,13 @@
                                         x-text="formatCustomerStatus(customer.status)"></span>
                                 </div>
                                 <div class="flex items-center gap-3 mt-1.5 text-xs text-slate-500 flex-wrap">
-                                    <span class="font-mono flex items-center gap-1" x-text="customer.phone"></span>
+                                    <span class="font-mono flex items-center gap-1" x-text="customer.phone" title="Nomor Utama / Pribadi"></span>
+                                    <template x-if="customer.office_phone">
+                                        <span class="font-mono flex items-center gap-1" x-text="'Kantor: ' + customer.office_phone"></span>
+                                    </template>
+                                    <template x-if="customer.emergency_phone">
+                                        <span class="font-mono flex items-center gap-1" x-text="'Darurat: ' + customer.emergency_phone"></span>
+                                    </template>
                                     <template x-if="customer.email">
                                         <span class="flex items-center gap-1" x-text="customer.email"></span>
                                     </template>
@@ -256,18 +262,34 @@
                                 </template>
                             </div>
 
-                            <div class="shrink-0 flex items-center gap-2">
+                            <div class="shrink-0 flex items-center gap-2 flex-wrap justify-end">
                                 <button @click="openPtpModal(customer)"
                                     class="bg-amber-500 hover:bg-amber-600 text-white text-xs px-3 py-2 rounded-lg transition shadow-sm flex items-center gap-1.5 font-medium whitespace-nowrap"
                                     :title="'Buat PTP untuk ' + customer.name">
                                     <i class="fa-solid fa-handshake"></i> PTP
                                 </button>
-                                <button @click="callCustomer(customer.phone, customer.name)"
+                                <button @click="callCustomer(customer.phone, customer.name + ' (Utama)')"
                                     :disabled="currentStatus !== 'online'"
                                     class="bg-brand-600 hover:bg-brand-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:hover:bg-slate-200 text-white text-xs px-3 py-2 rounded-lg transition shadow-sm flex items-center gap-1.5 font-medium whitespace-nowrap"
-                                    :title="currentStatus !== 'online' ? 'Status harus Online untuk menelepon' : 'Panggil ' + customer.name">
-                                    <i class="fa-solid fa-phone"></i> Call
+                                    :title="currentStatus !== 'online' ? 'Status harus Online untuk menelepon' : 'Panggil nomor utama ' + customer.name">
+                                    <i class="fa-solid fa-phone"></i> Call Utama
                                 </button>
+                                <template x-if="customer.office_phone">
+                                    <button @click="callCustomer(customer.office_phone, customer.name + ' (Kantor)')"
+                                        :disabled="currentStatus !== 'online'"
+                                        class="bg-sky-600 hover:bg-sky-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:hover:bg-slate-200 text-white text-xs px-3 py-2 rounded-lg transition shadow-sm flex items-center gap-1.5 font-medium whitespace-nowrap"
+                                        :title="'Panggil nomor kantor ' + customer.name">
+                                        <i class="fa-solid fa-building"></i> Kantor
+                                    </button>
+                                </template>
+                                <template x-if="customer.emergency_phone">
+                                    <button @click="callCustomer(customer.emergency_phone, customer.name + ' (Darurat)')"
+                                        :disabled="currentStatus !== 'online'"
+                                        class="bg-rose-600 hover:bg-rose-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:hover:bg-slate-200 text-white text-xs px-3 py-2 rounded-lg transition shadow-sm flex items-center gap-1.5 font-medium whitespace-nowrap"
+                                        :title="'Panggil emergency contact ' + customer.name">
+                                        <i class="fa-solid fa-phone-volume"></i> Darurat
+                                    </button>
+                                </template>
                             </div>
                         </div>
                     </div>
@@ -873,15 +895,15 @@
             ptpStatusLabel(ptp) {
                 if (!ptp) return '';
                 if (ptp.status === 'kept') return 'Ditepati';
-                if (ptp.status === 'broken') return 'Gagal';
+                if (ptp.status === 'rolling' || ptp.status === 'broken') return 'Rolling';
                 const today = new Date().toISOString().split('T')[0];
-                return (ptp.date && ptp.date < today) ? 'Overdue' : 'Aktif';
+                return (ptp.date && ptp.date < today) ? 'Overdue' : 'New';
             },
 
             ptpBadgeClass(ptp) {
                 if (!ptp) return 'bg-slate-50 text-slate-600 border-slate-200';
                 if (ptp.status === 'kept') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-                if (ptp.status === 'broken') return 'bg-rose-50 text-rose-700 border-rose-200';
+                if (ptp.status === 'rolling' || ptp.status === 'broken') return 'bg-rose-50 text-rose-700 border-rose-200';
                 const today = new Date().toISOString().split('T')[0];
                 return (ptp.date && ptp.date < today)
                     ? 'bg-red-50 text-red-700 border-red-200'

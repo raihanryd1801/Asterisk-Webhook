@@ -59,6 +59,13 @@
                     <i class="fa-solid fa-file-import"></i> Import
                 </button>
                 <button
+                    @click="openAutoAssignAgentModal()"
+                    class="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-2"
+                    title="Bagi customer otomatis ke beberapa agent (round-robin)"
+                >
+                    <i class="fa-solid fa-users-gear"></i> Auto Assign Agent
+                </button>
+                <button
                     @click="openCreateModal()"
                     class="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-2"
                 >
@@ -134,7 +141,7 @@
                         <option value="handed_over">Sudah Diserahkan</option>
                         <option value="returned">Ditarik Kembali</option>
                     </select>
-                    <label class="inline-flex items-center gap-1.5 text-xs text-slate-600 border border-slate-300 rounded-lg px-3 py-2 cursor-pointer whitespace-nowrap" title="Hanya PTP broken / NPL belum lunas / DPD ≥ 120">
+                    <label class="inline-flex items-center gap-1.5 text-xs text-slate-600 border border-slate-300 rounded-lg px-3 py-2 cursor-pointer whitespace-nowrap" title="Hanya PTP rolling / NPL belum lunas / DPD ≥ 120">
                         <input type="checkbox" x-model="badDebtOnly" @change="fetchCustomers()" class="rounded border-slate-300 text-brand-600 focus:ring-brand-500">
                         Bad debt saja
                     </label>
@@ -152,6 +159,17 @@
                 <button @click="bulkAssign()" :disabled="bulkLoading || !bulkCollectorId" class="bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
                     <i class="fa-solid" :class="bulkLoading ? 'fa-spinner fa-spin' : 'fa-bullseye'"></i>
                     <span x-text="bulkLoading ? 'Assign...' : 'Assign Collector'"></span>
+                </button>
+                <span class="hidden md:inline text-slate-300">|</span>
+                <select x-model="bulkAgentId" class="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+                    <option value="">Pilih Agent...</option>
+                    <template x-for="a in agents" :key="a.id">
+                        <option :value="a.id" x-text="a.name + ' (Ext: ' + a.extension + ')'"></option>
+                    </template>
+                </select>
+                <button @click="bulkAssignAgent()" :disabled="bulkAgentLoading || !bulkAgentId" class="bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2" title="Assign customer terpilih ke 1 agent">
+                    <i class="fa-solid" :class="bulkAgentLoading ? 'fa-spinner fa-spin' : 'fa-user-check'"></i>
+                    <span x-text="bulkAgentLoading ? 'Assign...' : 'Assign Agent'"></span>
                 </button>
                 <span class="hidden md:inline text-slate-300">|</span>
                 <button @click="markHandoverReady()" :disabled="handoverLoading" class="bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2" title="Tandai case busuk siap dilempar ke pihak ketiga">
@@ -202,6 +220,15 @@
             <!-- Kolom Kontak -->
             <td class="px-4 py-3">
                 <div class="text-sm text-slate-700 font-mono" x-text="customer.phone"></div>
+                <template x-if="customer.office_phone">
+                    <div class="text-xs text-slate-500 font-mono" x-text="'Kantor: ' + customer.office_phone"></div>
+                </template>
+                <template x-if="customer.emergency_phone">
+                    <div class="text-xs text-slate-500 font-mono" x-text="'Darurat: ' + customer.emergency_phone"></div>
+                </template>
+                <template x-if="customer.gender">
+                    <div class="text-xs text-slate-500" x-text="customer.gender === 'P' ? 'Perempuan' : 'Laki-laki'"></div>
+                </template>
                 <template x-if="customer.email">
                     <div class="text-xs text-slate-500" x-text="customer.email"></div>
                 </template>
@@ -383,8 +410,27 @@
                     </div>
                     
                     <div>
-                        <label class="block text-sm font-medium text-slate-700 mb-1">Nomor Telepon <span class="text-red-500">*</span></label>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Nomor Utama / Pribadi <span class="text-red-500">*</span></label>
                         <input type="text" name="phone" x-model="form.phone" required class="w-full border border-slate-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-brand-500 focus:border-transparent" placeholder="08xxxxxxxxxx">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="col-span-2">
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Jenis Kelamin</label>
+                            <select name="gender" x-model="form.gender" class="w-full border border-slate-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+                                <option value="">-</option>
+                                <option value="L">Laki-laki</option>
+                                <option value="P">Perempuan</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Nomor Kantor</label>
+                            <input type="text" name="office_phone" x-model="form.office_phone" class="w-full border border-slate-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-brand-500 focus:border-transparent" placeholder="021xxxxxxx">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Nomor Emergency Contact</label>
+                            <input type="text" name="emergency_phone" x-model="form.emergency_phone" class="w-full border border-slate-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-brand-500 focus:border-transparent" placeholder="08xxxxxxxxxx">
+                        </div>
                     </div>
                     
                     <div>
@@ -572,7 +618,7 @@
                     </button>
                 </div>
                 <form @submit.prevent="submitImport()" class="p-4 space-y-4">
-                    <p class="text-xs text-slate-500">Format kolom: <span class="font-mono">name, phone, email, company, status, total_amount, paid_amount, discount_amount, payment_status, due_date (YYYY-MM-DD), notes</span>. Baris dengan phone yang sudah ada akan di-update.</p>
+                    <p class="text-xs text-slate-500">Format kolom: <span class="font-mono">name, phone, gender (L/P), office_phone, emergency_phone, email, company, status, total_amount, paid_amount, discount_amount, payment_status, due_date (YYYY-MM-DD), notes</span>. Baris dengan phone yang sudah ada akan di-update.</p>
                     <input type="file" x-ref="importFile" accept=".xlsx,.xls,.csv" class="w-full border border-slate-300 rounded-lg px-4 py-2 text-sm" required>
                     <div x-show="importResult" class="text-xs rounded-lg p-3" :class="importResult?.failed > 0 ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'" x-text="importResult ? ('Import selesai: ' + importResult.imported + ' baru, ' + importResult.updated + ' update, ' + importResult.failed + ' gagal.') : ''"></div>
                     <div class="flex justify-end gap-3 pt-4 border-t border-slate-200">
@@ -609,13 +655,70 @@
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-slate-700 mb-1">Catatan Serah Terima</label>
-                        <textarea x-model="handoverForm.handover_notes" rows="3" placeholder="cth: NPL + PTP broken, sudah 3x visit..." class="w-full border border-slate-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent"></textarea>
+                        <textarea x-model="handoverForm.handover_notes" rows="3" placeholder="cth: NPL + PTP rolling, sudah 3x visit..." class="w-full border border-slate-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent"></textarea>
                     </div>
                     <div class="flex justify-end gap-3 pt-4 border-t border-slate-200">
                         <button type="button" @click="closeHandoverModal()" class="px-4 py-2 border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition-colors">Batal</button>
                         <button type="submit" :disabled="handoverLoading" class="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm hover:bg-orange-700 transition-colors disabled:opacity-50">
                             <span x-show="!handoverLoading">Serahkan Sekarang</span>
                             <span x-show="handoverLoading" class="flex items-center gap-2"><i class="fa-solid fa-spinner fa-spin"></i> Memproses...</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="showAutoAssignAgentModal" class="fixed inset-0 z-50 overflow-y-auto" style="display: none;" x-cloak>
+        <div class="flex min-h-full items-center justify-center p-4">
+            <div class="fixed inset-0 bg-black/50" @click="closeAutoAssignAgentModal()"></div>
+            <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+                <div class="flex items-center justify-between p-4 border-b border-slate-200">
+                    <h3 class="text-lg font-semibold text-slate-900">Auto Assign ke Agent</h3>
+                    <button @click="closeAutoAssignAgentModal()" class="text-slate-400 hover:text-slate-600 transition-colors">
+                        <i class="fa-solid fa-xmark text-xl"></i>
+                    </button>
+                </div>
+                <form @submit.prevent="submitAutoAssignAgent()" class="p-4 space-y-4">
+                    <p class="text-xs text-slate-500">Customer dibagi rata (<span class="font-semibold">round-robin</span>) ke agent terpilih. Cocok untuk 1000+ data.</p>
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="block text-sm font-medium text-slate-700">Agent Tujuan <span class="text-red-500">*</span></label>
+                            <button type="button" @click="toggleAllAutoAssignAgents()" class="text-xs text-brand-600 hover:text-brand-800 underline" x-text="autoAssignAgentIds.length === agents.length ? 'Batalkan semua' : 'Pilih semua'"></button>
+                        </div>
+                        <div class="max-h-40 overflow-y-auto border border-slate-200 rounded-lg p-2 space-y-1">
+                            <template x-for="a in agents" :key="a.id">
+                                <label class="flex items-center gap-2 text-sm text-slate-700 px-2 py-1 rounded hover:bg-slate-50 cursor-pointer">
+                                    <input type="checkbox" :value="a.id" x-model="autoAssignAgentIds" class="rounded border-slate-300 text-brand-600 focus:ring-brand-500">
+                                    <span x-text="a.name + ' (Ext: ' + a.extension + ')'"></span>
+                                </label>
+                            </template>
+                            <template x-if="agents.length === 0">
+                                <p class="text-xs text-slate-400 p-2">Belum ada agent.</p>
+                            </template>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Filter Bucket <span class="text-slate-400 font-normal">(kosongkan = semua)</span></label>
+                        <div class="flex flex-wrap gap-1.5">
+                            <template x-for="b in ['Current', 'Bucket 1', 'Bucket 2', 'Bucket 3', 'NPL']" :key="b">
+                                <label class="inline-flex items-center gap-1.5 text-xs border rounded-lg px-2.5 py-1.5 cursor-pointer transition-colors"
+                                    :class="autoAssignBuckets.includes(b) ? 'bg-brand-50 border-brand-300 text-brand-800' : 'border-slate-300 text-slate-600'">
+                                    <input type="checkbox" :value="b" x-model="autoAssignBuckets" class="rounded border-slate-300 text-brand-600 focus:ring-brand-500">
+                                    <span x-text="b"></span>
+                                </label>
+                            </template>
+                        </div>
+                    </div>
+                    <label class="inline-flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                        <input type="checkbox" x-model="autoAssignOnlyUnassigned" class="rounded border-slate-300 text-brand-600 focus:ring-brand-500">
+                        Hanya yang belum di-assign
+                    </label>
+                    <div class="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                        <button type="button" @click="closeAutoAssignAgentModal()" class="px-4 py-2 border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition-colors">Batal</button>
+                        <button type="submit" :disabled="autoAssignLoading || autoAssignAgentIds.length === 0" class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm hover:bg-teal-700 transition-colors disabled:opacity-50">
+                            <span x-show="!autoAssignLoading">Bagi Otomatis</span>
+                            <span x-show="autoAssignLoading" class="flex items-center gap-2"><i class="fa-solid fa-spinner fa-spin"></i> Memproses...</span>
                         </button>
                     </div>
                 </form>
@@ -692,7 +795,9 @@
         statuses: @json($statuses),
         collectors: @json($collectors ?? []),
         indexUrl: '{{ route('crm.customers.index') }}',
-        bulkAssignUrl: '{{ url('/dashboard/crm/collection/bulk-assign') }}',
+        bulkAssignUrl: '{{ url('/dashboard/crm/collection/bulk-assign-collector') }}',
+        bulkAssignAgentUrl: '{{ url('/dashboard/crm/customers/bulk-assign-agent') }}',
+        autoAssignAgentUrl: '{{ url('/dashboard/crm/customers/auto-assign-agent') }}',
         recalcUrl: '{{ url('/dashboard/crm/collection/recalculate-buckets') }}',
         exportUrl: '{{ url('/dashboard/crm/customers/export') }}',
         importUrl: '{{ url('/dashboard/crm/customers/import') }}',

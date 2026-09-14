@@ -10,7 +10,8 @@ class Customer extends Model
     use HasFactory;
 
     protected $fillable = [
-        'name', 'phone', 'email', 'company', 'status', 'notes',
+        'name', 'phone', 'office_phone', 'emergency_phone',
+        'gender', 'email', 'company', 'status', 'notes',
         'assigned_agent_id', 'created_by', 'last_contacted_at',
         'total_amount', 'paid_amount', 'discount_amount',
         'payment_status', 'payment_notes', 'last_payment_date', 'payment_proof',
@@ -49,6 +50,8 @@ class Customer extends Model
         return $query->where(function ($q) use ($search) {
             $q->where('name', 'like', "%{$search}%")
               ->orWhere('phone', 'like', "%{$search}%")
+              ->orWhere('office_phone', 'like', "%{$search}%")
+              ->orWhere('emergency_phone', 'like', "%{$search}%")
               ->orWhere('email', 'like', "%{$search}%")
               ->orWhere('company', 'like', "%{$search}%");
         });
@@ -96,9 +99,10 @@ class Customer extends Model
 
     public function scopeBadDebt($query)
     {
-        // Kandidat busuk: PTP broken ATAU NPL belum lunas ATAU DPD sangat tua
+        // Kandidat busuk: PTP rolling (termasuk legacy broken) ATAU NPL belum lunas ATAU DPD sangat tua
         return $query->where(function ($q) {
-            $q->whereJsonContains('promise_to_pay->status', 'broken')
+            $q->whereJsonContains('promise_to_pay->status', 'rolling')
+              ->orWhereJsonContains('promise_to_pay->status', 'broken')
               ->orWhere(function ($sq) {
                   $sq->where('bucket', 'NPL')->whereIn('payment_status', ['unpaid', 'partial']);
               })
@@ -135,8 +139,11 @@ class Customer extends Model
             'amount' => 0,
             'date' => null,
             'note' => '',
-            'status' => 'pending', // pending, kept, broken
+            'status' => 'new', // new, kept, rolling (legacy: pending=>new, broken=>rolling)
             'created_at' => null,
+            'extend_count' => 0,
+            'previous_date' => null,
+            'extended_at' => null,
         ], (array) $value);
     }
 
@@ -146,8 +153,9 @@ class Customer extends Model
             'amount' => $amount,
             'date' => $date,
             'note' => $note,
-            'status' => 'pending',
+            'status' => 'new',
             'created_at' => now()->toISOString(),
+            'extend_count' => 0,
         ];
         $this->save();
     }
@@ -164,23 +172,49 @@ class Customer extends Model
         }
     }
 
-    public function markPromiseBroken()
+    /** Janji gagal / perlu dijadwal ulang (pengganti status broken lama). */
+    public function markPromiseRolling()
     {
         $ptp = $this->getRawOriginal('promise_to_pay');
         if ($ptp) {
             $ptp = is_string($ptp) ? json_decode($ptp, true) : (is_object($ptp) ? (array) $ptp : $ptp);
-            $ptp['status'] = 'broken';
-            $ptp['broken_at'] = now()->toISOString();
+            $ptp['status'] = 'rolling';
+            $ptp['rolled_at'] = now()->toISOString();
             $this->promise_to_pay = $ptp;
             $this->save();
         }
+    }
+
+    /**
+     * Request extend 1x: perpanjang tanggal janji, status kembali new.
+     * Maksimal 1x per PTP (extend_count >= 1 ditolak).
+     */
+    public function requestPromiseExtend($date, $note = '')
+    {
+        $ptp = $this->getRawOriginal('promise_to_pay');
+        $ptp = $ptp
+            ? (is_string($ptp) ? json_decode($ptp, true) : (is_object($ptp) ? (array) $ptp : $ptp))
+            : [];
+        if (($ptp['extend_count'] ?? 0) >= 1) {
+            throw new \RuntimeException('PTP ini sudah pernah di-extend 1x. Buat PTP baru bila perlu.');
+        }
+        $ptp['previous_date'] = $ptp['date'] ?? null;
+        $ptp['date'] = $date;
+        if ($note !== '') {
+            $ptp['note'] = $note;
+        }
+        $ptp['status'] = 'new';
+        $ptp['extend_count'] = ($ptp['extend_count'] ?? 0) + 1;
+        $ptp['extended_at'] = now()->toISOString();
+        $this->promise_to_pay = $ptp;
+        $this->save();
     }
 
     public function hasActivePromise()
     {
         $ptp = $this->promise_to_pay;
         if (is_object($ptp)) $ptp = (array) $ptp;
-        return $ptp && $ptp['status'] === 'pending' && $ptp['date'] >= now()->toDateString();
+        return $ptp && in_array($ptp['status'], ['new', 'pending'], true) && $ptp['date'] >= now()->toDateString();
     }
 
     public function recalculateBucket()

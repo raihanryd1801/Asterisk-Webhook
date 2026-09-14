@@ -295,6 +295,8 @@ Route::prefix('dashboard')->group(function () {
         Route::post('/crm/collection/recalculate-buckets', [CustomerController::class, 'recalculateBuckets'])->name('crm.collection.recalculate');
         Route::post('/crm/collection/bulk-assign-collector', [CustomerController::class, 'bulkAssignCollector'])->name('crm.collection.bulk-assign-collector');
         Route::post('/crm/collection/auto-assign', [CustomerController::class, 'autoAssignCollectors'])->name('crm.collection.auto-assign');
+        Route::post('/crm/customers/bulk-assign-agent', [CustomerController::class, 'bulkAssignAgent'])->name('crm.customers.bulk-assign-agent');
+        Route::post('/crm/customers/auto-assign-agent', [CustomerController::class, 'autoAssignAgents'])->name('crm.customers.auto-assign-agent');
         Route::get('/crm/collection/blast/preview', [CustomerController::class, 'blastBucketPreview'])->name('crm.collection.blast.preview');
         Route::post('/crm/collection/blast/send', [CustomerController::class, 'blastBucketSend'])->name('crm.collection.blast.send');
         Route::post('/crm/collection/sla-check', [CustomerController::class, 'slaCheck'])->name('crm.collection.sla-check');

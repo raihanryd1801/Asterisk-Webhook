@@ -18,9 +18,16 @@ window.crmCustomers = function () {
         selectedIds: [],
         bulkCollectorId: '',
         bulkLoading: false,
+        bulkAgentId: '',
+        bulkAgentLoading: false,
+        showAutoAssignAgentModal: false,
+        autoAssignAgentIds: [],
+        autoAssignBuckets: [],
+        autoAssignOnlyUnassigned: true,
+        autoAssignLoading: false,
         recalcLoading: false,
         modalTitle: '',
-        form: { id: '', name: '', phone: '', email: '', company: '', status: 'new', assigned_agent_id: '', notes: '', total_amount: '', paid_amount: '', discount_amount: '', payment_status: 'unpaid', payment_notes: '', due_date: '', collector_id: '', risk_level: 'low' },
+        form: { id: '', name: '', phone: '', office_phone: '', emergency_phone: '', gender: '', email: '', company: '', status: 'new', assigned_agent_id: '', notes: '', total_amount: '', paid_amount: '', discount_amount: '', payment_status: 'unpaid', payment_notes: '', due_date: '', collector_id: '', risk_level: 'low' },
         selectedCustomer: null,
         paymentStatusFilter: '',
         bucketFilter: '',
@@ -103,7 +110,7 @@ window.crmCustomers = function () {
 
         openCreateModal() {
             this.modalTitle = 'Tambah Customer';
-            this.form = { id: '', name: '', phone: '', email: '', company: '', status: 'new', assigned_agent_id: '', notes: '', total_amount: '', paid_amount: '', discount_amount: '', payment_status: 'unpaid', payment_notes: '', due_date: '', collector_id: '', risk_level: 'low' };
+            this.form = { id: '', name: '', phone: '', office_phone: '', emergency_phone: '', gender: '', email: '', company: '', status: 'new', assigned_agent_id: '', notes: '', total_amount: '', paid_amount: '', discount_amount: '', payment_status: 'unpaid', payment_notes: '', due_date: '', collector_id: '', risk_level: 'low' };
             this.showModal = true;
         },
 
@@ -113,6 +120,9 @@ window.crmCustomers = function () {
                 id: customer.id,
                 name: customer.name,
                 phone: customer.phone,
+                office_phone: customer.office_phone || '',
+                emergency_phone: customer.emergency_phone || '',
+                gender: customer.gender || '',
                 email: customer.email || '',
                 company: customer.company || '',
                 status: customer.status,
@@ -132,7 +142,7 @@ window.crmCustomers = function () {
 
         closeModal() {
             this.showModal = false;
-            this.form = { id: '', name: '', phone: '', email: '', company: '', status: 'new', assigned_agent_id: '', notes: '', total_amount: '', paid_amount: '', discount_amount: '', payment_status: 'unpaid', payment_notes: '', due_date: '', collector_id: '', risk_level: 'low' };
+            this.form = { id: '', name: '', phone: '', office_phone: '', emergency_phone: '', gender: '', email: '', company: '', status: 'new', assigned_agent_id: '', notes: '', total_amount: '', paid_amount: '', discount_amount: '', payment_status: 'unpaid', payment_notes: '', due_date: '', collector_id: '', risk_level: 'low' };
         },
 
         async submitForm() {
@@ -221,6 +231,7 @@ window.crmCustomers = function () {
         clearSelection() {
             this.selectedIds = [];
             this.bulkCollectorId = '';
+            this.bulkAgentId = '';
         },
 
         async bulkAssign() {
@@ -259,6 +270,103 @@ window.crmCustomers = function () {
                 alert('Terjadi kesalahan');
             } finally {
                 this.bulkLoading = false;
+            }
+        },
+
+        async bulkAssignAgent() {
+            if (!this.bulkAgentId) {
+                alert('Pilih agent dulu');
+                return;
+            }
+            if (this.selectedIds.length === 0) {
+                alert('Pilih minimal 1 customer');
+                return;
+            }
+            this.bulkAgentLoading = true;
+            try {
+                const response = await fetch(window.crmCustomerData.bulkAssignAgentUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        customer_ids: this.selectedIds,
+                        agent_id: this.bulkAgentId,
+                    })
+                });
+                const data = await response.json();
+                if (data.status === 'success') {
+                    alert(data.message);
+                    this.selectedIds = [];
+                    this.bulkAgentId = '';
+                    this.fetchCustomers(this.pagination.current_page || 1);
+                } else {
+                    alert(data.message || 'Error');
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Terjadi kesalahan');
+            } finally {
+                this.bulkAgentLoading = false;
+            }
+        },
+
+        openAutoAssignAgentModal() {
+            this.autoAssignAgentIds = (this.agents || []).map(a => a.id);
+            this.autoAssignBuckets = [];
+            this.autoAssignOnlyUnassigned = true;
+            this.showAutoAssignAgentModal = true;
+        },
+
+        closeAutoAssignAgentModal() {
+            this.showAutoAssignAgentModal = false;
+        },
+
+        toggleAllAutoAssignAgents() {
+            if (this.autoAssignAgentIds.length === (this.agents || []).length) {
+                this.autoAssignAgentIds = [];
+            } else {
+                this.autoAssignAgentIds = (this.agents || []).map(a => a.id);
+            }
+        },
+
+        async submitAutoAssignAgent() {
+            if (this.autoAssignAgentIds.length === 0) {
+                alert('Pilih minimal 1 agent');
+                return;
+            }
+            if (!confirm(`Bagi customer otomatis ke ${this.autoAssignAgentIds.length} agent?`)) return;
+            this.autoAssignLoading = true;
+            try {
+                const response = await fetch(window.crmCustomerData.autoAssignAgentUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        agent_ids: this.autoAssignAgentIds,
+                        buckets: this.autoAssignBuckets,
+                        only_unassigned: this.autoAssignOnlyUnassigned,
+                    })
+                });
+                const data = await response.json();
+                if (data.status === 'success') {
+                    this.closeAutoAssignAgentModal();
+                    this.fetchCustomers(this.pagination.current_page || 1);
+                    const summary = data.message + ' ' + (data.detail || []).map(d => `${d.agent}: ${d.assigned}`).join(' • ');
+                    this.openResultModal('Auto Assign Agent', summary, data.assignments || [], !!data.truncated);
+                } else {
+                    alert(data.message || 'Error');
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Terjadi kesalahan');
+            } finally {
+                this.autoAssignLoading = false;
             }
         },
 

@@ -207,6 +207,9 @@ class CustomerController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'phone' => 'required|string|max:20|unique:customers,phone',
+            'office_phone' => 'nullable|string|max:30',
+            'emergency_phone' => 'nullable|string|max:30',
+            'gender' => 'nullable|in:L,P',
             'email' => 'nullable|email|max:255',
             'company' => 'nullable|string|max:255',
             'status' => 'required|in:new,contacted,qualified,proposal,closed_won,closed_lost',
@@ -225,6 +228,9 @@ class CustomerController extends Controller
         $customer = Customer::create([
             'name' => $request->name,
             'phone' => $request->phone,
+            'office_phone' => $request->office_phone,
+            'emergency_phone' => $request->emergency_phone,
+            'gender' => $request->gender,
             'email' => $request->email,
             'company' => $request->company,
             'status' => $request->status,
@@ -265,6 +271,9 @@ class CustomerController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'phone' => 'required|string|max:20|unique:customers,phone,' . $customer->id,
+            'office_phone' => 'nullable|string|max:30',
+            'emergency_phone' => 'nullable|string|max:30',
+            'gender' => 'nullable|in:L,P',
             'email' => 'nullable|email|max:255',
             'company' => 'nullable|string|max:255',
             'status' => 'required|in:new,contacted,qualified,proposal,closed_won,closed_lost',
@@ -286,6 +295,9 @@ class CustomerController extends Controller
         $customer->update([
             'name' => $request->name,
             'phone' => $request->phone,
+            'office_phone' => $request->office_phone,
+            'emergency_phone' => $request->emergency_phone,
+            'gender' => $request->gender,
             'email' => $request->email,
             'company' => $request->company,
             'status' => $newStatus,
@@ -365,7 +377,7 @@ class CustomerController extends Controller
         $customers = Customer::where('assigned_agent_id', $agent->id)
             ->whereIn('status', ['new', 'contacted', 'qualified', 'proposal'])
             ->latest()
-            ->get(['id', 'name', 'phone', 'email', 'company', 'status', 'notes', 'last_contacted_at', 'total_amount', 'paid_amount', 'discount_amount', 'payment_status', 'payment_notes', 'last_payment_date', 'due_date', 'days_past_due', 'bucket', 'risk_level', 'promise_to_pay']);
+            ->get(['id', 'name', 'phone', 'office_phone', 'emergency_phone', 'gender', 'email', 'company', 'status', 'notes', 'last_contacted_at', 'total_amount', 'paid_amount', 'discount_amount', 'payment_status', 'payment_notes', 'last_payment_date', 'due_date', 'days_past_due', 'bucket', 'risk_level', 'promise_to_pay']);
 
         return response()->json([
             'status' => 'success',
@@ -464,18 +476,24 @@ class CustomerController extends Controller
             ->orderByDesc('collected')
             ->get();
 
-        // PTP Summary
+        // PTP Summary (status baru: new / kept / rolling)
         $ptpStats = [
-            'active' => Customer::whereJsonContains('promise_to_pay->status', 'pending')
+            'active' => Customer::where(function ($q) {
+                    $q->whereJsonContains('promise_to_pay->status', 'new')
+                      ->orWhereJsonContains('promise_to_pay->status', 'pending');
+                })
                 ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(promise_to_pay, '$.date')) >= ?", [now()->toDateString()])
                 ->count(),
             'kept_today' => Customer::whereJsonContains('promise_to_pay->status', 'kept')
                 ->whereRaw("DATE(JSON_UNQUOTE(JSON_EXTRACT(promise_to_pay, '$.kept_at'))) = ?", [now()->toDateString()])
                 ->count(),
-            'broken_today' => Customer::whereJsonContains('promise_to_pay->status', 'broken')
-                ->whereRaw("DATE(JSON_UNQUOTE(JSON_EXTRACT(promise_to_pay, '$.broken_at'))) = ?", [now()->toDateString()])
+            'rolling_today' => Customer::whereJsonContains('promise_to_pay->status', 'rolling')
+                ->whereRaw("DATE(JSON_UNQUOTE(JSON_EXTRACT(promise_to_pay, '$.rolled_at'))) = ?", [now()->toDateString()])
                 ->count(),
-            'overdue' => Customer::whereJsonContains('promise_to_pay->status', 'pending')
+            'overdue' => Customer::where(function ($q) {
+                    $q->whereJsonContains('promise_to_pay->status', 'new')
+                      ->orWhereJsonContains('promise_to_pay->status', 'pending');
+                })
                 ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(promise_to_pay, '$.date')) < ?", [now()->toDateString()])
                 ->count(),
         ];
@@ -674,25 +692,37 @@ class CustomerController extends Controller
     {
         $this->authorizeAccess();
 
-        $filter = $request->get('filter', 'active'); // active, kept, broken, overdue, all
+        $filter = $request->get('filter', 'new'); // new, kept, rolling, overdue, all
+        if ($filter === 'active') {
+            $filter = 'new'; // alias lama
+        }
 
         $query = Customer::whereNotNull('promise_to_pay')
             ->where('total_amount', '>', 0)
             ->with('collector');
 
         switch ($filter) {
-            case 'active':
-                $query->whereJsonContains('promise_to_pay->status', 'pending')
+            case 'new':
+                $query->where(function ($q) {
+                        $q->whereJsonContains('promise_to_pay->status', 'new')
+                          ->orWhereJsonContains('promise_to_pay->status', 'pending'); // legacy
+                    })
                       ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(promise_to_pay, '$.date')) >= ?", [now()->toDateString()]);
                 break;
             case 'kept':
                 $query->whereJsonContains('promise_to_pay->status', 'kept');
                 break;
-            case 'broken':
-                $query->whereJsonContains('promise_to_pay->status', 'broken');
+            case 'rolling':
+                $query->where(function ($q) {
+                    $q->whereJsonContains('promise_to_pay->status', 'rolling')
+                      ->orWhereJsonContains('promise_to_pay->status', 'broken'); // legacy
+                });
                 break;
             case 'overdue':
-                $query->whereJsonContains('promise_to_pay->status', 'pending')
+                $query->where(function ($q) {
+                        $q->whereJsonContains('promise_to_pay->status', 'new')
+                          ->orWhereJsonContains('promise_to_pay->status', 'pending'); // legacy
+                    })
                       ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(promise_to_pay, '$.date')) < ?", [now()->toDateString()]);
                 break;
         }
@@ -732,10 +762,25 @@ class CustomerController extends Controller
 
         if ($action === 'kept') {
             $customer->markPromiseKept();
-            $msg = 'PTP ditandai DITEPIL';
+            $msg = 'PTP ditandai DITEPATI';
+        } elseif ($action === 'rolling') {
+            $customer->markPromiseRolling();
+            $msg = 'PTP ditandai ROLLING';
         } elseif ($action === 'broken') {
-            $customer->markPromiseBroken();
-            $msg = 'PTP ditandai BATAL';
+            // Alias lama: samakan dengan rolling.
+            $customer->markPromiseRolling();
+            $msg = 'PTP ditandai ROLLING';
+        } elseif ($action === 'extend') {
+            $request->validate([
+                'ptp_date' => 'required|date|after_or_equal:today',
+                'ptp_note' => 'nullable|string|max:1000',
+            ]);
+            try {
+                $customer->requestPromiseExtend($request->ptp_date, (string) $request->input('ptp_note', ''));
+            } catch (\RuntimeException $e) {
+                return response()->json(['status' => 'error', 'message' => $e->getMessage()], 422);
+            }
+            $msg = 'PTP di-extend 1x, status kembali NEW';
         } else {
             return response()->json(['status' => 'error', 'message' => 'Invalid action'], 400);
         }
@@ -799,6 +844,100 @@ class CustomerController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => "{$updated} cases assigned ke {$collector->name}.",
+        ]);
+    }
+
+    public function bulkAssignAgent(Request $request)
+    {
+        $this->authorizeAccess();
+
+        $request->validate([
+            'customer_ids' => 'required|array|min:1',
+            'customer_ids.*' => 'exists:customers,id',
+            'agent_id' => 'required|exists:agents,id',
+        ]);
+
+        $agent = Agent::where('id', $request->agent_id)->where('role', 'agent')->first()
+            ?? Agent::find($request->agent_id);
+
+        $updated = Customer::whereIn('id', $request->customer_ids)
+            ->update(['assigned_agent_id' => $request->agent_id]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "{$updated} customer di-assign ke {$agent->name} (Ext: {$agent->extension}).",
+        ]);
+    }
+
+    /**
+     * Auto-assign customer ke agent secara round-robin.
+     * Cocok untuk 1000+ data: pilih agent + filter bucket, sistem bagi rata.
+     */
+    public function autoAssignAgents(Request $request)
+    {
+        $this->authorizeAccess();
+
+        $request->validate([
+            'agent_ids' => 'required|array|min:1',
+            'agent_ids.*' => 'exists:agents,id',
+            'buckets' => 'nullable|array',
+            'buckets.*' => 'string|max:50',
+            'only_unassigned' => 'nullable|boolean',
+        ]);
+
+        $onlyUnassigned = $request->boolean('only_unassigned', true);
+
+        $agents = Agent::whereIn('id', $request->agent_ids)
+            ->orderBy('id')->get(['id', 'name', 'extension']);
+        if ($agents->isEmpty()) {
+            return response()->json(['status' => 'error', 'message' => 'Agent tidak ditemukan.'], 422);
+        }
+        $agentIds = $agents->pluck('id')->values();
+        $agentNames = $agents->mapWithKeys(fn($a) => [$a->id => "{$a->name} (Ext: {$a->extension})"])->toArray();
+
+        $q = Customer::orderBy('id');
+        if ($request->filled('buckets')) {
+            $q->whereIn('bucket', $request->buckets);
+        }
+        if ($onlyUnassigned) {
+            $q->whereNull('assigned_agent_id');
+        }
+        $customers = $q->get(['id', 'name', 'phone', 'bucket', 'assigned_agent_id']);
+        $prevNames = Agent::whereIn('id', $customers->pluck('assigned_agent_id')->filter()->unique())
+            ->pluck('name', 'id')->toArray();
+
+        $counts = array_fill_keys($agentIds->toArray(), 0);
+        $assignments = [];
+        $roundRobin = 0;
+        foreach ($customers as $customer) {
+            $agentId = $agentIds[$roundRobin % $agentIds->count()];
+            $roundRobin++;
+            $prevId = $customer->assigned_agent_id;
+            $customer->update(['assigned_agent_id' => $agentId]);
+            $counts[$agentId]++;
+            if (count($assignments) < 200) {
+                $assignments[] = [
+                    'name' => $customer->name,
+                    'phone' => $customer->phone,
+                    'from' => $prevId ? ($prevNames[$prevId] ?? '-') : ($customer->bucket ?: 'Unassigned'),
+                    'to' => $agentNames[$agentId] ?? '-',
+                ];
+            }
+        }
+
+        $total = $customers->count();
+        $detail = [];
+        foreach ($counts as $agentId => $count) {
+            $detail[] = ['agent' => $agentNames[$agentId] ?? $agentId, 'assigned' => $count];
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "Auto-assign selesai: {$total} customer dibagi ke " . $agents->count() . " agent.",
+            'total' => $total,
+            'detail' => $detail,
+            'assignments' => $assignments,
+            'truncated' => $total > count($assignments),
         ]);
     }
 
@@ -881,6 +1020,9 @@ class CustomerController extends Controller
                 'id' => $c->id,
                 'name' => $c->name,
                 'phone' => $c->phone,
+                'office_phone' => $c->office_phone,
+                'emergency_phone' => $c->emergency_phone,
+                'gender' => $c->gender,
                 'email' => $c->email,
                 'company' => $c->company,
                 'bucket' => $c->bucket,
@@ -1101,6 +1243,9 @@ class CustomerController extends Controller
                 'id' => $c->id,
                 'name' => $c->name,
                 'phone' => $c->phone,
+                'office_phone' => $c->office_phone,
+                'emergency_phone' => $c->emergency_phone,
+                'gender' => $c->gender,
                 'email' => $c->email,
                 'company' => $c->company,
                 'status' => $c->status,
@@ -1172,6 +1317,10 @@ class CustomerController extends Controller
             try {
                 $status = in_array($norm['status'] ?? '', $validStatuses) ? $norm['status'] : 'new';
                 $payStatus = in_array($norm['payment_status'] ?? '', $validPayStatuses) ? $norm['payment_status'] : null;
+                $genderRaw = strtoupper(trim((string) ($norm['gender'] ?? '')));
+                $gender = in_array($genderRaw, ['L', 'P', 'LAKI-LAKI', 'PEREMPUAN'], true)
+                    ? (str_starts_with($genderRaw, 'P') ? 'P' : 'L')
+                    : null;
 
                 $total = is_numeric($norm['total_amount'] ?? null) ? (float) $norm['total_amount'] : 0;
                 $paid = is_numeric($norm['paid_amount'] ?? null) ? (float) $norm['paid_amount'] : 0;
@@ -1197,6 +1346,9 @@ class CustomerController extends Controller
                     'name' => $name,
                     'email' => $norm['email'] ?? null,
                     'company' => $norm['company'] ?? null,
+                    'gender' => $gender,
+                    'office_phone' => $norm['office_phone'] ?? null,
+                    'emergency_phone' => $norm['emergency_phone'] ?? null,
                     'status' => $status,
                     'notes' => $norm['notes'] ?? null,
                     'total_amount' => $total,

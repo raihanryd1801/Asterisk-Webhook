@@ -99,12 +99,13 @@
     <div id="ptp" class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 scroll-mt-4">
         <h2 class="text-lg font-bold text-slate-800 mb-3">4. Alur status PTP</h2>
         <div class="text-sm text-slate-600 leading-relaxed space-y-2">
-            <p>Status yang tersimpan hanya 3: <code class="bg-slate-100 px-1.5 py-0.5 rounded font-mono text-xs">pending</code>, <code class="bg-slate-100 px-1.5 py-0.5 rounded font-mono text-xs">kept</code>, <code class="bg-slate-100 px-1.5 py-0.5 rounded font-mono text-xs">broken</code>. Label <strong>Active</strong> dan <strong>Overdue</strong> dihitung dari tanggal:</p>
+            <p>Status yang tersimpan hanya 3: <code class="bg-slate-100 px-1.5 py-0.5 rounded font-mono text-xs">new</code>, <code class="bg-slate-100 px-1.5 py-0.5 rounded font-mono text-xs">kept</code>, <code class="bg-slate-100 px-1.5 py-0.5 rounded font-mono text-xs">rolling</code>. Label <strong>New</strong> dan <strong>Overdue</strong> dihitung dari tanggal:</p>
             <ul class="list-disc list-inside space-y-1">
-                <li>Buat/ubah PTP → <strong>pending</strong> (tanggal ≥ hari ini = tampil <strong>Active</strong>; tanggal &lt; hari ini = tampil <strong>Overdue</strong> otomatis).</li>
+                <li>Buat/ubah PTP → <strong>new</strong> (tanggal ≥ hari ini = tampil <strong>New</strong>; tanggal &lt; hari ini = tampil <strong>Overdue</strong> otomatis).</li>
                 <li>Tombol <strong>✓</strong> → <strong>kept</strong> (janji ditepati).</li>
-                <li>Tombol <strong>✕</strong> → <strong>broken</strong> (janji gagal).</li>
-                <li>Tombol <strong>✏️ Edit</strong> → ubah nominal/tanggal, status kembali <strong>pending</strong>.</li>
+                <li>Tombol <strong>↻</strong> → <strong>rolling</strong> (janji gagal / perlu dijadwal ulang).</li>
+                <li>Tombol <strong>📅 Extend</strong> → perpanjang tanggal <strong>1x saja</strong>, status kembali <strong>new</strong>.</li>
+                <li>Tombol <strong>✏️ Edit</strong> → ubah nominal/tanggal, status kembali <strong>new</strong>.</li>
             </ul>
             <p class="text-xs text-slate-400">Catatan: pembayaran lunas tidak otomatis menandai PTP kept — masih manual via tombol ✓.</p>
         </div>
