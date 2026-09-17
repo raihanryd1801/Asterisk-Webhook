@@ -280,6 +280,15 @@ window.WAInbox = window.WAInbox || {
             }
             this.baselineDone = true;
             this.paintTitle(totalUnread);
+            // Sinkronkan badge sidebar dengan ritme yang sama (layout me-poll
+            // sendiri tiap 30 detik, jadi tanpa ini angkanya bisa beda).
+            try {
+                const badge = document.getElementById('wa-unread-badge');
+                if (badge) {
+                    badge.textContent = totalUnread > 99 ? '99+' : totalUnread;
+                    badge.style.display = totalUnread > 0 ? 'inline-flex' : 'none';
+                }
+            } catch (e) {}
             box.innerHTML = list.length === 0
                 ? '<div class="p-8 text-center text-slate-400 text-sm"><i class="fa-regular fa-comment-dots text-2xl text-slate-300 mb-2 block"></i>Belum ada percakapan.<br>Balasan blast akan muncul di sini.</div>'
                 : list.map(c => `
@@ -290,7 +299,7 @@ window.WAInbox = window.WAInbox || {
                         <div class="flex-1 min-w-0">
                             <div class="flex items-center justify-between gap-2">
                                 <p class="font-semibold text-slate-900 text-sm truncate">${this.esc(c.name || c.phone)}</p>
-                                ${c.unread > 0 ? `<span class="bg-red-500 text-white text-[10px] font-bold min-w-[20px] h-5 px-1 rounded-full flex items-center justify-center shrink-0">${c.unread}</span>` : ''}
+                                ${c.unread > 0 ? `<span class="bg-[#25d366] text-white text-[11px] font-bold min-w-[22px] h-[22px] px-1.5 rounded-full flex items-center justify-center shrink-0 shadow-sm">${c.unread > 99 ? '99+' : c.unread}</span>` : ''}
                             </div>
                             <p class="text-xs text-slate-500 truncate mt-0.5">${c.direction === 'out' ? 'Anda: ' : ''}${this.esc(c.last_message)}</p>
                             <p class="text-[10px] text-slate-400 font-mono mt-0.5">${this.esc(c.customer_phone || ('+' + c.phone))} • ${this.esc(c.at || '')}</p>
@@ -646,6 +655,25 @@ function waInboxInit() {
         window.WAInbox.loadConvs();
         if (window.WAInbox.active) window.WAInbox.loadThread();
     }, 5000);
+    // Bangunkan polling saat tab dibuka lagi / halaman di-back (timer
+    // di-throttle browser saat tab tersembunyi sehingga daftar bisa basi).
+    for (const evt of ['focus', 'pageshow']) {
+        if (!window.WAInbox['_bound_' + evt]) {
+            window.WAInbox['_bound_' + evt] = true;
+            window.addEventListener(evt, () => {
+                window.WAInbox.loadConvs();
+                if (window.WAInbox.active) window.WAInbox.loadThread();
+            });
+        }
+    }
+    document.removeEventListener('visibilitychange', window.WAInbox._visHandler || (() => {}));
+    window.WAInbox._visHandler = () => {
+        if (!document.hidden) {
+            window.WAInbox.loadConvs();
+            if (window.WAInbox.active) window.WAInbox.loadThread();
+        }
+    };
+    document.addEventListener('visibilitychange', window.WAInbox._visHandler);
 }
 
 document.addEventListener('DOMContentLoaded', waInboxInit);

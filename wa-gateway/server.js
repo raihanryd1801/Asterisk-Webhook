@@ -530,6 +530,15 @@ app.post('/sessions/:id/send', async (req, res) => {
         }
         const sent = await s.sock.sendMessage(jid, content);
         sentId = sent?.key?.id || null;
+        // Simpan pesan TEKS keluar agar retry dekripsi ("Waiting for this
+        // message") bisa dipenuhi Baileys via getMessage. Media tidak disimpan
+        // agar message-store.json tidak membengkak.
+        if (sentId && message && !media) {
+            storeMessage(id, {
+                key: { remoteJid: jid, id: sentId, fromMe: true },
+                message: { conversation: message },
+            });
+        }
     });
 
     try {
