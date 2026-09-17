@@ -549,6 +549,36 @@ app.post('/sessions/:id/send', async (req, res) => {
     }
 });
 
+// Tandai chat sebagai dibaca (kirim read receipt) agar HP customer centang
+// biru + HP sendiri ikut terbaca. Body: { to, server?, ids?: [messageId] }.
+// Tanpa ids: tandai seluruh chat dibaca (chatModify markRead).
+app.post('/sessions/:id/read', async (req, res) => {
+    const id = req.params.id;
+    const s = sessions.get(id);
+    if (!s || s.status !== 'connected' || !s.sock) {
+        return res.status(409).json({ ok: false, message: 'Sesi belum terhubung.' });
+    }
+    const server = req.body.server === 'lid' ? 'lid' : 's.whatsapp.net';
+    const to = server === 'lid'
+        ? String(req.body.to || '').replace(/\D/g, '')
+        : normalizePhone(req.body.to);
+    if (!/^\d{9,16}$/.test(to)) {
+        return res.status(422).json({ ok: false, message: 'Nomor tujuan tidak valid' });
+    }
+    const jid = `${to}@${server}`;
+    try {
+        const ids = Array.isArray(req.body.ids) ? req.body.ids.filter(x => typeof x === 'string' && x).slice(0, 100) : [];
+        if (ids.length > 0) {
+            await s.sock.readMessages(ids.map(mid => ({ remoteJid: jid, id: mid, fromMe: false })));
+        } else {
+            await s.sock.chatModify({ markRead: true, lastMessages: [] }, jid);
+        }
+        res.json({ ok: true, marked: ids.length });
+    } catch (e) {
+        res.status(502).json({ ok: false, message: e.message || 'Gagal tandai dibaca' });
+    }
+});
+
 app.listen(PORT, '127.0.0.1', () => {
     console.log(`WA gateway listening on 127.0.0.1:${PORT}`);
     // Pulihkan sesi yang pernah terhubung agar tidak perlu scan ulang tiap restart

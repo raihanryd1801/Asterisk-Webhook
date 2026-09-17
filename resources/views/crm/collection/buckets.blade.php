@@ -155,11 +155,11 @@
 
 @section('scripts')
 <script>
-const initialRanges = @json($ranges);
+window.initialRanges = @json($ranges);
 
 function openRangeModal() {
     const tbody = document.getElementById('range-body');
-    tbody.innerHTML = initialRanges.map((r, i) => `
+    tbody.innerHTML = window.initialRanges.map((r, i) => `
         <tr class="hover:bg-slate-50" data-idx="${i}">
             <td class="px-3 py-2 font-medium text-slate-900">${r.bucket}<input type="hidden" data-f="bucket" value="${r.bucket}"></td>
             <td class="px-3 py-2"><input type="number" min="0" max="3650" data-f="min_dpd" value="${r.min_dpd}" class="w-24 border border-slate-300 rounded-lg px-2 py-1 text-sm"></td>
@@ -182,9 +182,9 @@ function closeRangeModal() {
     document.getElementById('range-modal').style.display = 'none';
 }
 
-let blastBucket = '';
+window.blastBucket = '';
 
-let blastSenderReady = false;
+window.blastSenderReady = false;
 
 async function openBlastModal(bucket) {
     blastBucket = bucket;

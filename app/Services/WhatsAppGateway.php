@@ -129,6 +129,25 @@ class WhatsAppGateway
         }
     }
 
+    /**
+     * Tandai chat dibaca di WA (read receipt) agar HP customer centang biru
+     * dan HP sendiri ikut terbaca. Best-effort: gagal = DB tetap tertandai.
+     */
+    public function markRead(string $sessionId, string $to, string $server = 's.whatsapp.net', array $ids = []): bool
+    {
+        try {
+            $res = $this->client()->post("/sessions/{$sessionId}/read", [
+                'to' => $to,
+                'server' => $server === 'lid' ? 'lid' : 's.whatsapp.net',
+                'ids' => array_values(array_filter($ids)),
+            ]);
+            return $res->ok() && ($res->json('ok') === true);
+        } catch (\Throwable $e) {
+            Log::warning('WA gateway markRead gagal: ' . $e->getMessage());
+            return false;
+        }
+    }
+
     public function send(string $sessionId, string $to, string $message, string $server = 's.whatsapp.net', ?array $media = null, bool $fast = false): array
     {
         try {

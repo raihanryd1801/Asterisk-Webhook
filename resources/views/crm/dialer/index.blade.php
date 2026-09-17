@@ -77,10 +77,11 @@
             <template x-if="!queue || !queue.ami_connected">
                 <p class="text-xs text-slate-400 italic">Tidak terhubung ke AMI — daftar antrean live tidak tampil. Data abandoned tetap dihitung dari database.</p>
             </template>
-            <template x-if="queue && queue.ami_connected && queue.entries.length === 0">
+            <template x-if="queue && queue.ami_connected && queue.entries && queue.entries.length === 0">
                 <p class="text-xs text-slate-400 italic">Antrean kosong. Customer yang mengangkat langsung tersambung ke agent.</p>
             </template>
-            <div class="space-y-2" x-show="queue && queue.entries.length > 0">
+            <template x-if="queue && queue.entries && queue.entries.length > 0">
+            <div class="space-y-2">
                 <template x-for="e in queue.entries" :key="e.position + '-' + e.caller_id">
                     <div class="flex items-center gap-3 border border-amber-200 bg-amber-50/50 rounded-xl px-3 py-2 text-sm">
                         <span class="w-7 h-7 rounded-full bg-amber-500 text-white text-xs font-bold flex items-center justify-center shrink-0" x-text="e.position"></span>
@@ -94,7 +95,8 @@
                     </div>
                 </template>
             </div>
-            <template x-if="queue && queue.answered_unbridged.length > 0">
+            </template>
+            <template x-if="queue && queue.answered_unbridged && queue.answered_unbridged.length > 0">
                 <div class="mt-3 pt-3 border-t border-slate-100">
                     <p class="text-[11px] font-bold text-slate-500 uppercase mb-2">Terjawab tapi belum tersambung (DB)</p>
                     <div class="space-y-1.5">

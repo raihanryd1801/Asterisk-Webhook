@@ -242,11 +242,36 @@ class WaController extends Controller
             return response()->json($denied, 403);
         }
 
+        // Ambil ID pesan yang akan ditandai DULU (untuk read receipt ke WA),
+        // baru update DB.
+        $toMarkIds = \App\Models\WaMessage::where('session_id', $sessionId)
+            ->where('phone', $phone)
+            ->where('direction', 'in')
+            ->whereNull('read_at')
+            ->whereNotNull('external_id')
+            ->orderByDesc('id')
+            ->limit(100)
+            ->pluck('external_id')
+            ->toArray();
+
         \App\Models\WaMessage::where('session_id', $sessionId)
             ->where('phone', $phone)
             ->where('direction', 'in')
             ->whereNull('read_at')
             ->update(['read_at' => now()]);
+
+        // Teruskan tanda dibaca ke WA (best-effort): HP customer jadi centang
+        // biru + HP sendiri ikut terbaca.
+        try {
+            $peerServer = \App\Models\WaMessage::where('session_id', $sessionId)
+                ->where('phone', $phone)
+                ->latest('id')
+                ->value('jid_server') ?: 's.whatsapp.net';
+            if (!empty($toMarkIds)) {
+                app(\App\Services\WhatsAppGateway::class)->markRead($sessionId, $phone, $peerServer, $toMarkIds);
+            }
+        } catch (\Throwable $e) {
+        }
 
         $messages = \App\Models\WaMessage::where('session_id', $sessionId)
             ->where('phone', $phone)

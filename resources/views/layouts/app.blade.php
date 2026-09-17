@@ -36,6 +36,9 @@
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         [x-cloak] { display: none !important; }
         .turbo-progress-bar { height: 4px; background-color: #14b8a6; }
+        /* Peredam kedip pindah menu (Turbo + Tailwind CDN me-render ulang body) */
+        @keyframes pageFadeIn { from { opacity: 0.25; } to { opacity: 1; } }
+        #page-main.page-fresh { animation: pageFadeIn 0.12s ease-out; }
     </style>
     @yield('styles')
 </head>
@@ -206,7 +209,7 @@
     </aside>
 
     <main class="flex-1 flex flex-col min-w-0 overflow-hidden relative z-10">
-        <div class="flex-1 overflow-y-auto p-6 lg:p-8">
+        <div class="flex-1 overflow-y-auto p-6 lg:p-8" id="page-main">
             @yield('content')
         </div>
     </main>
@@ -340,6 +343,14 @@
     document.addEventListener('DOMContentLoaded', sideNavRestore);
     // Turbo tidak memicu DOMContentLoaded saat navigasi
     document.addEventListener('turbo:load', sideNavRestore);
+    document.addEventListener('turbo:load', () => {
+        // Mainkan fade peredam kedip tiap render selesai
+        const main = document.getElementById('page-main');
+        if (!main) return;
+        main.classList.remove('page-fresh');
+        void main.offsetWidth; // paksa reflow agar animasi jalan ulang
+        main.classList.add('page-fresh');
+    });
     document.addEventListener('turbo:before-visit', () => {
         const nav = document.getElementById('side-nav');
         if (!nav) return;
