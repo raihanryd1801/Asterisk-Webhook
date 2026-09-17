@@ -193,6 +193,15 @@ supervisorctl reread
 supervisorctl update
 supervisorctl status || true
 
+# Cron scheduler Laravel (cdr:sync tiap menit, cdr:summarize tiap 5 menit, dll)
+CRON_LINE="* * * * * cd $APP_DIR && php artisan schedule:run >> /dev/null 2>&1"
+if ! crontab -l 2>/dev/null | grep -q "artisan schedule:run"; then
+  (crontab -l 2>/dev/null; echo "$CRON_LINE") | crontab -
+  echo "Cron schedule:run terpasang."
+else
+  echo "Cron schedule:run sudah ada."
+fi
+
 echo
 echo "SELESAI. Langkah manual tersisa:"
 echo "  1. Isi $APP_DIR/.env (DB_*, WA_*, AMI, PDS_*, dsb) bila belum."

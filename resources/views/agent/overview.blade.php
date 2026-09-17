@@ -327,6 +327,14 @@
     // 🚀 LOGIKA AJAX FETCH DENGAN SESSIONSTORAGE (PERSISTENT)
     // ========================================================
     async function switchFilter(range, btnElement) {
+        // Bersihkan cache versi lama (v1 tanpa expiry) bila masih ada
+        try {
+            Object.keys(sessionStorage).forEach(k => {
+                if (k.indexOf('overview_cache_') === 0 && k.indexOf('overview_cache_v2_') !== 0) {
+                    sessionStorage.removeItem(k);
+                }
+            });
+        } catch (e) {}
         
         // 1. Ubah Style Tombol Aktif (Hitam)
         document.querySelectorAll('.filter-btn').forEach(btn => {
@@ -336,13 +344,20 @@
         btnElement.classList.remove('text-gray-600', 'hover:bg-gray-100');
         btnElement.classList.add('bg-gray-900', 'text-white');
 
-        // 2. Ambil dari sessionStorage browser (Aman saat pindah menu)
-        let storageKey = 'overview_cache_' + range;
-        let cachedData = sessionStorage.getItem(storageKey);
-
-        if (cachedData) {
-            updateDashboardUI(JSON.parse(cachedData));
-            return;
+        // 2. Ambil dari sessionStorage browser (Aman saat pindah menu).
+        // Kunci berversi + kedaluwarsa 5 menit (selaras cache backend) agar
+        // data basi (mis. tersimpan saat tabel ringkasan kosong) tidak menempel selamanya.
+        let storageKey = 'overview_cache_v2_' + range;
+        let cachedRaw = sessionStorage.getItem(storageKey);
+        if (cachedRaw) {
+            try {
+                let cached = JSON.parse(cachedRaw);
+                if (cached && cached.data && (Date.now() - cached.at) < 5 * 60 * 1000) {
+                    updateDashboardUI(cached.data);
+                    return;
+                }
+            } catch (e) {}
+            sessionStorage.removeItem(storageKey);
         }
 
         // 3. Jika belum ada, fetch ke backend
@@ -352,8 +367,8 @@
             });
             let data = await response.json();
 
-            // Simpan ke sessionStorage
-            sessionStorage.setItem(storageKey, JSON.stringify(data));
+            // Simpan ke sessionStorage (dengan timestamp untuk expiry)
+            sessionStorage.setItem(storageKey, JSON.stringify({ at: Date.now(), data }));
             
             // Render UI Baru
             updateDashboardUI(data);

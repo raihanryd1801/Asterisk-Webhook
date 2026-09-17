@@ -9,3 +9,4 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('cdr:sync')->everyMinute()->withoutOverlapping();
+Schedule::command('cdr:summarize')->everyFiveMinutes()->withoutOverlapping();

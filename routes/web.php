@@ -87,26 +87,80 @@ Route::prefix('dashboard')->group(function () {
 
         // ==========================================
         // 🚀 SISTEM CACHE & PEMROSESAN DATA
+        // Sumber data: tabel ringkasan cdr_daily_summary (ribuan baris),
+        // bukan cdr_live (jutaan baris). Scheduler membangun ringkasan tiap
+        // 5 menit (cdr:summarize); data hari ini toleransi stale <= 5 menit.
+        // Grafik per-jam (range today) tetap baca live karena butuh granular
+        // jam, tapi dibatasi 1 hari sehingga tetap cepat.
         // ==========================================
         $cacheKey = "dashboard_overview_{$range}_{$userKey}";
-        $cacheDuration = ($range === 'today') ? 0 : 300; 
+        $cacheDuration = ($range === 'today') ? 60 : 300;
 
-        $dashboardData = Cache::remember($cacheKey, $cacheDuration, function () use ($range, $query) {
+        // Backfill sekali bila ringkasan masih kosong tapi CDR ada isinya
+        // (fresh install sebelum scheduler sempat jalan).
+        if (!\Illuminate\Support\Facades\DB::table('cdr_daily_summary')->exists()
+            && \App\Models\Cdr::exists()) {
+            (new \App\Services\CdrSummarizer())->summarizeRecent(62);
+        }
+
+        // Batas tanggal per range (kolom date di ringkasan)
+        $todayDate = now()->toDateString();
+        $fromDate = match ($range) {
+            'today' => $todayDate,
+            '7_days' => now()->subDays(6)->toDateString(),
+            'all_time' => null,
+            default => now()->startOfMonth()->toDateString(),
+        };
+
+        // Filter peran untuk query ringkasan. Grain ringkasan = (date, src,
+        // disposition), jadi pencocokan HANYA sisi src (bukan dst seperti query
+        // live). Disengaja: data membuktikan dst praktis tidak pernah extension
+        // agent (1 dari 2,6 jt baris), sehingga selisihnya noise.
+        // Variabel peran selalu terdefinisi agar closure di bawah aman
+        // (cabang admin tidak mengisi ketiganya).
+        $extension = $extension ?? null;
+        $managedExtensions = $managedExtensions ?? [];
+        $spv = $spv ?? null;
+        $applyScope = function ($q) use ($extension, $managedExtensions, $spv, $userKey) {
+            if (str_starts_with($userKey, 'agent_')) {
+                $q->where('src', $extension);
+            } elseif (str_starts_with($userKey, 'spv_')) {
+                if (!$spv) {
+                    $q->whereRaw('1 = 0');
+                } else {
+                    $q->whereIn('src', $managedExtensions);
+                }
+            }
+            return $q;
+        };
+
+        $dashboardData = Cache::remember($cacheKey, $cacheDuration, function () use ($range, $fromDate, $todayDate, $applyScope, $query) {
             
-            // 1. STATISTIK RINGKAS
-            $todayStart = now()->startOfDay()->format('Y-m-d H:i:s');
-            $statsData = (clone $query)->selectRaw("
-                SUM(CASE WHEN calldate >= '{$todayStart}' THEN 1 ELSE 0 END) as today_calls,
-                SUM(CASE WHEN calldate >= '{$todayStart}' AND disposition = 'ANSWERED' THEN 1 ELSE 0 END) as today_answered,
-                COUNT(*) as total_calls,
-                SUM(CASE WHEN disposition = 'ANSWERED' THEN 1 ELSE 0 END) as all_answered
-            ")->first();
+            // Basis query ringkasan: filter tanggal + peran. Semua agregat di
+            // bawah memakai ini sehingga hanya menyentuh ribuan baris.
+            $sumBase = function () use ($fromDate, $applyScope) {
+                $q = \Illuminate\Support\Facades\DB::table('cdr_daily_summary');
+                if ($fromDate) {
+                    $q->where('date', '>=', $fromDate);
+                }
+                return $applyScope($q);
+            };
 
-            $today_calls      = (int) ($statsData->today_calls ?? 0);
-            $today_answered   = (int) ($statsData->today_answered ?? 0);
+            // 1. STATISTIK RINGKAS
+            $sqToday = $sumBase();
+            $todayRow = (clone $sqToday)->where('date', $todayDate)
+                ->selectRaw("SUM(calls) as today_calls, SUM(CASE WHEN disposition = 'ANSWERED' THEN calls ELSE 0 END) as today_answered")
+                ->first();
+            $sqTotal = $sumBase();
+            $totalRow = (clone $sqTotal)
+                ->selectRaw("SUM(calls) as total_calls, SUM(CASE WHEN disposition = 'ANSWERED' THEN calls ELSE 0 END) as all_answered")
+                ->first();
+
+            $today_calls      = (int) ($todayRow->today_calls ?? 0);
+            $today_answered   = (int) ($todayRow->today_answered ?? 0);
             $today_rate       = $today_calls > 0 ? round(($today_answered / $today_calls) * 100, 1) : 0;
-            $total_calls      = (int) ($statsData->total_calls ?? 0);
-            $all_answered     = (int) ($statsData->all_answered ?? 0);
+            $total_calls      = (int) ($totalRow->total_calls ?? 0);
+            $all_answered     = (int) ($totalRow->all_answered ?? 0);
             $all_time_rate    = $total_calls > 0 ? round(($all_answered / $total_calls) * 100, 1) : 0;
 
             $stats = [
@@ -125,6 +179,7 @@ Route::prefix('dashboard')->group(function () {
             $chartVolumeData = [];
             
             if ($range === 'today') {
+                // Butuh granular jam: baca live, tapi cukup 1 hari (cepat).
                 $volumeRaw = (clone $query)->selectRaw("HOUR(calldate) as time_key, COUNT(*) as total")->groupByRaw("HOUR(calldate)")->pluck('total', 'time_key')->toArray();
                 for ($i = 0; $i < 24; $i++) {
                     $chartVolumeCategories[] = sprintf("%02d:00", $i);
@@ -132,7 +187,8 @@ Route::prefix('dashboard')->group(function () {
                 }
                 $chartSubtitle = "Calls per hour, WIB.";
             } elseif ($range === '7_days') {
-                $volumeRaw = (clone $query)->selectRaw("DATE(calldate) as time_key, COUNT(*) as total")->groupByRaw("DATE(calldate)")->pluck('total', 'time_key')->toArray();
+                $sq = $sumBase();
+                $volumeRaw = (clone $sq)->selectRaw("date as time_key, SUM(calls) as total")->groupBy("date")->pluck('total', 'time_key')->toArray();
                 for ($i = 6; $i >= 0; $i--) {
                     $date = now()->subDays($i);
                     $chartVolumeCategories[] = $date->format('d M');
@@ -140,7 +196,8 @@ Route::prefix('dashboard')->group(function () {
                 }
                 $chartSubtitle = "Calls per day, last 7 days.";
             } elseif ($range === 'this_month') {
-                $volumeRaw = (clone $query)->selectRaw("DATE(calldate) as time_key, COUNT(*) as total")->groupByRaw("DATE(calldate)")->pluck('total', 'time_key')->toArray();
+                $sq = $sumBase();
+                $volumeRaw = (clone $sq)->selectRaw("date as time_key, SUM(calls) as total")->groupBy("date")->pluck('total', 'time_key')->toArray();
                 $daysInMonth = now()->daysInMonth;
                 for ($i = 1; $i <= $daysInMonth; $i++) {
                     $dateString = now()->setDay($i)->toDateString();
@@ -149,7 +206,8 @@ Route::prefix('dashboard')->group(function () {
                 }
                 $chartSubtitle = "Calls per day, this month.";
             } else {
-                $volumeDataRaw = (clone $query)->selectRaw("DATE_FORMAT(calldate, '%Y-%m') as time_key, COUNT(*) as total")->groupByRaw("DATE_FORMAT(calldate, '%Y-%m')")->orderBy('time_key')->get();
+                $sq = $sumBase();
+                $volumeDataRaw = (clone $sq)->selectRaw("DATE_FORMAT(date, '%Y-%m') as time_key, SUM(calls) as total")->groupByRaw("DATE_FORMAT(date, '%Y-%m')")->orderBy('time_key')->get();
                 foreach ($volumeDataRaw as $row) {
                     $chartVolumeCategories[] = \Carbon\Carbon::createFromFormat('Y-m', $row->time_key)->format('M Y');
                     $chartVolumeData[] = (int) $row->total;
@@ -158,7 +216,8 @@ Route::prefix('dashboard')->group(function () {
             }
 
             // 3. CALL OUTCOMES CHART
-            $outcomesDataRaw = (clone $query)->selectRaw("disposition, COUNT(*) as total")->groupBy("disposition")->get();
+            $sq = $sumBase();
+            $outcomesDataRaw = (clone $sq)->selectRaw("disposition, SUM(calls) as total")->groupBy("disposition")->get();
             $outcomesRaw = [];
             foreach ($outcomesDataRaw as $row) {
                 $dispKey = strtoupper($row->disposition);
@@ -174,7 +233,8 @@ Route::prefix('dashboard')->group(function () {
             ];
 
             // 4. TABEL AGENT PERFORMANCE
-            $agentPerformanceRaw = (clone $query)->selectRaw("src as extension, COUNT(*) as total_calls, SUM(CASE WHEN disposition = 'ANSWERED' THEN 1 ELSE 0 END) as connected_calls, SUM(billsec) as total_talk_time")->where('src', '!=', '')->groupBy('extension')->orderBy('total_calls', 'desc')->limit(50)->get();
+            $sq = $sumBase();
+            $agentPerformanceRaw = (clone $sq)->selectRaw("src as extension, SUM(calls) as total_calls, SUM(CASE WHEN disposition = 'ANSWERED' THEN calls ELSE 0 END) as connected_calls, SUM(billsec) as total_talk_time")->where('src', '!=', '')->groupBy('extension')->orderBy('total_calls', 'desc')->limit(50)->get();
             
             $agentNames = \App\Models\Agent::whereIn('extension', $agentPerformanceRaw->pluck('extension'))->pluck('name', 'extension');
 
