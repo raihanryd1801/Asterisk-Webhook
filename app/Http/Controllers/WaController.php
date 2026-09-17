@@ -279,6 +279,15 @@ class WaController extends Controller
                 ->latest('id')
                 ->value('customer_id');
         }
+        // Thread baru (belum ada pesan): cocokkan langsung ke data customer
+        // agar nama + tautan langsung tampil saat mulai percakapan baru.
+        $customerName = null;
+        if (!$customerId) {
+            $customerId = \App\Models\WaMessage::findCustomerId($phone);
+        }
+        if ($customerId) {
+            $customerName = \App\Models\Customer::where('id', $customerId)->value('name');
+        }
 
         $customerPhone = null;
         if ($customerId) {
@@ -288,8 +297,8 @@ class WaController extends Controller
         return response()->json([
             'status' => 'success',
             'phone' => $phone,
-            'name' => $peer?->name,
-            'customer_id' => $peer?->customer_id,
+            'name' => $peer?->name ?? $customerName,
+            'customer_id' => $customerId,
             'customer_phone' => $customerPhone,
             'messages' => $messages,
         ]);

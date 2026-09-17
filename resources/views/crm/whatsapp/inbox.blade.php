@@ -7,10 +7,14 @@
         <div class="w-11 h-11 rounded-xl bg-brand-600 text-white flex items-center justify-center text-lg shadow-sm shrink-0">
             <i class="fa-brands fa-whatsapp"></i>
         </div>
-        <div class="min-w-0">
+        <div class="min-w-0 flex-1">
             <h1 class="text-xl font-bold text-brand-700 leading-tight">Inbox WhatsApp</h1>
             <p class="text-sm text-brand-600/80 mt-0.5">Balasan customer ke nomor Anda. Klik percakapan untuk membaca & membalas.</p>
         </div>
+        <button onclick="window.WAInbox.openNewModal()" title="Mulai percakapan baru dengan customer"
+            class="shrink-0 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-sm font-medium transition flex items-center gap-2 shadow-sm">
+            <i class="fa-solid fa-plus"></i><span class="hidden sm:inline">Percakapan Baru</span>
+        </button>
     </div>
 
     @if(($isSharedAgent ?? false))
@@ -47,6 +51,10 @@
                     </div>
                 </div>
                 <div class="flex items-center gap-2 shrink-0">
+                    <button onclick="window.WAInbox.openLinkModal()" title="Tautkan ke data customer"
+                        class="px-3 py-1.5 border border-brand-200 bg-brand-50 text-brand-700 rounded-xl text-xs font-medium hover:bg-brand-100 transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-link"></i><span class="hidden sm:inline">Customer</span>
+                    </button>
                     <button onclick="waBack()" class="sm:hidden px-3 py-1.5 border border-slate-300 rounded-xl text-xs font-medium hover:bg-slate-50 transition">← Kembali</button>
                 </div>
             </div>
@@ -76,6 +84,52 @@
                     <i class="fa-regular fa-comments text-2xl text-brand-300"></i>
                 </div>
                 Pilih percakapan di sebelah kiri.
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal percakapan baru: pilih nomor customer -->
+    <div id="wa-new-modal" class="fixed inset-0 z-50 overflow-y-auto" style="display: none;">
+        <div class="flex min-h-full items-center justify-center p-4">
+            <div class="fixed inset-0 bg-black/50" onclick="window.WAInbox.closeNewModal()"></div>
+            <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[85vh] overflow-hidden flex flex-col">
+                <div class="flex items-center justify-between p-4 border-b border-slate-200">
+                    <div>
+                        <h3 class="font-semibold text-slate-900">Percakapan Baru</h3>
+                        <p class="text-xs text-slate-500">Pilih nomor customer untuk mulai chat.</p>
+                    </div>
+                    <button onclick="window.WAInbox.closeNewModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-xl"></i></button>
+                </div>
+                <div class="p-4 border-b border-slate-100">
+                    <input id="wa-new-search" type="text" placeholder="Cari nama / nomor customer..."
+                        class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm bg-slate-50 focus:bg-white focus:ring-2 focus:ring-brand-500 focus:border-transparent transition">
+                </div>
+                <div class="flex-1 overflow-y-auto p-2" id="wa-new-results"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal tautkan percakapan ke customer -->
+    <div id="wa-link-modal" class="fixed inset-0 z-50 overflow-y-auto" style="display: none;">
+        <div class="flex min-h-full items-center justify-center p-4">
+            <div class="fixed inset-0 bg-black/50" onclick="window.WAInbox.closeLinkModal()"></div>
+            <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[85vh] overflow-hidden flex flex-col">
+                <div class="flex items-center justify-between p-4 border-b border-slate-200">
+                    <div>
+                        <h3 class="font-semibold text-slate-900">Tautkan ke Customer</h3>
+                        <p class="text-xs text-slate-500 font-mono" id="wa-link-phone"></p>
+                    </div>
+                    <button onclick="window.WAInbox.closeLinkModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-xl"></i></button>
+                </div>
+                <div class="p-4 border-b border-slate-100">
+                    <input id="wa-link-search" type="text" placeholder="Cari nama / nomor customer..."
+                        class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm bg-slate-50 focus:bg-white focus:ring-2 focus:ring-brand-500 focus:border-transparent transition">
+                </div>
+                <div class="flex-1 overflow-y-auto p-2" id="wa-link-results"></div>
+                <div class="p-3 border-t border-slate-100 flex justify-between items-center">
+                    <button onclick="window.WAInbox.unlinkCustomer()" class="text-xs text-rose-600 hover:text-rose-800 font-medium px-2 py-1">Putuskan tautan</button>
+                    <button onclick="window.WAInbox.closeLinkModal()" class="px-4 py-2 border border-slate-300 rounded-xl text-sm text-slate-700 hover:bg-slate-50">Tutup</button>
+                </div>
             </div>
         </div>
     </div>
@@ -375,6 +429,169 @@ window.WAInbox = window.WAInbox || {
             this.sending = false;
         }
         return false;
+    },
+
+    normPhone(raw) {
+        let d = String(raw || '').replace(/\D/g, '');
+        if (d.startsWith('0')) d = '62' + d.substring(1);
+        else if (d.startsWith('620')) d = '62' + d.substring(3);
+        return d;
+    },
+
+    openNewModal() {
+        document.getElementById('wa-new-modal').style.display = 'block';
+        const input = document.getElementById('wa-new-search');
+        input.value = '';
+        if (!input.dataset.bound) {
+            input.dataset.bound = '1';
+            let t = null;
+            input.addEventListener('input', () => {
+                clearTimeout(t);
+                t = setTimeout(() => window.WAInbox.searchNew(input.value), 350);
+            });
+        }
+        this.searchNew('');
+        setTimeout(() => input.focus(), 50);
+    },
+
+    closeNewModal() {
+        document.getElementById('wa-new-modal').style.display = 'none';
+    },
+
+    async searchNew(q) {
+        const box = document.getElementById('wa-new-results');
+        box.innerHTML = '<div class="p-6 text-center text-slate-400 text-sm"><i class="fa-solid fa-spinner fa-spin"></i> Mencari...</div>';
+        try {
+            const res = await fetch(`{{ route('crm.customers.index') }}?search=${encodeURIComponent(q || '')}&per_page=10`, {
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            });
+            const data = await res.json();
+            const rows = data.data || data || [];
+            box.innerHTML = rows.length === 0
+                ? '<div class="p-6 text-center text-slate-400 text-sm">Tidak ketemu. Coba kata kunci lain.</div>'
+                : rows.map(c => {
+                    const nums = [
+                        { label: 'Utama', val: c.phone },
+                        { label: 'Kantor', val: c.office_phone },
+                        { label: 'Darurat', val: c.emergency_phone },
+                    ].filter(n => n.val);
+                    const btns = nums.map(n => {
+                        const norm = this.normPhone(n.val);
+                        return `<button onclick="window.WAInbox.startNew('${norm}')"
+                            class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-mono bg-brand-50 text-brand-700 border border-brand-200 hover:bg-brand-100 transition">
+                            <i class="fa-brands fa-whatsapp"></i>${this.esc(n.val)}
+                            <span class="font-sans text-[10px] text-brand-500">${n.label}</span>
+                        </button>`;
+                    }).join('');
+                    return `<div class="px-3 py-2.5 rounded-xl hover:bg-slate-50 transition">
+                        <p class="font-semibold text-slate-900 text-sm truncate">${this.esc(c.name || '-')}</p>
+                        <div class="flex flex-wrap gap-1.5 mt-1.5">${btns || '<span class="text-xs text-slate-400">Tanpa nomor</span>'}</div>
+                    </div>`;
+                }).join('');
+        } catch (e) {
+            box.innerHTML = '<div class="p-6 text-center text-slate-400 text-sm">Gagal memuat. Coba lagi.</div>';
+        }
+    },
+
+    async startNew(phone) {
+        this.closeNewModal();
+        await this.open(phone);
+    },
+
+    openLinkModal() {
+        if (!this.active) return;
+        document.getElementById('wa-link-phone').textContent = '+' + this.active;
+        document.getElementById('wa-link-modal').style.display = 'block';
+        const input = document.getElementById('wa-link-search');
+        input.value = '';
+        if (!input.dataset.bound) {
+            input.dataset.bound = '1';
+            let t = null;
+            input.addEventListener('input', () => {
+                clearTimeout(t);
+                t = setTimeout(() => window.WAInbox.searchLink(input.value), 350);
+            });
+        }
+        this.searchLink('');
+        setTimeout(() => input.focus(), 50);
+    },
+
+    closeLinkModal() {
+        document.getElementById('wa-link-modal').style.display = 'none';
+    },
+
+    async searchLink(q) {
+        const box = document.getElementById('wa-link-results');
+        box.innerHTML = '<div class="p-6 text-center text-slate-400 text-sm"><i class="fa-solid fa-spinner fa-spin"></i> Mencari...</div>';
+        try {
+            const res = await fetch(`{{ route('crm.customers.index') }}?search=${encodeURIComponent(q || '')}&per_page=10`, {
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            });
+            const data = await res.json();
+            const rows = data.data || data || [];
+            box.innerHTML = rows.length === 0
+                ? '<div class="p-6 text-center text-slate-400 text-sm">Tidak ketemu. Coba kata kunci lain.</div>'
+                : rows.map(c => `
+                    <button onclick="window.WAInbox.chooseLink(${c.id}, '${this.esc(c.name || '').replace(/'/g, "\\'")}')"
+                        class="w-full text-left px-3 py-2.5 hover:bg-brand-50 rounded-xl transition flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-xs shrink-0">
+                            ${this.esc((c.name || '?').substring(0, 1).toUpperCase())}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="font-semibold text-slate-900 text-sm truncate">${this.esc(c.name || '-')}</p>
+                            <p class="text-xs text-slate-500 font-mono truncate">${this.esc(c.phone || '')}${c.company ? ' • ' + this.esc(c.company) : ''}</p>
+                        </div>
+                        <i class="fa-solid fa-link text-brand-500 text-xs shrink-0"></i>
+                    </button>`).join('');
+        } catch (e) {
+            box.innerHTML = '<div class="p-6 text-center text-slate-400 text-sm">Gagal memuat. Coba lagi.</div>';
+        }
+    },
+
+    async chooseLink(customerId, customerName) {
+        if (!this.active) return;
+        if (!confirm(`Tautkan percakapan ini ke ${customerName}?`)) return;
+        try {
+            const token = await this.freshToken();
+            const res = await fetch('{{ route('crm.whatsapp.link') }}', {
+                method: 'POST',
+                headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': token || this.csrfToken() },
+                body: JSON.stringify({ phone: this.active, customer_id: customerId }),
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+                this.closeLinkModal();
+                await this.loadThread();
+                this.loadConvs();
+            } else {
+                alert(data.message || 'Gagal menautkan.');
+            }
+        } catch (e) {
+            alert('Terjadi kesalahan jaringan.');
+        }
+    },
+
+    async unlinkCustomer() {
+        if (!this.active) return;
+        if (!confirm('Putuskan tautan percakapan ini dari customer?')) return;
+        try {
+            const token = await this.freshToken();
+            const res = await fetch('{{ route('crm.whatsapp.link') }}', {
+                method: 'POST',
+                headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': token || this.csrfToken() },
+                body: JSON.stringify({ phone: this.active, customer_id: null }),
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+                this.closeLinkModal();
+                await this.loadThread();
+                this.loadConvs();
+            } else {
+                alert(data.message || 'Gagal memutuskan.');
+            }
+        } catch (e) {
+            alert('Terjadi kesalahan jaringan.');
+        }
     },
 };
 
