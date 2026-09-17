@@ -693,15 +693,21 @@
             },
 
             getPaginationPages() {
-                let current = this.pagination.current_page; 
-                let last = this.pagination.last_page; 
-                let delta = 2; 
-                let range = [];
-                for (let i = 1; i <= last; i++) {
-                    if (i === 1 || i === last || (i >= current - delta && i <= current + delta)) { range.push(i); } 
-                    else if (range[range.length - 1] !== '...') { range.push('...'); }
+                // O(1): jangan loop 1..last.
+                const current = this.pagination.current_page || 1;
+                const last = this.pagination.last_page || 1;
+                const delta = 2;
+                const set = new Set([1, last]);
+                for (let i = current - delta; i <= current + delta; i++) {
+                    if (i > 1 && i < last) set.add(i);
                 }
-                return range;
+                const sorted = [...set].sort((a, b) => a - b);
+                const out = [];
+                sorted.forEach((p, idx) => {
+                    if (idx > 0 && p - sorted[idx - 1] > 1) out.push('...');
+                    out.push(p);
+                });
+                return out;
             },
 
             // 🚀 CUSTOMER ASSIGNED METHODS

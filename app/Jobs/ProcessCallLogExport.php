@@ -19,10 +19,19 @@ class ProcessCallLogExport implements ShouldQueue
     protected $filters;
     protected $filePath;
 
+    // Batas wajar agar export jutaan baris tidak menggantung worker berjam-jam.
+    // Minta user persempit filter tanggal bila kena cap.
+    public const MAX_ROWS = 200000;
+
     public function __construct(array $filters, string $filePath)
     {
         $this->filters = $filters;
         $this->filePath = $filePath;
+    }
+
+    protected function progressKey(): string
+    {
+        return 'export_progress_' . basename($this->filePath);
     }
 
     public function handle()
@@ -77,6 +86,18 @@ class ProcessCallLogExport implements ShouldQueue
             $query->where('calldate', '<=', $this->filters['end_date'] . ' 23:59:59');
         }
 
+        $total = (clone $query)->count();
+        $truncated = $total > self::MAX_ROWS;
+        if ($truncated) {
+            $query->limit(self::MAX_ROWS);
+        }
+
+        \Illuminate\Support\Facades\Cache::put(
+            $this->progressKey(),
+            ['done' => 0, 'total' => min($total, self::MAX_ROWS), 'truncated' => $truncated],
+            now()->addMinutes(30)
+        );
+
       $finalPath = \Illuminate\Support\Facades\Storage::disk('public')->path($this->filePath);
         $tmpPath = $finalPath . '.tmp'; // 🚀 Ini file sementaranya
 
@@ -87,8 +108,17 @@ class ProcessCallLogExport implements ShouldQueue
 
         // ❌ JANGAN GUNAKAN $finalPath / $fullPath DI SINI
         // ✅ GUNAKAN $tmpPath
-        (new \Rap2hpoutre\FastExcel\FastExcel($query->cursor()))->export($tmpPath, function ($row) use ($agentNames) {
+        $progressKey = $this->progressKey();
+        $done = 0;
+        (new \Rap2hpoutre\FastExcel\FastExcel($query->cursor()))->export($tmpPath, function ($row) use ($agentNames, &$done, $progressKey) {
             $src = ($row->src === $row->dst && strlen($row->src) > 5) ? 'Ext / Agent' : $row->src;
+
+            $done++;
+            if ($done % 5000 === 0) {
+                $prev = \Illuminate\Support\Facades\Cache::get($progressKey, []);
+                $prev['done'] = $done;
+                \Illuminate\Support\Facades\Cache::put($progressKey, $prev, now()->addMinutes(30));
+            }
 
             // Sisi agent: src bila outbound dari ext, dst bila inbound ke ext.
             // Nama diambil dari tabel agents (akurat), fallback ke cnam CDR.
@@ -115,5 +145,6 @@ class ProcessCallLogExport implements ShouldQueue
 
         // 3. Ubah nama .tmp menjadi .xlsx hanya ketika proses di atas SUDAH 100% SELESAI
         rename($tmpPath, $finalPath);
+        \Illuminate\Support\Facades\Cache::forget($this->progressKey());
     }
 }

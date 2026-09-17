@@ -14,6 +14,10 @@ class CallRecordingsZipExport
     protected $filters;
     protected $filename;
 
+    // Batas wajar: tiap file = 1 request HTTP ke FreePBX. Tanpa cap, jutaan
+    // baris = jutaan request = worker gantung berjam-jam.
+    public const MAX_FILES = 2000;
+
     public function __construct(array $filters)
     {
         $this->filters = $filters;
@@ -25,14 +29,22 @@ class CallRecordingsZipExport
         return $this->filename;
     }
 
+    protected function statusKey(): string
+    {
+        return 'zip_status_' . $this->filename;
+    }
+
     public function generate()
     {
-        // 1. Ambil query filter seperti biasa
+        // 1. Ambil query filter seperti biasa.
+        // NOTE: tanpa ORDER BY calldate — urutan file di dalam ZIP tidak penting,
+        // dan sort di jutaan baris bikin chunk menggantung. orderBy id (primary
+        // key) disyaratkan chunk() dan selalu cepat.
         $query = DB::table('cdr_live')
             ->select('calldate', 'src', 'dst', 'recordingfile')
             ->whereNotNull('recordingfile')
             ->where('recordingfile', '!=', '')
-            ->orderBy('calldate', 'desc');
+            ->orderBy('id');
 
         if (!empty($this->filters['supervisor_extension'])) {
             $spv = Agent::where('extension', $this->filters['supervisor_extension'])->first();
@@ -68,6 +80,24 @@ class CallRecordingsZipExport
             $query->where('calldate', '<=', $this->filters['end_date'] . ' 23:59:59');
         }
 
+        // Rem otomatis 30 hari bila tanpa filter tanggal (samakan perilaku export Excel)
+        if (empty($this->filters['start_date']) && empty($this->filters['end_date'])) {
+            $query->where('calldate', '>=', date('Y-m-d 00:00:00', strtotime('-30 days')));
+        }
+
+        $total = (clone $query)->count();
+        $truncated = $total > self::MAX_FILES;
+        if ($truncated) {
+            $query->limit(self::MAX_FILES);
+        }
+        $target = min($total, self::MAX_FILES);
+
+        \Illuminate\Support\Facades\Cache::put(
+            $this->statusKey(),
+            ['ready' => false, 'done' => 0, 'total' => $target, 'truncated' => $truncated],
+            now()->addMinutes(30)
+        );
+
         // 2. Siapkan file ZIP lokal di server web sementara
         $exportDir = storage_path('app/public/exports');
         if (!file_exists($exportDir)) {
@@ -84,12 +114,16 @@ class CallRecordingsZipExport
        // 🚀 Siapkan Client HTTP Guzzle (Turbo Downloader)
         $client = new Client([
             'timeout' => 10, // Max 10 detik nunggu per file
+            'connect_timeout' => 3, // Max 3 detik buka koneksi (server mati langsung skip)
             'verify' => false,
             'http_errors' => false
         ]);
 
+        $statusKey = $this->statusKey();
+        $doneFiles = 0;
+
         // Gunakan Chunk 100 (Artinya 100 file didownload serentak dalam 1 kloter)
-        $query->chunk(100, function ($rows) use ($zip, $client) {
+        $query->chunk(100, function ($rows) use ($zip, $client, $statusKey, &$doneFiles, $target) {
             $promises = [];
             $fileMapping = [];
 
@@ -134,6 +168,13 @@ class CallRecordingsZipExport
                     $zip->setCompressionName($zipName, ZipArchive::CM_STORE);
                 }
             }
+
+            $doneFiles += count($rows);
+            \Illuminate\Support\Facades\Cache::put(
+                $statusKey,
+                ['ready' => false, 'done' => min($doneFiles, $target), 'total' => $target],
+                now()->addMinutes(30)
+            );
         });
 
         $zip->close();

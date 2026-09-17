@@ -28,7 +28,7 @@
                 <i class="fa-solid" :class="isExporting ? 'fa-gear fa-spin' : 'fa-file-excel text-xs'"></i> 
                 
                 <!-- Teks berubah dinamis tergantung format yang dipilih -->
-                <span x-text="isExporting ? 'Merakit ' + exportFormat.toUpperCase() + '...' : 'Export Data'"></span>
+                <span x-text="isExporting ? ('Merakit ' + exportFormat.toUpperCase() + '... ' + exportProgress) : 'Export Data'"></span>
             </button>
 
             <!-- Tombol Export ZIP Rekaman -->
@@ -38,7 +38,7 @@
     <!-- Ikon berputar saat proses zip berjalan -->
     <i class="fa-solid" :class="isExportingZip ? 'fa-gear fa-spin' : 'fa-file-zipper text-xs'"></i> 
     
-    <span x-text="isExportingZip ? 'Merakit File ZIP...' : 'Export ZIP Rekaman'"></span>
+                <span x-text="isExportingZip ? ('Merakit File ZIP... ' + zipProgress) : 'Export ZIP Rekaman'"></span>
 </button>
             
             <button @click="syncAndRefresh()" :disabled="isSyncing" 

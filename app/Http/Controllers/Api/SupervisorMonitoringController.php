@@ -365,38 +365,63 @@ class SupervisorMonitoringController extends Controller
         $query->whereDate('calldate', '<=', $request->end_date);
     }
 
-    // Tentukan Sorting
+    // Tentukan Sorting (kolom + arah; arah bisa dibalik untuk trik ambil-dari-ujung)
     $sort = $request->query('sort', 'oldest');
     switch ($sort) {
-        case 'oldest': $query->orderBy('calldate', 'asc'); break;
-        case 'longest': $query->orderBy('billsec', 'desc'); break;
-        case 'shortest': $query->orderBy('billsec', 'asc'); break;
+        case 'oldest': $sortCol = 'calldate'; $sortDir = 'asc'; break;
+        case 'longest': $sortCol = 'billsec'; $sortDir = 'desc'; break;
+        case 'shortest': $sortCol = 'billsec'; $sortDir = 'asc'; break;
         case 'newest':
-        default: $query->orderBy('calldate', 'desc'); break;
+        default: $sortCol = 'calldate'; $sortDir = 'desc'; break;
     }
 
     $perPage = $request->query('per_page', 15);
-    $page = $request->query('page', 1);
+    $page = max(1, (int) $request->query('page', 1));
 
-    // 1. Hitung total seluruh data
-    $total = (clone $query)->count();
+    // 1. Total di-cache 60 detik per kombinasi filter (COUNT di jutaan baris
+    // itu 1-2 detik sendiri; filter jarang berubah dalam semenit).
+    $countKey = 'calllogs_count_' . md5(json_encode([
+        'spv' => session('supervisor_extension'),
+        'agent' => session('agent_extension'),
+        'agent_extension' => $request->input('agent_extension'),
+        'search' => $request->input('search'),
+        'start_date' => $request->input('start_date'),
+        'end_date' => $request->input('end_date'),
+    ]));
+    $total = \Illuminate\Support\Facades\Cache::remember($countKey, 60, function () use ($query) {
+        return (clone $query)->count();
+    });
 
-    // 🚀 2. AMBIL ID DENGAN TETAP MEMBAWA SORTING (Tanpa reorder yang menghapus orderBy)
-    $targetIds = (clone $query)
-        ->select('uniqueid')
-        ->offset(($page - 1) * $perPage)
-        ->limit($perPage)
-        ->pluck('uniqueid');
-
-    // 3. Ambil data lengkap berdasarkan ID yang sudah terurut benar
-    $logsCollection = (clone $query)
-        ->whereIn('uniqueid', $targetIds)
-        ->get();
-
-    // Urutkan ulang collection agar urutannya persis sesuai targetIds dari database
-    $logsCollection = $targetIds->map(function ($id) use ($logsCollection) {
-        return $logsCollection->firstWhere('uniqueid', $id);
-    })->filter()->values();
+    // 2. Satu query langsung. Trik ujung: bila halaman yang diminta ada di
+    // separuh belakang, ambil dari ujung berlawanan (sort dibalik, offset dari
+    // akhir) lalu balik urutannya di PHP — OFFSET kecil = cepat. Contoh:
+    // page terakhir 2,6 jt baris = page pertama sort terbalik (milidetik).
+    // Tiebreaker id agar urutan stabil di kedua arah.
+    $offset = ($page - 1) * $perPage;
+    $fromEnd = $total > 0 && $offset > $total / 2;
+    if ($fromEnd) {
+        $effDir = $sortDir === 'asc' ? 'desc' : 'asc';
+        // Ambil jendela yang sama dari ujung berlawanan: [total-offset-limit, total-offset)
+        $revOffset = max(0, $total - $offset - $perPage);
+        $revLimit = min($perPage, $total - $offset);
+        $logsCollection = $revLimit > 0
+            ? (clone $query)
+                ->orderBy($sortCol, $effDir)
+                ->orderBy('id', $effDir)
+                ->offset($revOffset)
+                ->limit($revLimit)
+                ->get()
+                ->reverse()
+                ->values()
+            : collect();
+    } else {
+        $logsCollection = (clone $query)
+            ->orderBy($sortCol, $sortDir)
+            ->orderBy('id', $sortDir)
+            ->offset($offset)
+            ->limit($perPage)
+            ->get();
+    }
 
     // 4. Bungkus ke Paginator
     $paginatedLogs = new \Illuminate\Pagination\LengthAwarePaginator(
@@ -536,7 +561,10 @@ class SupervisorMonitoringController extends Controller
             ]);
         }
 
-        return response()->json(['ready' => false]);
+        // Progres pengerjaan (ditulis job tiap 5000 baris) + info cap
+        $progress = \Illuminate\Support\Facades\Cache::get('export_progress_' . $filename, []);
+
+        return response()->json(array_merge(['ready' => false], $progress));
     }
     public function agentClickToCall(Request $request)
     {

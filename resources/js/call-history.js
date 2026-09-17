@@ -16,6 +16,8 @@ window.callHistoryPage = function() {
         
         isExporting: false, 
         isExportingZip: false,
+        exportProgress: '',
+        zipProgress: '',
         exportFormat: 'xlsx',
         isSyncing: false,
         isLoading: false, 
@@ -153,19 +155,21 @@ window.callHistoryPage = function() {
         },
 
         getPaginationPages() {
-            let current = this.pagination.current_page;
-            let last = this.pagination.last_page;
-            let delta = 2;
-            let range = [];
-            
-            for (let i = 1; i <= last; i++) {
-                if (i === 1 || i === last || (i >= current - delta && i <= current + delta)) {
-                    range.push(i);
-                } else if (range[range.length - 1] !== '...') {
-                    range.push('...');
-                }
+            // O(1): jangan loop 1..last (bisa ratusan ribu di tabel besar).
+            const current = this.pagination.current_page || 1;
+            const last = this.pagination.last_page || 1;
+            const delta = 2;
+            const set = new Set([1, last]);
+            for (let i = current - delta; i <= current + delta; i++) {
+                if (i > 1 && i < last) set.add(i);
             }
-            return range;
+            const sorted = [...set].sort((a, b) => a - b);
+            const out = [];
+            sorted.forEach((p, idx) => {
+                if (idx > 0 && p - sorted[idx - 1] > 1) out.push('...');
+                out.push(p);
+            });
+            return out;
         },
 
         jumpToPage() {
@@ -187,7 +191,8 @@ window.callHistoryPage = function() {
         },
 
         async exportRecordingsZip() {
-    this.isExportingZip = true; 
+    this.isExportingZip = true;
+    this.zipProgress = '';
     try {
         // Mengambil parameter filter yang sedang aktif
         let params = new URLSearchParams(this.filters).toString();
@@ -211,7 +216,11 @@ window.callHistoryPage = function() {
                 if (status.ready) {
                     clearInterval(checkInterval);
                     window.location.href = status.url; // Otomatis download file .zip
-                    this.isExportingZip = false; 
+                    this.isExportingZip = false;
+                    this.zipProgress = '';
+                } else if (status.total > 0) {
+                    const pct = Math.min(99, Math.round((status.done || 0) / status.total * 100));
+                    this.zipProgress = `${pct}% (${status.done || 0}/${status.total}${status.truncated ? ', dibatasi' : ''})`;
                 }
             } catch (err) {
                 clearInterval(checkInterval);
@@ -229,7 +238,8 @@ window.callHistoryPage = function() {
 },
 
         async exportData() {
-            this.isExporting = true; 
+            this.isExporting = true;
+            this.exportProgress = '';
             try {
                 let params = new URLSearchParams(this.filters).toString();
                 let url = `/dashboard/api/call-logs/export?${params}&format=${this.exportFormat}`;
@@ -251,7 +261,11 @@ window.callHistoryPage = function() {
                         if (status.ready) {
                             clearInterval(checkInterval);
                             window.location.href = status.url; 
-                            this.isExporting = false; 
+                            this.isExporting = false;
+                            this.exportProgress = '';
+                        } else if (status.total > 0) {
+                            const pct = Math.min(99, Math.round((status.done || 0) / status.total * 100));
+                            this.exportProgress = `${pct}% (${status.done || 0}/${status.total}${status.truncated ? ', dibatasi' : ''})`;
                         }
                     } catch (err) {
                         clearInterval(checkInterval);
