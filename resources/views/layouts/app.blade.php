@@ -91,7 +91,7 @@
             </div>
         </div>
 
-        <nav class="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+        <nav id="side-nav" class="flex-1 overflow-y-auto py-4 px-3 space-y-1">
             @if($userType === 'agent')
                 <p class="px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-3 mt-2">Contact Center</p>
                 <a href="{{ route('dashboard.overview', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('dashboard.overview') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
@@ -319,6 +319,33 @@
     @endif
 
     @yield('scripts')
+
+    <script>
+    // Sidebar: ingat posisi scroll antar pindah menu (Turbo me-render ulang
+    // seluruh body sehingga scroll selalu reset ke atas kalau tidak disimpan).
+    function sideNavRestore() {
+        const nav = document.getElementById('side-nav');
+        if (!nav) return;
+        try {
+            const saved = parseInt(sessionStorage.getItem('sideNavScroll') || '0', 10);
+            if (saved > 0) nav.scrollTop = saved;
+            if (!nav.dataset.scrollBound) {
+                nav.dataset.scrollBound = '1';
+                nav.addEventListener('scroll', () => {
+                    try { sessionStorage.setItem('sideNavScroll', String(nav.scrollTop)); } catch (e) {}
+                }, { passive: true });
+            }
+        } catch (e) {}
+    }
+    document.addEventListener('DOMContentLoaded', sideNavRestore);
+    // Turbo tidak memicu DOMContentLoaded saat navigasi
+    document.addEventListener('turbo:load', sideNavRestore);
+    document.addEventListener('turbo:before-visit', () => {
+        const nav = document.getElementById('side-nav');
+        if (!nav) return;
+        try { sessionStorage.setItem('sideNavScroll', String(nav.scrollTop)); } catch (e) {}
+    });
+    </script>
 
     <script>
     // 419 global: submit Turbo yang kena Page Expired -> reload sekali untuk

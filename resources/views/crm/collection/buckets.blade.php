@@ -70,9 +70,11 @@
                                 @if($b->bucket === 'Tanpa Bucket')
                                     <span class="text-slate-300 text-xs">—</span>
                                 @else
+                                    @if($b->count > 0)
                                     <button onclick="openBlastModal({{ json_encode($b->bucket) }})" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors" title="Blast WA/SMS ke bucket ini">
                                         <i class="fa-solid fa-paper-plane text-[10px]"></i> Blast
                                     </button>
+                                    @endif
                                     <a href="{{ route('crm.customers.index', ['bucket' => $b->bucket]) }}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-brand-50 text-brand-700 border border-brand-200 hover:bg-brand-100 transition-colors">
                                         Lihat <i class="fa-solid fa-arrow-right text-[10px]"></i>
                                     </a>

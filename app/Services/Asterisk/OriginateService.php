@@ -174,6 +174,55 @@ class OriginateService
     }
 
     /**
+     * Snapshot isi queue PDS via AMI QueueStatus.
+     * Return ['connected'=>bool, 'calls'=>int, 'holdtime'=>int,
+     *          'members'=>[...], 'entries'=>[...]].
+     * entries = penelepon yang sedang antre (Position, CallerIDNum, Wait detik).
+     */
+    public function queueStatus($queue): array
+    {
+        $result = ['connected' => false, 'calls' => 0, 'holdtime' => 0, 'members' => [], 'entries' => []];
+        try {
+            $this->ami->connect();
+            $this->ami->sendAction('QueueStatus', ['Queue' => $queue]);
+            $events = $this->ami->readEventsUntil('QueueStatusComplete', 10);
+            $this->ami->disconnect();
+        } catch (Exception $e) {
+            return $result;
+        }
+
+        $result['connected'] = true;
+        foreach ($events as $ev) {
+            $event = $ev['Event'] ?? '';
+            if ($event === 'QueueParams' && ($ev['Queue'] ?? '') === (string) $queue) {
+                $result['calls'] = (int) ($ev['Calls'] ?? 0);
+                $result['holdtime'] = (int) ($ev['Holdtime'] ?? 0);
+            } elseif ($event === 'QueueMember') {
+                $result['members'][] = [
+                    'interface' => $ev['Interface'] ?? ($ev['Name'] ?? '-'),
+                    'name' => $ev['Name'] ?? ($ev['MemberName'] ?? '-'),
+                    'paused' => ($ev['Paused'] ?? '0') === '1',
+                    'status' => (int) ($ev['Status'] ?? 0),
+                    'calls_taken' => (int) ($ev['CallsTaken'] ?? 0),
+                    'last_call' => (int) ($ev['LastCall'] ?? 0),
+                ];
+            } elseif ($event === 'QueueEntry') {
+                $result['entries'][] = [
+                    'position' => (int) ($ev['Position'] ?? 0),
+                    'caller_id' => $ev['CallerIDNum'] ?? ($ev['CallerIDName'] ?? '-'),
+                    'caller_name' => $ev['CallerIDName'] ?? '',
+                    'wait' => (int) ($ev['Wait'] ?? 0),
+                    'channel' => $ev['Channel'] ?? '',
+                ];
+            }
+        }
+
+        usort($result['entries'], fn($a, $b) => $a['position'] <=> $b['position']);
+
+        return $result;
+    }
+
+    /**
      * Fitur Supervisor Action (Listen, Whisper, Join)
      * 
      * @param string $supervisorExt Extension milik supervisor (misal: "201")

@@ -204,6 +204,104 @@ class DialerController extends Controller
         return response()->json(['status' => 'success', 'data' => $rotation]);
     }
 
+    /**
+     * Monitoring queue PDS: siapa sedang antre (live via AMI), member login,
+     * abandoned hari ini + item terjawab tapi belum tersambung (DB).
+     */
+    public function queueMonitor(PdsDialService $pds)
+    {
+        $queue = config('services.pds.queue', '9000');
+
+        $qs = ['connected' => false, 'calls' => 0, 'holdtime' => 0, 'members' => [], 'entries' => []];
+        try {
+            $qs = app(\App\Services\Asterisk\OriginateService::class)->queueStatus($queue);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('PDS queue monitor gagal: ' . $e->getMessage());
+        }
+
+        // Tandai member yang dikenal sebagai agent kita
+        $agentNames = Agent::pluck('name', 'extension')->toArray();
+        $members = array_map(function ($m) use ($agentNames) {
+            $ext = preg_replace('/^PJSIP\//', '', (string) ($m['interface'] ?? ''));
+            if (isset($agentNames[$ext])) {
+                $m['agent_name'] = $agentNames[$ext];
+                $m['extension'] = $ext;
+            }
+            return $m;
+        }, $qs['members']);
+
+        // Padankan nomor antre dengan customer/job (biar ketahuan nomor siapa)
+        $waitingPhones = collect($qs['entries'])->pluck('caller_id')->filter()->unique()->values();
+        $phoneMap = [];
+        if ($waitingPhones->isNotEmpty()) {
+            $norm = function ($p) {
+                $d = preg_replace('/\D/', '', (string) $p);
+                if (str_starts_with($d, '0')) {
+                    $d = '62' . substr($d, 1);
+                }
+                return $d;
+            };
+            $variants = $waitingPhones->flatMap(fn($p) => [$p, $norm($p), '0' . ltrim($norm($p), '62')])->unique()->values();
+            $phoneMap = \App\Models\DialQueueItem::with('customer:id,name')
+                ->whereIn('phone', $variants->toArray())
+                ->where('status', 'dialing')
+                ->latest('id')
+                ->get()
+                ->mapWithKeys(fn($it) => [$it->phone => [
+                    'customer' => $it->customer?->name,
+                    'job_id' => $it->job_id,
+                    'agent_extension' => $it->agent_extension,
+                ]]);
+        }
+        $entries = array_map(function ($e) use ($phoneMap) {
+            $info = $phoneMap[$e['caller_id']] ?? null;
+            if (!$info) {
+                $d = preg_replace('/\D/', '', (string) $e['caller_id']);
+                if (str_starts_with($d, '0')) {
+                    $d = '62' . substr($d, 1);
+                }
+                $info = $phoneMap[$d] ?? null;
+            }
+            $e['customer'] = $info['customer'] ?? null;
+            $e['job_id'] = $info['job_id'] ?? null;
+            return $e;
+        }, $qs['entries']);
+
+        $today = now()->toDateString();
+        $abandonedToday = \App\Models\DialQueueItem::whereDate('updated_at', $today)
+            ->where('note', 'like', 'Abandoned%')
+            ->count();
+
+        // Terjawab tapi belum tersambung ke agent (kandidat masih antre)
+        $answeredUnbridged = \App\Models\DialQueueItem::with(['customer:id,name', 'job:id,name'])
+            ->whereNotNull('answered_at')
+            ->whereNull('bridged_agent')
+            ->where('status', 'dialing')
+            ->orderByDesc('answered_at')
+            ->limit(20)
+            ->get()
+            ->map(fn($it) => [
+                'id' => $it->id,
+                'phone' => $it->phone,
+                'customer' => $it->customer?->name,
+                'job' => $it->job?->name,
+                'answered_at' => $it->answered_at?->toDateTimeString(),
+                'waited' => $it->answered_at ? $it->answered_at->diffInSeconds(now()) : null,
+            ]);
+
+        return response()->json([
+            'status' => 'success',
+            'queue' => $queue,
+            'ami_connected' => $qs['connected'],
+            'waiting' => $qs['calls'],
+            'holdtime' => $qs['holdtime'],
+            'members' => $members,
+            'entries' => $entries,
+            'abandoned_today' => $abandonedToday,
+            'answered_unbridged' => $answeredUnbridged,
+        ]);
+    }
+
     // ============ ROTATION MILIK AGENT (session agent, di luar premium gate) ============
 
     protected function currentAgent()

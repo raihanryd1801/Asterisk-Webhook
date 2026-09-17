@@ -25,6 +25,8 @@ Route::post('/call-logs/store', [CallLogController::class, 'store']);
 Route::post('/pds/bridge', [\App\Http\Controllers\Api\PdsBridgeController::class, 'bridge']);
 Route::post('/pds/result', [\App\Http\Controllers\Api\PdsBridgeController::class, 'result']);
 
+// Sinkron pesan keluar yang dikirim dari HP (fromMe via Baileys)
+Route::post('/wa/sent', [\App\Http\Controllers\WaController::class, 'outboundSync']);
 // Webhook pesan masuk dari sidecar wa-gateway (otorisasi via token, tanpa login)
 Route::post('/wa/inbound', [\App\Http\Controllers\WaController::class, 'inbound']);
 // Status keterkiriman (delivered/read) dari sidecar

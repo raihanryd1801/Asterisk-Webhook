@@ -91,9 +91,62 @@ window.WAInbox = window.WAInbox || {
     active: null,
     timer: null,
     sending: false,
+    seen: {},
+    baselineDone: false,
+    baseTitle: document.title,
 
     esc(s) {
         return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    },
+
+    beep() {
+        // Notifikasi suara pendek; autoplay policy: gagal diam-diam sebelum ada gesture.
+        try {
+            const Ctx = window.AudioContext || window.webkitAudioContext;
+            if (!Ctx) return;
+            window.WAInbox._audio = window.WAInbox._audio || new Ctx();
+            const ctx = window.WAInbox._audio;
+            if (ctx.state === 'suspended') { ctx.resume().catch(() => {}); return; }
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.frequency.value = 880;
+            gain.gain.setValueAtTime(0.001, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.3);
+        } catch (e) {}
+    },
+
+    toast(phone, name, text) {
+        let wrap = document.getElementById('wa-toasts');
+        if (!wrap) {
+            wrap = document.createElement('div');
+            wrap.id = 'wa-toasts';
+            wrap.className = 'fixed bottom-6 right-6 z-[60] flex flex-col gap-2 items-end';
+            document.body.appendChild(wrap);
+        }
+        const el = document.createElement('button');
+        el.className = 'max-w-xs w-72 text-left bg-slate-900 text-white rounded-2xl shadow-2xl border border-white/10 p-3.5 flex gap-3 items-start hover:bg-slate-800 transition';
+        el.innerHTML =
+            '<div class="w-10 h-10 rounded-full bg-brand-600 flex items-center justify-center font-bold shrink-0">' +
+            this.esc((name || phone || '?').substring(0, 1).toUpperCase()) + '</div>' +
+            '<div class="flex-1 min-w-0"><p class="font-semibold text-sm truncate">' +
+            this.esc(name || phone) + '</p><p class="text-xs text-slate-300 truncate mt-0.5">' +
+            this.esc(text || 'Pesan baru masuk') + '</p>' +
+            '<p class="text-[10px] text-brand-500 font-semibold mt-1">Klik untuk membuka</p></div>';
+        el.onclick = () => { el.remove(); window.WAInbox.open(phone); };
+        wrap.appendChild(el);
+        while (wrap.children.length > 3) wrap.firstChild.remove();
+        setTimeout(() => { if (el.parentNode) el.remove(); }, 8000);
+    },
+
+    paintTitle(totalUnread) {
+        document.title = totalUnread > 0
+            ? `(${totalUnread > 99 ? '99+' : totalUnread}) ${this.baseTitle}`
+            : this.baseTitle;
     },
 
     tickHtml(tick) {
@@ -157,6 +210,22 @@ window.WAInbox = window.WAInbox || {
             const box = document.getElementById('wa-convs');
             const list = data.data.filter(c =>
                 !q || (c.name || '').toLowerCase().includes(q) || (c.phone || '').includes(q));
+            // Deteksi pesan baru untuk toast + bunyi + title. Poll pertama
+            // hanya jadi baseline (tidak bunyi untuk pesan lama).
+            let totalUnread = 0;
+            for (const c of data.data) {
+                totalUnread += (c.unread || 0);
+                const prev = this.seen[c.phone];
+                if (this.baselineDone && (c.unread || 0) > 0 && prev !== undefined && prev !== c.at) {
+                    if (c.phone !== this.active) {
+                        this.toast(c.phone, c.name || c.phone, c.last_message || 'Pesan baru masuk');
+                    }
+                    this.beep();
+                }
+                this.seen[c.phone] = c.at;
+            }
+            this.baselineDone = true;
+            this.paintTitle(totalUnread);
             box.innerHTML = list.length === 0
                 ? '<div class="p-8 text-center text-slate-400 text-sm"><i class="fa-regular fa-comment-dots text-2xl text-slate-300 mb-2 block"></i>Belum ada percakapan.<br>Balasan blast akan muncul di sini.</div>'
                 : list.map(c => `
@@ -324,6 +393,9 @@ function waInboxInit() {
     // Hentikan timer lama (mis. dari kunjungan Turbo sebelumnya) agar tidak dobel
     if (window.WAInbox.timer) clearInterval(window.WAInbox.timer);
     window.WAInbox.active = null;
+    window.WAInbox.seen = {};
+    window.WAInbox.baselineDone = false;
+    window.WAInbox.paintTitle(0);
     // Kembalikan draft pesan yang tersimpan sebelum reload paksa
     try {
         const draft = JSON.parse(localStorage.getItem('wa-reply-draft') || 'null');

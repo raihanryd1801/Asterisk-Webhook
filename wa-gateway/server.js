@@ -16,6 +16,8 @@ const {
     useMultiFileAuthState,
     DisconnectReason,
     fetchLatestBaileysVersion,
+    USyncQuery,
+    USyncUser,
 } = require('@whiskeysockets/baileys');
 
 const PORT = parseInt(process.env.WA_PORT || '3001', 10);
@@ -213,9 +215,34 @@ async function startSession(id) {
         }
     });
 
-    // Teruskan pesan MASUK ke Laravel (abaikan pesan sendiri & status).
-    // Media (gambar/video/dokumen/audio) diunduh lalu dikirim multipart.
+    // Cache LID -> nomor per sesi (menghemat query USYNC berulang).
     const { downloadMediaMessage } = require('@whiskeysockets/baileys');
+    const lidCache = new Map();
+    async function resolveLid(lidDigits) {
+        if (!lidDigits) return '';
+        if (lidCache.has(lidDigits)) return lidCache.get(lidDigits);
+        try {
+            // Query protokol LID langsung (bukan via onWhatsApp yang selalu
+            // menganggap input sebagai nomor telepon sehingga LID tak ketemu).
+            const q = new USyncQuery().withContactProtocol().withLIDProtocol();
+            q.withUser(new USyncUser().withLid(lidDigits));
+            const results = await sock.executeUSyncQuery(q);
+            const list = (results && results.list) || [];
+            for (const item of list) {
+                const jid = item && item.id ? String(item.id) : '';
+                if (jid.endsWith('@s.whatsapp.net')) {
+                    const phone = jid.replace(/@.*$/, '').replace(/\D/g, '');
+                    if (phone && phone !== lidDigits) {
+                        lidCache.set(lidDigits, phone);
+                        return phone;
+                    }
+                }
+            }
+            return '';
+        } catch (e) {
+            return '';
+        }
+    }
     const MAX_MEDIA_BYTES = 8 * 1024 * 1024;
 
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
@@ -223,13 +250,25 @@ async function startSession(id) {
         for (const msg of messages || []) {
             storeMessage(id, msg);
             try {
-                if (!msg.message || msg.key?.fromMe) continue;
+                if (!msg.message) continue;
+                // Pesan fromMe = dikirim dari perangkat tertaut/HP sendiri.
+                // Dulu dibuang; sekarang diteruskan sebagai outbound agar chat
+                // dari HP ikut muncul di web. Duplikat dengan kiriman via
+                // web/blast dicegah Laravel via external_id (message_id).
+                const isOwn = !!msg.key?.fromMe;
+                const endpoint = isOwn ? 'sent' : 'inbound';
                 // Baileys baru mengirim JID samaran @lid; nomor asli ada di remoteJidAlt.
                 // Utamakan JID nomor telepon, tapi JANGAN buang pesan murni @lid
                 // (tanpa padanan nomor) — tetap teruskan dengan server aslinya
                 // agar balasan bisa kembali ke alamat yang tepat.
                 const alt = msg.key?.remoteJidAlt || '';
                 let remote = msg.key?.remoteJid || '';
+                // Ingat LID aslinya bila remote berupa @lid — dikirim ke Laravel
+                // agar bisa disimpan sebagai peta LID->nomor (untuk kiriman HP).
+                let lid = '';
+                if (remote.endsWith('@lid')) {
+                    lid = remote.replace(/@.*$/, '').replace(/\D/g, '');
+                }
                 let server = null;
                 if (alt.endsWith('@s.whatsapp.net')) {
                     remote = alt;
@@ -238,13 +277,20 @@ async function startSession(id) {
                     server = 's.whatsapp.net';
                 } else if (remote.endsWith('@lid')) {
                     // Coba petakan ke nomor asli via identitas pengirim;
-                    // kalau tidak ada, tetap teruskan sebagai LID.
+                    // kalau tidak ada (mis. kiriman dari HP ke kontak baru),
+                    // tanya langsung ke server WA (USYNC) LID ini milik nomor apa.
                     const pn = senderPhoneNumber(msg);
                     if (pn) {
                         remote = `${pn}@s.whatsapp.net`;
                         server = 's.whatsapp.net';
                     } else {
-                        server = 'lid';
+                        const resolved = await resolveLid(remote.replace(/@.*$/, '').replace(/\D/g, ''));
+                        if (resolved) {
+                            remote = `${resolved}@s.whatsapp.net`;
+                            server = 's.whatsapp.net';
+                        } else {
+                            server = 'lid';
+                        }
                     }
                 } else {
                     continue;
@@ -287,6 +333,7 @@ async function startSession(id) {
                     session_id: id,
                     remote_jid: remote,
                     remote_server: server,
+                    lid,
                     push_name: msg.pushName || '',
                     message_id: msg.key?.id || '',
                     text: String(text).slice(0, 4000),
@@ -298,13 +345,13 @@ async function startSession(id) {
                     for (const [k, v] of Object.entries(baseFields)) form.append(k, v);
                     form.append('media_kind', mediaKind);
                     form.append('media', new Blob([mediaBuffer], { type: mediaMime }), `wa-${Date.now()}.${ext}`);
-                    await fetch(`${LARAVEL_URL}/api/wa/inbound`, {
+                    await fetch(`${LARAVEL_URL}/api/wa/${endpoint}`, {
                         method: 'POST',
                         headers: { 'X-Gateway-Token': TOKEN },
                         body: form,
                     }).catch(() => {});
                 } else {
-                    await fetch(`${LARAVEL_URL}/api/wa/inbound`, {
+                    await fetch(`${LARAVEL_URL}/api/wa/${endpoint}`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',

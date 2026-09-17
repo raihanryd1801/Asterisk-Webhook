@@ -57,6 +57,62 @@
         </div>
     </div>
 
+    <!-- Queue Monitor -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div class="p-4 border-b border-slate-200 flex items-center justify-between">
+            <h2 class="text-sm font-bold text-slate-800 uppercase tracking-wider">
+                Antrean Queue <span class="font-mono" x-text="queue ? queue.queue : ''"></span>
+                <span class="ml-2 inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border"
+                    :class="queue && queue.ami_connected ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'">
+                    <span class="w-1.5 h-1.5 rounded-full" :class="queue && queue.ami_connected ? 'bg-emerald-500' : 'bg-rose-500'"></span>
+                    <span x-text="queue && queue.ami_connected ? 'AMI Live' : 'AMI Offline'"></span>
+                </span>
+            </h2>
+            <div class="flex items-center gap-3 text-xs">
+                <span class="text-slate-500">Menunggu: <strong class="text-amber-600 font-mono text-sm" x-text="queue ? queue.waiting : '-'"></strong></span>
+                <span class="text-slate-500">Abandoned hari ini: <strong class="text-rose-600 font-mono text-sm" x-text="queue ? queue.abandoned_today : '-'"></strong></span>
+            </div>
+        </div>
+        <div class="p-4">
+            <template x-if="!queue || !queue.ami_connected">
+                <p class="text-xs text-slate-400 italic">Tidak terhubung ke AMI — daftar antrean live tidak tampil. Data abandoned tetap dihitung dari database.</p>
+            </template>
+            <template x-if="queue && queue.ami_connected && queue.entries.length === 0">
+                <p class="text-xs text-slate-400 italic">Antrean kosong. Customer yang mengangkat langsung tersambung ke agent.</p>
+            </template>
+            <div class="space-y-2" x-show="queue && queue.entries.length > 0">
+                <template x-for="e in queue.entries" :key="e.position + '-' + e.caller_id">
+                    <div class="flex items-center gap-3 border border-amber-200 bg-amber-50/50 rounded-xl px-3 py-2 text-sm">
+                        <span class="w-7 h-7 rounded-full bg-amber-500 text-white text-xs font-bold flex items-center justify-center shrink-0" x-text="e.position"></span>
+                        <div class="flex-1 min-w-0">
+                            <span class="font-mono font-semibold text-slate-800" x-text="e.caller_id"></span>
+                            <template x-if="e.customer">
+                                <span class="text-xs text-slate-500" x-text="' • ' + e.customer"></span>
+                            </template>
+                        </div>
+                        <span class="text-xs text-slate-500 font-mono shrink-0" x-text="e.wait + ' dtk'"></span>
+                    </div>
+                </template>
+            </div>
+            <template x-if="queue && queue.answered_unbridged.length > 0">
+                <div class="mt-3 pt-3 border-t border-slate-100">
+                    <p class="text-[11px] font-bold text-slate-500 uppercase mb-2">Terjawab tapi belum tersambung (DB)</p>
+                    <div class="space-y-1.5">
+                        <template x-for="u in queue.answered_unbridged" :key="u.id">
+                            <div class="flex items-center gap-2 text-xs text-slate-600">
+                                <i class="fa-solid fa-phone-volume text-amber-500"></i>
+                                <span class="font-mono" x-text="u.phone"></span>
+                                <span x-text="u.customer ? '• ' + u.customer : ''"></span>
+                                <span class="text-slate-400" x-text="u.job ? '• job ' + u.job : ''"></span>
+                                <span class="ml-auto font-mono text-slate-400" x-text="u.waited + ' dtk lalu'"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
     <!-- Jobs -->
     <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div class="overflow-x-auto">
@@ -285,6 +341,7 @@ window.dialerManager = function() {
         jobs: @json($jobs->items()),
         pagination: @json($dialPaginationData),
         rotation: [],
+        queue: null,
         allBuckets: @json($buckets),
         showModal: false,
         submitting: false,
@@ -306,11 +363,14 @@ window.dialerManager = function() {
 
         async fetchAll(silent = false) {
             try {
-                const [jobsRes, rotRes] = await Promise.all([
+                const [jobsRes, rotRes, queueRes] = await Promise.all([
                     fetch(`{{ route('crm.dialer.index') }}?page=${this.pagination.current_page || 1}`, {
                         headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
                     }),
                     fetch(`{{ route('crm.dialer.rotation') }}`, {
+                        headers: { 'Accept': 'application/json' }
+                    }),
+                    fetch(`{{ route('crm.dialer.queue') }}`, {
                         headers: { 'Accept': 'application/json' }
                     }),
                 ]);
@@ -328,6 +388,10 @@ window.dialerManager = function() {
                 };
                 const rotData = await rotRes.json();
                 if (rotData.status === 'success') this.rotation = rotData.data;
+                try {
+                    const queueData = await queueRes.json();
+                    if (queueData.status === 'success') this.queue = queueData;
+                } catch (e) { if (!silent) console.error(e); }
             } catch (e) {
                 if (!silent) console.error(e);
             }

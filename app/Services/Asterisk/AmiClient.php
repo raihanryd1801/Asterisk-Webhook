@@ -93,8 +93,49 @@ class AmiClient
         }
     }
     /**
-     * Membaca event stream dari Asterisk secara terus-menerus tanpa putus karena timeout
+     * Baca blok-blok event sampai event penutup diterima atau timeout.
+     * Dipakai untuk action yang menjawab banyak event (mis. QueueStatus
+     * yang diakhiri Event: QueueStatusComplete).
+     * Return array blok asosiatif (termasuk blok Response awal).
      */
+    public function readEventsUntil(string $completeEvent, int $timeoutSec = 10): array
+    {
+        if (!$this->socket) {
+            throw new Exception("Socket AMI belum terhubung! Panggil connect() dulu.");
+        }
+
+        $events = [];
+        $block = [];
+        $deadline = time() + max(2, $timeoutSec);
+        stream_set_timeout($this->socket, 2);
+
+        while (time() < $deadline) {
+            $line = fgets($this->socket);
+            if ($line === false) {
+                $meta = stream_get_meta_data($this->socket);
+                if (!empty($meta['timed_out'])) {
+                    continue;
+                }
+                break;
+            }
+            if (trim($line) === '') {
+                if (!empty($block)) {
+                    $events[] = $block;
+                    if (($block['Event'] ?? '') === $completeEvent) {
+                        break;
+                    }
+                    $block = [];
+                }
+                continue;
+            }
+            if (str_contains($line, ':')) {
+                [$key, $value] = explode(':', $line, 2);
+                $block[trim($key)] = trim($value);
+            }
+        }
+
+        return $events;
+    }
     public function listenToEvents(callable $callback)
     {
         while (!feof($this->socket)) {

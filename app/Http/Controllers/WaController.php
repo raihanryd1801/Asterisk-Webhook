@@ -490,6 +490,16 @@ class WaController extends Controller
             ? preg_replace('/\D/', '', $rawId)
             : \App\Models\WaMessage::normalizePhone($rawId);
 
+        // LID yang sudah terpetakan -> pakai nomor aslinya.
+        $lid = preg_replace('/\D/', '', (string) $request->input('lid', ''));
+        if ($server === 'lid') {
+            $mapped = \App\Models\WaLidMap::lookup($request->input('session_id'), $lid !== '' ? $lid : $phone);
+            if ($mapped) {
+                $phone = $mapped;
+                $server = 's.whatsapp.net';
+            }
+        }
+
         if ($phone === '') {
             return response()->json(['status' => 'error', 'message' => 'Nomor tidak valid'], 422);
         }
@@ -522,6 +532,13 @@ class WaController extends Controller
             $request->input('session_id'), $phone, $server, $customerId
         );
 
+        // Ingat peta LID->nomor bila pesan ini datang via @lid tapi terpetakan
+        // ke nomor asli (agar kiriman HP berikutnya gabung thread yang sama).
+        if ($server === 's.whatsapp.net') {
+            $lidRemember = preg_replace('/\D/', '', (string) $request->input('lid', ''));
+            \App\Models\WaLidMap::remember($request->input('session_id'), $lidRemember, $phone);
+        }
+
         // occurred_at dari sidecar berformat ISO UTC (akhiran Z).
         // Wajib dikonversi ke timezone aplikasi (WIB) sebelum disimpan,
         // kalau tidak jam tampil 7 jam lebih lambat dari pesan keluar.
@@ -536,6 +553,110 @@ class WaController extends Controller
             'jid_server' => $server,
             'name' => $this->resolveName($customerId, $request->input('push_name')),
             'customer_id' => $customerId,
+            'message' => mb_substr($text, 0, 4000),
+            'media_path' => $mediaPath,
+            'media_mime' => $mediaMime,
+            'external_id' => $request->input('message_id'),
+            'occurred_at' => $occurred,
+        ]);
+
+        return response()->json(['status' => 'success']);
+    }
+
+    // ============ SINKRON PESAN KELUAR DARI HP (token gateway, tanpa session login) ============
+    // Baileys meneruskan pesan yang dikirim dari HP (fromMe) via messages.upsert.
+    // Dedupe via external_id: kiriman web/blast sudah tercatat duluan oleh Laravel.
+
+    public function outboundSync(Request $request)
+    {
+        if ((string) $request->header('X-Gateway-Token') !== (string) env('WA_GATEWAY_TOKEN', '')) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 401);
+        }
+
+        $request->validate([
+            'session_id' => 'required|string|max:64',
+            'text' => 'nullable|string',
+            'message' => 'nullable|string',
+            'media' => 'nullable|file|max:8192',
+            'media_kind' => 'nullable|string|max:20',
+            'message_id' => 'nullable|string|max:128',
+        ]);
+
+        if ($request->message_id && \App\Models\WaMessage::where('session_id', $request->session_id)
+                ->where('external_id', $request->message_id)->exists()) {
+            return response()->json(['status' => 'success', 'deduped' => true]);
+        }
+
+        $server = $request->input('remote_server') === 'lid' ? 'lid' : 's.whatsapp.net';
+        $rawId = preg_replace('/@.*$/', '', (string) $request->input('remote_jid', ''));
+        $phone = $server === 'lid'
+            ? preg_replace('/\D/', '', $rawId)
+            : \App\Models\WaMessage::normalizePhone($rawId);
+
+        // Kiriman HP via @lid: petakan ke nomor asli bila sudah dikenal.
+        $lid = preg_replace('/\D/', '', (string) $request->input('lid', ''));
+        if ($server === 'lid') {
+            $mapped = \App\Models\WaLidMap::lookup($request->input('session_id'), $lid !== '' ? $lid : $phone);
+            if ($mapped) {
+                $phone = $mapped;
+                $server = 's.whatsapp.net';
+            }
+        }
+
+        if ($phone === '') {
+            return response()->json(['status' => 'error', 'message' => 'Nomor tidak valid'], 422);
+        }
+
+        $customerId = $server === 'lid' ? null : \App\Models\WaMessage::findCustomerId($phone);
+        $text = trim((string) ($request->input('text') ?? $request->input('message', '')));
+
+        $mediaPath = null;
+        $mediaMime = null;
+        if ($request->hasFile('media') && $request->file('media')->isValid()) {
+            $mediaMime = $request->file('media')->getMimeType() ?: 'application/octet-stream';
+            $ext = $request->file('media')->getClientOriginalExtension() ?: 'bin';
+            $mediaPath = $request->file('media')->storeAs(
+                'wa-media/' . date('Y/m'),
+                \Illuminate\Support\Str::uuid() . '.' . $ext,
+                'public'
+            );
+        }
+
+        if ($text === '' && !$mediaPath) {
+            return response()->json(['status' => 'error', 'message' => 'Pesan kosong'], 422);
+        }
+        if ($text === '') {
+            $text = \App\Models\WaMessage::mediaFallbackLabel($mediaMime);
+        }
+
+        [$phone, $server, $customerId] = \App\Models\WaMessage::resolveThreadKey(
+            $request->input('session_id'), $phone, $server, $customerId
+        );
+
+        if ($server === 's.whatsapp.net') {
+            $lidRemember = preg_replace('/\D/', '', (string) $request->input('lid', ''));
+            \App\Models\WaLidMap::remember($request->input('session_id'), $lidRemember, $phone);
+        }
+
+        // Nama lawan bicara: pakai yang sudah dikenal di thread (push_name
+        // pesan fromMe adalah nama kita sendiri, bukan lawan bicara).
+        $peerName = \App\Models\WaMessage::where('session_id', $request->input('session_id'))
+            ->where('phone', $phone)
+            ->latest('id')
+            ->value('name') ?? $this->resolveName($customerId, null);
+
+        $occurred = $request->input('occurred_at')
+            ? \Carbon\Carbon::parse($request->input('occurred_at'))->setTimezone(config('app.timezone'))
+            : now();
+
+        \App\Models\WaMessage::create([
+            'session_id' => $request->input('session_id'),
+            'direction' => 'out',
+            'phone' => $phone,
+            'jid_server' => $server,
+            'name' => $peerName,
+            'customer_id' => $customerId,
+            'replied_by_label' => 'HP',
             'message' => mb_substr($text, 0, 4000),
             'media_path' => $mediaPath,
             'media_mime' => $mediaMime,

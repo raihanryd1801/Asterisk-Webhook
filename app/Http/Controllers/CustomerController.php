@@ -498,6 +498,14 @@ class CustomerController extends Controller
                 ->count(),
         ];
 
+        // Pembayaran masuk (dari ledger payments)
+        $paymentStats = [
+            'today_total' => (float) \App\Models\Payment::whereDate('paid_at', now()->toDateString())->sum('amount'),
+            'today_count' => \App\Models\Payment::whereDate('paid_at', now()->toDateString())->count(),
+            'month_total' => (float) \App\Models\Payment::whereYear('paid_at', now()->year)->whereMonth('paid_at', now()->month)->sum('amount'),
+            'month_count' => \App\Models\Payment::whereYear('paid_at', now()->year)->whereMonth('paid_at', now()->month)->count(),
+        ];
+
         // Upcoming Due (next 7 days)
         $upcomingDue = Customer::dueSoon(7)
             ->with('collector')
@@ -541,7 +549,7 @@ class CustomerController extends Controller
 
         return view('crm.collection.dashboard', compact(
             'bucketSummary', 'riskSummary',
-            'collectorPerformance', 'ptpStats', 'upcomingDue', 'topNPL',
+            'collectorPerformance', 'ptpStats', 'paymentStats', 'upcomingDue', 'topNPL',
             'slaBreaches'
         ));
     }
@@ -599,7 +607,7 @@ class CustomerController extends Controller
 
     public function buckets(Request $request)
     {
-        $buckets = Customer::selectRaw('
+        $stats = Customer::selectRaw('
             COALESCE(bucket, "Tanpa Bucket") as bucket,
             COUNT(*) as count,
             SUM(total_amount) as total_amount,
@@ -608,16 +616,37 @@ class CustomerController extends Controller
             AVG(days_past_due) as avg_dpd
         ')
             ->groupBy('bucket')
-            ->orderByRaw("CASE COALESCE(bucket, '')
-                WHEN 'Current' THEN 1
-                WHEN 'Bucket 1' THEN 2
-                WHEN 'Bucket 2' THEN 3
-                WHEN 'Bucket 3' THEN 4
-                WHEN 'NPL' THEN 5
-                ELSE 6 END")
-            ->get();
+            ->get()
+            ->keyBy('bucket');
 
+        // Tampilkan SEMUA rentang terdaftar walau 0 case (biar Bucket 2 / NPL
+        // yang kosong tetap kelihatan, bukan hilang misterius).
         $ranges = \App\Models\BucketRange::allRules();
+        $ordered = collect($ranges)->sortBy('sort')->values();
+        $buckets = $ordered->map(function ($r) use ($stats) {
+            $s = $stats->get($r['bucket']);
+            return (object) [
+                'bucket' => $r['bucket'],
+                'count' => (int) ($s->count ?? 0),
+                'total_amount' => (float) ($s->total_amount ?? 0),
+                'paid_amount' => (float) ($s->paid_amount ?? 0),
+                'remaining_amount' => (float) ($s->remaining_amount ?? 0),
+                'avg_dpd' => (float) ($s->avg_dpd ?? 0),
+            ];
+        })->values();
+
+        // Baris "Tanpa Bucket" (tanpa due date) hanya bila memang ada isinya.
+        if ($stats->has('Tanpa Bucket')) {
+            $s = $stats->get('Tanpa Bucket');
+            $buckets->push((object) [
+                'bucket' => 'Tanpa Bucket',
+                'count' => (int) $s->count,
+                'total_amount' => (float) $s->total_amount,
+                'paid_amount' => (float) $s->paid_amount,
+                'remaining_amount' => (float) $s->remaining_amount,
+                'avg_dpd' => $s->avg_dpd,
+            ]);
+        }
 
         return view('crm.collection.buckets', compact('buckets', 'ranges'));
     }

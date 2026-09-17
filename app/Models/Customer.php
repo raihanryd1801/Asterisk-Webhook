@@ -40,6 +40,57 @@ class Customer extends Model
         return $this->belongsTo(DebtCollector::class, 'collector_id');
     }
 
+    public function payments()
+    {
+        return $this->hasMany(Payment::class)->orderByDesc('paid_at')->orderByDesc('id');
+    }
+
+    /** Total pembayaran yang tercatat di tabel payments (di luar saldo awal). */
+    public function getRecordedPaymentsTotalAttribute()
+    {
+        return (float) $this->payments()->sum('amount');
+    }
+
+    /**
+     * Catat 1 transaksi pembayaran: tambah ke paid_amount + sesuaikan
+     * status/last_payment + hitung ulang bucket. Dipakai PaymentController.
+     */
+    public function applyPayment(float $amount, string $paidAt): void
+    {
+        $this->paid_amount = (float) $this->paid_amount + $amount;
+        $this->last_payment_date = $paidAt . ' ' . now()->format('H:i:s');
+
+        $remaining = max(0, (float) $this->total_amount - (float) $this->paid_amount - (float) $this->discount_amount);
+        if ($remaining <= 0 && (float) $this->total_amount > 0) {
+            $this->payment_status = (float) $this->discount_amount > 0 ? 'discounted' : 'paid';
+        } elseif ((float) $this->paid_amount > 0 || (float) $this->discount_amount > 0) {
+            $this->payment_status = 'partial';
+        } else {
+            $this->payment_status = 'unpaid';
+        }
+        $this->save();
+
+        if ($this->due_date) {
+            $this->recalculateBucket();
+        }
+    }
+
+    /** Batalkan 1 transaksi: kurangi paid_amount lalu sesuaikan status. */
+    public function reversePayment(float $amount): void
+    {
+        $this->paid_amount = max(0, (float) $this->paid_amount - $amount);
+
+        $remaining = max(0, (float) $this->total_amount - (float) $this->paid_amount - (float) $this->discount_amount);
+        if ($remaining <= 0 && (float) $this->total_amount > 0) {
+            $this->payment_status = (float) $this->discount_amount > 0 ? 'discounted' : 'paid';
+        } elseif ((float) $this->paid_amount > 0 || (float) $this->discount_amount > 0) {
+            $this->payment_status = 'partial';
+        } else {
+            $this->payment_status = 'unpaid';
+        }
+        $this->save();
+    }
+
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');

@@ -193,7 +193,10 @@
     <tr>
         <th class="px-4 py-3 text-left"><input type="checkbox" @change="toggleSelectAll($event)" :checked="customers.length > 0 && selectedIds.length === customers.length" class="rounded border-slate-300 text-brand-600 focus:ring-brand-500" title="Pilih semua di halaman ini"></th>
         <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Customer</th>
-        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Kontak</th>
+        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Nomor Utama</th>
+        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Kantor</th>
+        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Darurat</th>
+        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Gender</th>
         <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Status</th>
         <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Status Bayar</th>
         <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Jumlah Tagihan</th> <!-- Kolom Baru -->
@@ -215,22 +218,45 @@
             <td class="px-4 py-3">
                 <div class="font-medium text-slate-900" x-text="customer.name"></div>
                 <div class="text-sm text-slate-500" x-text="customer.company || '-'"></div>
-            </td>
-
-            <!-- Kolom Kontak -->
-            <td class="px-4 py-3">
-                <div class="text-sm text-slate-700 font-mono" x-text="customer.phone"></div>
-                <template x-if="customer.office_phone">
-                    <div class="text-xs text-slate-500 font-mono" x-text="'Kantor: ' + customer.office_phone"></div>
-                </template>
-                <template x-if="customer.emergency_phone">
-                    <div class="text-xs text-slate-500 font-mono" x-text="'Darurat: ' + customer.emergency_phone"></div>
-                </template>
-                <template x-if="customer.gender">
-                    <div class="text-xs text-slate-500" x-text="customer.gender === 'P' ? 'Perempuan' : 'Laki-laki'"></div>
-                </template>
                 <template x-if="customer.email">
                     <div class="text-xs text-slate-500" x-text="customer.email"></div>
+                </template>
+            </td>
+
+            <!-- Kolom Nomor Utama -->
+            <td class="px-4 py-3">
+                <div class="text-sm text-slate-700 font-mono" x-text="customer.phone"></div>
+            </td>
+
+            <!-- Kolom Nomor Kantor -->
+            <td class="px-4 py-3">
+                <template x-if="customer.office_phone">
+                    <div class="text-sm text-slate-700 font-mono" x-text="customer.office_phone"></div>
+                </template>
+                <template x-if="!customer.office_phone">
+                    <span class="text-slate-400 text-sm">-</span>
+                </template>
+            </td>
+
+            <!-- Kolom Nomor Darurat -->
+            <td class="px-4 py-3">
+                <template x-if="customer.emergency_phone">
+                    <div class="text-sm text-slate-700 font-mono" x-text="customer.emergency_phone"></div>
+                </template>
+                <template x-if="!customer.emergency_phone">
+                    <span class="text-slate-400 text-sm">-</span>
+                </template>
+            </td>
+
+            <!-- Kolom Gender -->
+            <td class="px-4 py-3">
+                <template x-if="customer.gender">
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                        :class="customer.gender === 'P' ? 'bg-pink-50 text-pink-700 border border-pink-200' : 'bg-sky-50 text-sky-700 border border-sky-200'"
+                        x-text="customer.gender === 'P' ? 'Perempuan' : 'Laki-laki'"></span>
+                </template>
+                <template x-if="!customer.gender">
+                    <span class="text-slate-400 text-sm">-</span>
                 </template>
             </td>
 
@@ -339,6 +365,9 @@
             <!-- Kolom Actions -->
             <td class="px-4 py-3">
                 <div class="flex items-center gap-1">
+                    <button @click="openPayModal(customer)" class="text-emerald-600 hover:text-emerald-800 p-1.5 rounded hover:bg-emerald-50 transition-colors" title="Catat Pembayaran / Riwayat">
+                        <i class="fa-solid fa-money-bill-wave text-sm"></i>
+                    </button>
                     <button @click="openEditModal(customer)" class="text-brand-600 hover:text-brand-800 p-1.5 rounded hover:bg-brand-50 transition-colors" title="Edit">
                         <i class="fa-solid fa-pen text-sm"></i>
                     </button>
@@ -353,10 +382,10 @@
         </tr>
     </template>
     
-    <!-- Pastikan colspan disesuaikan menjadi 12 karena ada penambahan kolom -->
+    <!-- Pastikan colspan disesuaikan menjadi 15 karena ada penambahan kolom -->
     <template x-if="customers.length === 0">
         <tr>
-            <td colspan="12" class="px-4 py-12 text-center text-slate-500">
+            <td colspan="15" class="px-4 py-12 text-center text-slate-500">
                 <i class="fa-solid fa-users text-3xl mb-2 block text-slate-300"></i>
                 Belum ada data customer
             </td>
@@ -735,6 +764,97 @@
         </div>
     </div>
 
+    <div x-show="showPayModal" class="fixed inset-0 z-50 overflow-y-auto" style="display: none;" x-cloak>
+        <div class="flex min-h-full items-center justify-center p-4">
+            <div class="fixed inset-0 bg-black/50" @click="closePayModal()"></div>
+            <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+                <div class="flex items-center justify-between p-4 border-b border-slate-200 sticky top-0 bg-white rounded-t-2xl">
+                    <h3 class="text-lg font-semibold text-slate-900">Pembayaran — <span x-text="payCustomer?.name"></span></h3>
+                    <button @click="closePayModal()" class="text-slate-400 hover:text-slate-600 transition-colors">
+                        <i class="fa-solid fa-xmark text-xl"></i>
+                    </button>
+                </div>
+                <div class="p-4 space-y-4">
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm flex flex-wrap gap-x-4 gap-y-1">
+                        <span class="text-slate-500">Tagihan: <strong class="font-mono text-slate-800" x-text="'Rp ' + formatCurrency(payCustomer?.total_amount || 0)"></strong></span>
+                        <span class="text-slate-500">Terbayar: <strong class="font-mono text-emerald-700" x-text="'Rp ' + formatCurrency(payCustomer?.paid_amount || 0)"></strong></span>
+                        <span class="text-slate-500">Saldo awal: <strong class="font-mono text-slate-600" x-text="'Rp ' + formatCurrency(payOpening)"></strong></span>
+                    </div>
+
+                    <div>
+                        <h4 class="text-sm font-semibold text-slate-700 mb-2">Riwayat Transaksi</h4>
+                        <template x-if="payLoading">
+                            <div class="flex items-center justify-center py-6 text-slate-400"><i class="fa-solid fa-spinner fa-spin text-xl"></i></div>
+                        </template>
+                        <template x-if="!payLoading && payHistory.length === 0">
+                            <p class="text-xs text-slate-400 italic py-2">Belum ada transaksi tercatat. Saldo saat ini adalah saldo awal.</p>
+                        </template>
+                        <div class="space-y-2 max-h-56 overflow-y-auto" x-show="!payLoading && payHistory.length > 0">
+                            <template x-for="p in payHistory" :key="p.id">
+                                <div class="flex items-center gap-3 border border-slate-200 rounded-xl p-2.5 text-sm">
+                                    <div class="flex-1 min-w-0">
+                                        <div class="font-mono font-semibold text-emerald-700" x-text="'Rp ' + formatCurrency(p.amount)"></div>
+                                        <div class="text-xs text-slate-500" x-text="formatDate(p.paid_at) + ' • ' + p.method_label + (p.by ? ' • ' + p.by : '')"></div>
+                                        <template x-if="p.notes">
+                                            <div class="text-xs text-slate-500 truncate" x-text="p.notes"></div>
+                                        </template>
+                                    </div>
+                                    <template x-if="p.proof_url">
+                                        <a :href="p.proof_url" target="_blank" rel="noopener" class="text-brand-600 hover:text-brand-800 p-1.5" title="Lihat bukti"><i class="fa-solid fa-receipt"></i></a>
+                                    </template>
+                                    <button @click="deletePayment(p.id)" class="text-red-400 hover:text-red-600 p-1.5" title="Hapus (koreksi)"><i class="fa-solid fa-trash text-xs"></i></button>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <form @submit.prevent="submitPay()" class="border-t border-slate-200 pt-4 space-y-3">
+                        <h4 class="text-sm font-semibold text-slate-700">Catat Pembayaran Baru</h4>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Nominal (Rp) <span class="text-red-500">*</span></label>
+                                <div class="relative">
+                                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">Rp</span>
+                                    <input type="text" inputmode="numeric" :value="formatRupiah(payForm.amount)" @input="payForm.amount = parseRupiah($event.target.value); $event.target.value = formatRupiah(payForm.amount)" required class="w-full border border-slate-300 rounded-lg pl-9 pr-4 py-2 text-sm font-mono focus:ring-2 focus:ring-brand-500 focus:border-transparent" placeholder="Rp 0">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Tanggal Bayar <span class="text-red-500">*</span></label>
+                                <input type="date" x-model="payForm.paid_at" required :max="payToday" class="w-full border border-slate-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Metode <span class="text-red-500">*</span></label>
+                                <select x-model="payForm.method" required class="w-full border border-slate-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+                                    <option value="transfer">Transfer</option>
+                                    <option value="cash">Tunai</option>
+                                    <option value="va">Virtual Account</option>
+                                    <option value="qris">QRIS</option>
+                                    <option value="autodebet">Autodebet</option>
+                                    <option value="lainnya">Lainnya</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Bukti (jpg/png/pdf)</label>
+                                <input type="file" x-ref="payProof" accept=".jpg,.jpeg,.png,.pdf" class="w-full border border-slate-300 rounded-lg px-4 py-2 text-sm">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Keterangan</label>
+                            <textarea x-model="payForm.notes" rows="2" placeholder="cth: cicilan ke-2 via BCA..." class="w-full border border-slate-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent"></textarea>
+                        </div>
+                        <div class="flex justify-end gap-3">
+                            <button type="button" @click="closePayModal()" class="px-4 py-2 border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition-colors">Tutup</button>
+                            <button type="submit" :disabled="paySaving" class="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm hover:bg-emerald-700 transition-colors disabled:opacity-50">
+                                <span x-show="!paySaving">Simpan Pembayaran</span>
+                                <span x-show="paySaving" class="flex items-center gap-2"><i class="fa-solid fa-spinner fa-spin"></i> Menyimpan...</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div x-show="showResultModal" class="fixed inset-0 z-50 overflow-y-auto" style="display: none;" x-cloak>
         <div class="flex min-h-full items-center justify-center p-4">
             <div class="fixed inset-0 bg-black/50" @click="closeResultModal()"></div>
@@ -807,6 +927,7 @@
         bulkAssignUrl: '{{ url('/dashboard/crm/collection/bulk-assign-collector') }}',
         bulkAssignAgentUrl: '{{ url('/dashboard/crm/customers/bulk-assign-agent') }}',
         autoAssignAgentUrl: '{{ url('/dashboard/crm/customers/auto-assign-agent') }}',
+        paymentsBaseUrl: '{{ url('/dashboard/crm/payments') }}',
         recalcUrl: '{{ url('/dashboard/crm/collection/recalculate-buckets') }}',
         exportUrl: '{{ url('/dashboard/crm/customers/export') }}',
         importUrl: '{{ url('/dashboard/crm/customers/import') }}',

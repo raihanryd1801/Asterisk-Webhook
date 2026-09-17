@@ -25,6 +25,14 @@ window.crmCustomers = function () {
         autoAssignBuckets: [],
         autoAssignOnlyUnassigned: true,
         autoAssignLoading: false,
+        showPayModal: false,
+        payCustomer: null,
+        payHistory: [],
+        payOpening: 0,
+        payLoading: false,
+        paySaving: false,
+        payToday: new Date().toISOString().split('T')[0],
+        payForm: { amount: '', paid_at: new Date().toISOString().split('T')[0], method: 'transfer', notes: '' },
         recalcLoading: false,
         modalTitle: '',
         form: { id: '', name: '', phone: '', office_phone: '', emergency_phone: '', gender: '', email: '', company: '', status: 'new', assigned_agent_id: '', notes: '', total_amount: '', paid_amount: '', discount_amount: '', payment_status: 'unpaid', payment_notes: '', due_date: '', collector_id: '', risk_level: 'low' },
@@ -367,6 +375,113 @@ window.crmCustomers = function () {
                 alert('Terjadi kesalahan');
             } finally {
                 this.autoAssignLoading = false;
+            }
+        },
+
+        openPayModal(customer) {
+            this.payCustomer = customer;
+            this.payForm = { amount: '', paid_at: this.payToday, method: 'transfer', notes: '' };
+            if (this.$refs.payProof) this.$refs.payProof.value = '';
+            this.showPayModal = true;
+            this.fetchPayHistory();
+        },
+
+        closePayModal() {
+            this.showPayModal = false;
+            this.payCustomer = null;
+            this.payHistory = [];
+        },
+
+        async fetchPayHistory() {
+            if (!this.payCustomer) return;
+            this.payLoading = true;
+            try {
+                const response = await fetch(`${window.crmCustomerData.indexUrl}/${this.payCustomer.id}/payments`, {
+                    headers: { 'Accept': 'application/json' }
+                });
+                const data = await response.json();
+                if (data.status === 'success') {
+                    this.payHistory = data.data || [];
+                    this.payOpening = data.opening_balance || 0;
+                }
+            } catch (e) {
+                console.error(e);
+            } finally {
+                this.payLoading = false;
+            }
+        },
+
+        async submitPay() {
+            if (!this.payCustomer || !this.payForm.amount || !this.payForm.paid_at) {
+                alert('Nominal dan tanggal wajib diisi');
+                return;
+            }
+            this.paySaving = true;
+            try {
+                const formData = new FormData();
+                formData.append('amount', this.payForm.amount);
+                formData.append('paid_at', this.payForm.paid_at);
+                formData.append('method', this.payForm.method);
+                if (this.payForm.notes) formData.append('notes', this.payForm.notes);
+                const file = this.$refs.payProof && this.$refs.payProof.files ? this.$refs.payProof.files[0] : null;
+                if (file) formData.append('proof', file);
+                formData.append('_token', document.querySelector('meta[name="csrf-token"]').content);
+                const response = await fetch(`${window.crmCustomerData.indexUrl}/${this.payCustomer.id}/payments`, {
+                    method: 'POST',
+                    body: formData,
+                    headers: { 'Accept': 'application/json' },
+                });
+                const data = await response.json();
+                if (data.status === 'success') {
+                    alert(data.message);
+                    // Segarkan baris customer di tabel tanpa reload halaman
+                    if (data.customer) {
+                        const idx = this.customers.findIndex(c => c.id === this.payCustomer.id);
+                        if (idx !== -1) {
+                            this.customers[idx] = { ...this.customers[idx], ...data.customer };
+                            this.payCustomer = this.customers[idx];
+                        }
+                    }
+                    this.payForm = { amount: '', paid_at: this.payToday, method: 'transfer', notes: '' };
+                    if (this.$refs.payProof) this.$refs.payProof.value = '';
+                    this.fetchPayHistory();
+                } else {
+                    alert(data.message || 'Error');
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Terjadi kesalahan');
+            } finally {
+                this.paySaving = false;
+            }
+        },
+
+        async deletePayment(id) {
+            if (!confirm('Hapus transaksi ini? Saldo akan dikembalikan.')) return;
+            try {
+                const response = await fetch(`${window.crmCustomerData.paymentsBaseUrl}/${id}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        'Accept': 'application/json',
+                    },
+                });
+                const data = await response.json();
+                if (data.status === 'success') {
+                    if (data.customer && this.payCustomer) {
+                        const idx = this.customers.findIndex(c => c.id === this.payCustomer.id);
+                        if (idx !== -1) {
+                            this.customers[idx] = { ...this.customers[idx], ...data.customer };
+                            this.payCustomer = this.customers[idx];
+                        }
+                    }
+                    this.fetchPayHistory();
+                } else {
+                    alert(data.message || 'Error');
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Terjadi kesalahan');
             }
         },
 

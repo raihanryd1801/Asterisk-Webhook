@@ -292,6 +292,10 @@ Route::prefix('dashboard')->group(function () {
         Route::get('/crm/collection/ptp', [CustomerController::class, 'ptpManagement'])->name('crm.collection.ptp');
         Route::post('/crm/customers/{customer}/ptp', [CustomerController::class, 'setPTP'])->name('crm.customers.ptp.store');
         Route::post('/crm/customers/{customer}/ptp/{action}', [CustomerController::class, 'updatePTPStatus'])->name('crm.customers.ptp.update');
+        // Pencatatan pembayaran (ledger per transaksi)
+        Route::get('/crm/customers/{customer}/payments', [\App\Http\Controllers\PaymentController::class, 'index'])->name('crm.customers.payments.index');
+        Route::post('/crm/customers/{customer}/payments', [\App\Http\Controllers\PaymentController::class, 'store'])->name('crm.customers.payments.store');
+        Route::delete('/crm/payments/{payment}', [\App\Http\Controllers\PaymentController::class, 'destroy'])->name('crm.payments.destroy');
         Route::post('/crm/collection/recalculate-buckets', [CustomerController::class, 'recalculateBuckets'])->name('crm.collection.recalculate');
         Route::post('/crm/collection/bulk-assign-collector', [CustomerController::class, 'bulkAssignCollector'])->name('crm.collection.bulk-assign-collector');
         Route::post('/crm/collection/auto-assign', [CustomerController::class, 'autoAssignCollectors'])->name('crm.collection.auto-assign');
@@ -322,6 +326,7 @@ Route::prefix('dashboard')->group(function () {
         Route::post('/crm/dialer/jobs/{job}/repeat', [\App\Http\Controllers\DialerController::class, 'repeat'])->name('crm.dialer.repeat');
         Route::delete('/crm/dialer/jobs/{job}', [\App\Http\Controllers\DialerController::class, 'destroy'])->name('crm.dialer.destroy');
         Route::get('/crm/dialer/rotation', [\App\Http\Controllers\DialerController::class, 'rotationList'])->name('crm.dialer.rotation');
+        Route::get('/crm/dialer/queue', [\App\Http\Controllers\DialerController::class, 'queueMonitor'])->name('crm.dialer.queue');
 
     });
 

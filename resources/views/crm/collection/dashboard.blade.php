@@ -37,85 +37,108 @@
     </div>
 
     <!-- ============ STAT CARDS ============ -->
-    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
-        <div class="bg-white rounded-[20px] border border-slate-200 shadow-[0_2px_6px_rgba(16,24,40,0.06)] p-5 flex items-center gap-3">
+    {{-- Layout kartu diubah jadi vertikal (ikon di atas, angka & label di bawah) +
+         breakpoint lebih bertahap, supaya angka rupiah yang panjang tidak lagi
+         mendesak keluar dari card saat grid mengecil. --}}
+    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-8 gap-4">
+        <div class="bg-white rounded-[20px] border border-slate-200 shadow-[0_2px_6px_rgba(16,24,40,0.06)] hover:shadow-[0_4px_12px_rgba(16,24,40,0.08)] transition-shadow p-4 sm:p-5 flex flex-col gap-3 min-w-0">
             <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
                 <i class="fa-solid fa-users text-sm"></i>
             </div>
-            <div>
-                <p class="text-xl font-bold text-slate-900 tnum">{{ $bucketSummary->sum('count') }}</p>
+            <div class="min-w-0">
+                <p class="text-lg sm:text-xl font-bold text-slate-900 tnum leading-snug break-words">{{ $bucketSummary->sum('count') }}</p>
                 <p class="text-xs text-slate-500 mt-0.5">Total cases</p>
             </div>
         </div>
 
-        <div class="bg-white rounded-[20px] border border-slate-200 shadow-[0_2px_6px_rgba(16,24,40,0.06)] p-5 flex items-center gap-3">
+        <div class="bg-white rounded-[20px] border border-slate-200 shadow-[0_2px_6px_rgba(16,24,40,0.06)] hover:shadow-[0_4px_12px_rgba(16,24,40,0.08)] transition-shadow p-4 sm:p-5 flex flex-col gap-3 min-w-0">
             <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
                 <i class="fa-solid fa-money-bill-wave text-sm"></i>
             </div>
-            <div>
-                <p class="text-xl font-bold text-slate-900 tnum">Rp {{ number_format($bucketSummary->sum('total_amount'), 0, ',', '.') }}</p>
+            <div class="min-w-0">
+                <p class="text-lg sm:text-xl font-bold text-slate-900 tnum leading-snug break-words">Rp {{ number_format($bucketSummary->sum('total_amount'), 0, ',', '.') }}</p>
                 <p class="text-xs text-slate-500 mt-0.5">Total portfolio</p>
             </div>
         </div>
 
-        <div class="bg-white rounded-[20px] border border-slate-200 shadow-[0_2px_6px_rgba(16,24,40,0.06)] p-5 flex items-center gap-3">
+        <div class="bg-white rounded-[20px] border border-slate-200 shadow-[0_2px_6px_rgba(16,24,40,0.06)] hover:shadow-[0_4px_12px_rgba(16,24,40,0.08)] transition-shadow p-4 sm:p-5 flex flex-col gap-3 min-w-0">
             <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
                 <i class="fa-solid fa-check-circle text-sm"></i>
             </div>
-            <div>
-                <p class="text-xl font-bold text-emerald-600 tnum">Rp {{ number_format($bucketSummary->sum('paid_amount'), 0, ',', '.') }}</p>
+            <div class="min-w-0">
+                <p class="text-lg sm:text-xl font-bold text-emerald-600 tnum leading-snug break-words">Rp {{ number_format($bucketSummary->sum('paid_amount'), 0, ',', '.') }}</p>
                 <p class="text-xs text-slate-500 mt-0.5">Collected</p>
             </div>
         </div>
 
-        <div class="bg-white rounded-[20px] border border-slate-200 shadow-[0_2px_6px_rgba(16,24,40,0.06)] p-5 flex items-center gap-3">
+        <div class="bg-white rounded-[20px] border border-slate-200 shadow-[0_2px_6px_rgba(16,24,40,0.06)] hover:shadow-[0_4px_12px_rgba(16,24,40,0.08)] transition-shadow p-4 sm:p-5 flex flex-col gap-3 min-w-0">
             <div class="w-10 h-10 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center shrink-0">
                 <i class="fa-solid fa-clock text-sm"></i>
             </div>
-            <div>
-                <p class="text-xl font-bold text-orange-600 tnum">Rp {{ number_format($bucketSummary->sum('remaining_amount'), 0, ',', '.') }}</p>
+            <div class="min-w-0">
+                <p class="text-lg sm:text-xl font-bold text-orange-600 tnum leading-snug break-words">Rp {{ number_format($bucketSummary->sum('remaining_amount'), 0, ',', '.') }}</p>
                 <p class="text-xs text-slate-500 mt-0.5">Outstanding</p>
             </div>
         </div>
 
-        <div class="bg-white rounded-[20px] border border-slate-200 shadow-[0_2px_6px_rgba(16,24,40,0.06)] p-5 flex items-center gap-3">
+        <div class="bg-white rounded-[20px] border border-slate-200 shadow-[0_2px_6px_rgba(16,24,40,0.06)] hover:shadow-[0_4px_12px_rgba(16,24,40,0.08)] transition-shadow p-4 sm:p-5 flex flex-col gap-3 min-w-0">
+            <div class="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
+                <i class="fa-solid fa-money-bill-wave text-sm"></i>
+            </div>
+            <div class="min-w-0">
+                <p class="text-lg sm:text-xl font-bold text-teal-600 tnum leading-snug break-words">Rp {{ number_format($paymentStats['today_total'], 0, ',', '.') }}</p>
+                <p class="text-xs text-slate-500 mt-0.5">Masuk hari ini <span class="tnum">({{ $paymentStats['today_count'] }} trx)</span></p>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-[20px] border border-slate-200 shadow-[0_2px_6px_rgba(16,24,40,0.06)] hover:shadow-[0_4px_12px_rgba(16,24,40,0.08)] transition-shadow p-4 sm:p-5 flex flex-col gap-3 min-w-0">
+            <div class="w-10 h-10 rounded-xl bg-cyan-50 text-cyan-600 flex items-center justify-center shrink-0">
+                <i class="fa-solid fa-calendar-check text-sm"></i>
+            </div>
+            <div class="min-w-0">
+                <p class="text-lg sm:text-xl font-bold text-cyan-600 tnum leading-snug break-words">Rp {{ number_format($paymentStats['month_total'], 0, ',', '.') }}</p>
+                <p class="text-xs text-slate-500 mt-0.5">Masuk bulan ini <span class="tnum">({{ $paymentStats['month_count'] }} trx)</span></p>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-[20px] border border-slate-200 shadow-[0_2px_6px_rgba(16,24,40,0.06)] hover:shadow-[0_4px_12px_rgba(16,24,40,0.08)] transition-shadow p-4 sm:p-5 flex flex-col gap-3 min-w-0">
             <div class="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
                 <i class="fa-solid fa-triangle-exclamation text-sm"></i>
             </div>
-            <div>
-                <p class="text-xl font-bold text-rose-600 tnum">
+            <div class="min-w-0">
+                <p class="text-lg sm:text-xl font-bold text-rose-600 tnum leading-snug break-words">
                     Rp {{ number_format($bucketSummary->where('bucket', 'NPL')->sum('remaining_amount'), 0, ',', '.') }}
                 </p>
                 <p class="text-xs text-slate-500 mt-0.5">NPL exposure <span class="tnum">({{ $bucketSummary->where('bucket', 'NPL')->sum('count') }} case)</span></p>
             </div>
         </div>
 
-        <div class="bg-white rounded-[20px] border border-slate-200 shadow-[0_2px_6px_rgba(16,24,40,0.06)] p-5 flex items-center gap-3">
+        <div class="bg-white rounded-[20px] border border-slate-200 shadow-[0_2px_6px_rgba(16,24,40,0.06)] hover:shadow-[0_4px_12px_rgba(16,24,40,0.08)] transition-shadow p-4 sm:p-5 flex flex-col gap-3 min-w-0">
             <div class="w-10 h-10 rounded-xl bg-yellow-50 text-yellow-600 flex items-center justify-center shrink-0">
                 <i class="fa-solid fa-handshake text-sm"></i>
             </div>
-            <div>
-                <p class="text-xl font-bold text-yellow-600 tnum">{{ $ptpStats['active'] }}</p>
+            <div class="min-w-0">
+                <p class="text-lg sm:text-xl font-bold text-yellow-600 tnum leading-snug break-words">{{ $ptpStats['active'] }}</p>
                 <p class="text-xs text-slate-500 mt-0.5">New PTP</p>
             </div>
         </div>
 
-        <div class="bg-white rounded-[20px] border border-slate-200 shadow-[0_2px_6px_rgba(16,24,40,0.06)] p-5 flex items-center gap-3">
+        <div class="bg-white rounded-[20px] border border-slate-200 shadow-[0_2px_6px_rgba(16,24,40,0.06)] hover:shadow-[0_4px_12px_rgba(16,24,40,0.08)] transition-shadow p-4 sm:p-5 flex flex-col gap-3 min-w-0">
             <div class="w-10 h-10 rounded-xl bg-green-50 text-green-600 flex items-center justify-center shrink-0">
                 <i class="fa-solid fa-check-circle text-sm"></i>
             </div>
-            <div>
-                <p class="text-xl font-bold text-green-600 tnum">{{ $ptpStats['kept_today'] }}</p>
+            <div class="min-w-0">
+                <p class="text-lg sm:text-xl font-bold text-green-600 tnum leading-snug break-words">{{ $ptpStats['kept_today'] }}</p>
                 <p class="text-xs text-slate-500 mt-0.5">PTP kept today</p>
             </div>
         </div>
 
-        <div class="bg-white rounded-[20px] border border-slate-200 shadow-[0_2px_6px_rgba(16,24,40,0.06)] p-5 flex items-center gap-3">
+        <div class="bg-white rounded-[20px] border border-slate-200 shadow-[0_2px_6px_rgba(16,24,40,0.06)] hover:shadow-[0_4px_12px_rgba(16,24,40,0.08)] transition-shadow p-4 sm:p-5 flex flex-col gap-3 min-w-0">
             <div class="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0">
                 <i class="fa-solid fa-xmark-circle text-sm"></i>
             </div>
-            <div>
-                <p class="text-xl font-bold text-red-600 tnum">{{ $ptpStats['rolling_today'] }}</p>
+            <div class="min-w-0">
+                <p class="text-lg sm:text-xl font-bold text-red-600 tnum leading-snug break-words">{{ $ptpStats['rolling_today'] }}</p>
                 <p class="text-xs text-slate-500 mt-0.5">PTP rolling today</p>
             </div>
         </div>
@@ -176,18 +199,18 @@
             <p class="text-xs text-slate-500 mt-0.5">Jumlah case dan exposure per level risiko.</p>
             <div class="mt-3 divide-y divide-slate-100">
                 @foreach($riskSummary as $r)
-                    <div class="flex items-center justify-between py-3">
-                        <div class="flex items-center gap-3">
-                            <span class="w-2.5 h-2.5 rounded-full"
+                    <div class="flex items-center justify-between py-3 gap-3">
+                        <div class="flex items-center gap-3 min-w-0">
+                            <span class="w-2.5 h-2.5 rounded-full shrink-0"
                                 @class([
                                     'bg-green-500' => $r->risk_level === 'low',
                                     'bg-yellow-500' => $r->risk_level === 'medium',
                                     'bg-orange-500' => $r->risk_level === 'high',
                                     'bg-red-500' => $r->risk_level === 'critical',
                                 ])></span>
-                            <span class="font-medium text-slate-700 capitalize">{{ $r->risk_level }}</span>
+                            <span class="font-medium text-slate-700 capitalize truncate">{{ $r->risk_level }}</span>
                         </div>
-                        <div class="text-right">
+                        <div class="text-right shrink-0">
                             <div class="font-semibold text-slate-900 tnum">{{ number_format($r->count) }} cases</div>
                             <div class="text-xs text-slate-400 tnum">Rp {{ number_format($r->exposure, 0, ',', '.') }}</div>
                         </div>
@@ -245,20 +268,20 @@
             <h3 class="text-base font-bold text-slate-900">Promise to Pay (PTP) status</h3>
             <p class="text-xs text-slate-500 mt-0.5">Ringkasan janji bayar hari ini.</p>
             <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
-                <div class="p-4 rounded-2xl bg-green-50 text-center">
-                    <div class="text-2xl font-bold text-green-600 tnum">{{ $ptpStats['active'] }}</div>
+                <div class="p-4 rounded-2xl bg-green-50 text-center min-w-0">
+                    <div class="text-2xl font-bold text-green-600 tnum break-words">{{ $ptpStats['active'] }}</div>
                     <div class="text-xs text-green-600 mt-1">New PTP</div>
                 </div>
-                <div class="p-4 rounded-2xl bg-red-50 text-center">
-                    <div class="text-2xl font-bold text-red-600 tnum">{{ $ptpStats['overdue'] }}</div>
+                <div class="p-4 rounded-2xl bg-red-50 text-center min-w-0">
+                    <div class="text-2xl font-bold text-red-600 tnum break-words">{{ $ptpStats['overdue'] }}</div>
                     <div class="text-xs text-red-600 mt-1">Overdue PTP</div>
                 </div>
-                <div class="p-4 rounded-2xl bg-emerald-50 text-center">
-                    <div class="text-2xl font-bold text-emerald-600 tnum">{{ $ptpStats['kept_today'] }}</div>
+                <div class="p-4 rounded-2xl bg-emerald-50 text-center min-w-0">
+                    <div class="text-2xl font-bold text-emerald-600 tnum break-words">{{ $ptpStats['kept_today'] }}</div>
                     <div class="text-xs text-emerald-600 mt-1">Kept today</div>
                 </div>
-                <div class="p-4 rounded-2xl bg-rose-50 text-center">
-                    <div class="text-2xl font-bold text-rose-600 tnum">{{ $ptpStats['rolling_today'] }}</div>
+                <div class="p-4 rounded-2xl bg-rose-50 text-center min-w-0">
+                    <div class="text-2xl font-bold text-rose-600 tnum break-words">{{ $ptpStats['rolling_today'] }}</div>
                     <div class="text-xs text-rose-600 mt-1">Rolling today</div>
                 </div>
             </div>
@@ -315,12 +338,12 @@
         @else
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-4">
                 @foreach($slaBreaches as $s)
-                    <div class="rounded-2xl bg-orange-50 p-4">
-                        <div class="flex items-center justify-between">
-                            <span class="font-bold text-slate-800">{{ $s['bucket'] }}</span>
-                            <span class="text-xs text-orange-600 tnum">max {{ $s['max_dpd'] }} DPD</span>
+                    <div class="rounded-2xl bg-orange-50 p-4 min-w-0">
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="font-bold text-slate-800 truncate">{{ $s['bucket'] }}</span>
+                            <span class="text-xs text-orange-600 tnum shrink-0">max {{ $s['max_dpd'] }} DPD</span>
                         </div>
-                        <p class="text-2xl font-bold text-orange-600 mt-1 tnum">{{ number_format($s['count']) }} <span class="text-sm font-normal">case breach</span></p>
+                        <p class="text-2xl font-bold text-orange-600 mt-1 tnum break-words">{{ number_format($s['count']) }} <span class="text-sm font-normal">case breach</span></p>
                         <p class="text-xs text-slate-500 mt-1">{{ $s['action'] }}</p>
                     </div>
                 @endforeach
