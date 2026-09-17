@@ -150,10 +150,10 @@ window.WAInbox = window.WAInbox || {
     },
 
     tickHtml(tick) {
-        // ✓ terkirim ke server, ✓✓ sampai di HP, ✓✓ biru dibaca
+        // centang 1 = terkirim ke server, centang 2 hitam = sampai di HP, centang 2 biru = dibaca
         if (tick === 'read') return '<i class="fa-solid fa-check-double text-sky-300" title="Dibaca"></i>';
-        if (tick === 'delivered') return '<i class="fa-solid fa-check-double" title="Sampai di HP"></i>';
-        return '<i class="fa-solid fa-check" title="Terkirim ke server"></i>';
+        if (tick === 'delivered') return '<i class="fa-solid fa-check-double text-slate-800" title="Sampai di HP"></i>';
+        return '<i class="fa-solid fa-check text-brand-100" title="Terkirim ke server"></i>';
     },
 
     mediaHtml(m) {
@@ -293,7 +293,7 @@ window.WAInbox = window.WAInbox || {
                         ? 'flex justify-end'
                         : 'flex justify-start';
                     const bubble = side
-                        ? 'max-w-[80%] bg-gradient-to-br from-brand-500 to-brand-600 text-white text-sm rounded-2xl rounded-br-md px-4 py-2.5 shadow-sm'
+                        ? 'max-w-[80%] bg-[#005c4b] text-white text-sm rounded-2xl rounded-br-md px-4 py-2.5 shadow-sm'
                         : 'max-w-[80%] bg-white text-slate-800 text-sm rounded-2xl rounded-bl-md px-4 py-2.5 shadow-sm border border-slate-100';
                     const stamp = side ? 'text-brand-100' : 'text-slate-400';
                     const tick = side ? this.tickHtml(m.tick) : '';

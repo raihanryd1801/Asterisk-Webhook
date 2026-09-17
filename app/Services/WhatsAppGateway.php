@@ -129,13 +129,14 @@ class WhatsAppGateway
         }
     }
 
-    public function send(string $sessionId, string $to, string $message, string $server = 's.whatsapp.net', ?array $media = null): array
+    public function send(string $sessionId, string $to, string $message, string $server = 's.whatsapp.net', ?array $media = null, bool $fast = false): array
     {
         try {
             $payload = [
                 'to' => $to,
                 'message' => $message,
                 'server' => $server === 'lid' ? 'lid' : 's.whatsapp.net',
+                'fast' => $fast, // true = balasan interaktif, lewati jeda pacing blast
             ];
             if ($media) {
                 $payload['media'] = $media;

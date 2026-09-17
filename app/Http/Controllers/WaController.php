@@ -389,7 +389,7 @@ class WaController extends Controller
             ];
         }
 
-        $result = $gateway->send($sessionId, $phone, $request->message ?? '', $server, $mediaPayload);
+        $result = $gateway->send($sessionId, $phone, $request->message ?? '', $server, $mediaPayload, true);
         if (!$result['ok']) {
             // Bersihkan file yang sudah terlanjur disimpan bila kirim gagal
             if ($mediaPath) {

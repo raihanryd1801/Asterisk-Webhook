@@ -191,6 +191,21 @@ async function startSession(id) {
 
     // Teruskan status keterkiriman pesan KELUAR kita ke Laravel
     // (terkirim ke server / sampai ke HP / dibaca) agar UI bisa tampilkan centang.
+    const forwardReceipt = (messageId, stage) => {
+        fetch(`${LARAVEL_URL}/api/wa/receipt`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Gateway-Token': TOKEN,
+            },
+            body: JSON.stringify({
+                session_id: id,
+                message_id: messageId,
+                stage,
+            }),
+        }).catch(() => {});
+    };
+    // Grup/siaran: status datang via message-receipt.update.
     sock.ev.on('message-receipt.update', (updates) => {
         for (const u of updates || []) {
             try {
@@ -199,18 +214,23 @@ async function startSession(id) {
                 if (u.receipt?.playedTimestamp || u.receipt?.readTimestamp) stage = 'read';
                 else if (u.receipt?.receiptTimestamp) stage = 'delivered';
                 if (!stage) continue;
-                fetch(`${LARAVEL_URL}/api/wa/receipt`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Gateway-Token': TOKEN,
-                    },
-                    body: JSON.stringify({
-                        session_id: id,
-                        message_id: u.key.id,
-                        stage,
-                    }),
-                }).catch(() => {});
+                forwardReceipt(u.key.id, stage);
+            } catch (e) {}
+        }
+    });
+    // Chat personal: status datang via messages.update dengan kode numerik
+    // WebMessageInfo.Status (3 = DELIVERY_ACK/sampai, >= 4 = READ/PLAYED/dibaca).
+    sock.ev.on('messages.update', (updates) => {
+        for (const u of updates || []) {
+            try {
+                if (!u.key?.fromMe || !u.key?.id) continue;
+                const status = u.update && typeof u.update.status !== 'undefined'
+                    ? Number(u.update.status)
+                    : NaN;
+                if (Number.isNaN(status)) continue;
+                const stage = status >= 4 ? 'read' : (status === 3 ? 'delivered' : null);
+                if (!stage) continue;
+                forwardReceipt(u.key.id, stage);
             } catch (e) {}
         }
     });
@@ -450,7 +470,9 @@ app.delete('/sessions/:id', async (req, res) => {
     res.json({ ok: true });
 });
 
-// Kirim pesan via sesi (antre + jeda acak anti rate-limit)
+// Kirim pesan via sesi (antre + jeda acak anti rate-limit).
+// Body { fast: true } = balasan interaktif (inbox): lewati jeda pacing,
+// tetap antre serial. Blast massal wajib lewat pacing (default).
 app.post('/sessions/:id/send', async (req, res) => {
     const id = req.params.id;
     const s = sessions.get(id);
@@ -492,8 +514,11 @@ app.post('/sessions/:id/send', async (req, res) => {
     }
 
     let sentId = null;
+    const fast = req.body.fast === true;
     s.queue = s.queue.then(async () => {
-        await sleep(randDelay());
+        if (!fast) {
+            await sleep(randDelay());
+        }
         let content;
         if (media) {
             if (media.kind === 'image') content = { image: media.buffer, caption: message || undefined, mimetype: media.mimetype };
