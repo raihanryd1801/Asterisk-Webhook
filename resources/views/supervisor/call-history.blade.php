@@ -97,7 +97,7 @@
 
     <!-- 6. Action Buttons -->
     <div class="flex gap-2">
-        <button @click="fetchLogs(1)" class="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm py-2.5 rounded-xl transition shadow-sm">
+        <button @click="fetchLogs(1)" :disabled="isLoading" class="flex-1 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 disabled:cursor-wait text-white font-semibold text-sm py-2.5 rounded-xl transition shadow-sm">
             Cari
         </button>
         <button @click="resetFilters()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm px-4 py-2.5 rounded-xl transition">
@@ -235,14 +235,14 @@
             
             <!-- Tombol First (<<) -->
             <button @click="fetchLogs(1)" 
-                    :disabled="pagination.current_page === 1"
+                    :disabled="isLoading || pagination.current_page === 1"
                     class="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed text-xs transition" title="Halaman Pertama">
                 <i class="fa-solid fa-angles-left text-[10px]"></i>
             </button>
 
             <!-- Tombol Prev (<) -->
             <button @click="fetchLogs(pagination.current_page - 1)" 
-                    :disabled="pagination.current_page === 1"
+                    :disabled="isLoading || pagination.current_page === 1"
                     class="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed text-xs transition" title="Sebelumnya">
                 <i class="fa-solid fa-chevron-left text-[10px]"></i>
             </button>
@@ -253,20 +253,20 @@
                         class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all border"
                         :class="page === pagination.current_page ? 'bg-cyan-600 text-white border-cyan-600 shadow-sm' : (page === '...' ? 'border-transparent text-slate-400 cursor-default' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50')"
                         x-text="page"
-                        :disabled="page === '...'">
+                        :disabled="page === '...' || isLoading">
                 </button>
             </template>
 
             <!-- Tombol Next (>) -->
             <button @click="fetchLogs(pagination.current_page + 1)" 
-                    :disabled="pagination.current_page === pagination.last_page"
+                    :disabled="isLoading || pagination.current_page === pagination.last_page"
                     class="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed text-xs transition" title="Berikutnya">
                 <i class="fa-solid fa-chevron-right text-[10px]"></i>
             </button>
 
             <!-- Tombol Last (>>) -->
             <button @click="fetchLogs(pagination.last_page)" 
-                    :disabled="pagination.current_page === pagination.last_page"
+                    :disabled="isLoading || pagination.current_page === pagination.last_page"
                     class="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed text-xs transition" title="Halaman Terakhir">
                 <i class="fa-solid fa-angles-right text-[10px]"></i>
             </button>
@@ -282,8 +282,8 @@
                    :max="pagination.last_page"
                    placeholder="Halaman..." 
                    class="w-16 border border-slate-200 rounded-lg px-2 py-1 text-xs text-center outline-none focus:ring-2 focus:ring-cyan-500 bg-white font-mono">
-            <button @click="jumpToPage()" 
-                    class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1 rounded-lg text-xs font-semibold transition border border-slate-200">
+            <button @click="jumpToPage()" :disabled="isLoading"
+                    class="bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 px-3 py-1 rounded-lg text-xs font-semibold transition border border-slate-200">
                 Go
             </button>
         </div>

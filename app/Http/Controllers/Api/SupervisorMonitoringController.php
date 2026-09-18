@@ -316,37 +316,80 @@ class SupervisorMonitoringController extends Controller
         }
     }
 
-   public function callLogs(Request $request)
+    public function callLogs(Request $request)
 {
+    // Single-flight per sesi: bila request sebelumnya masih jalan (user klik
+    // berkali-kali / double submit), tolak dengan 429 agar query berat tidak
+    // menumpuk di MySQL. Frontend menampilkan toast "tunggu sebentar".
+    $flightKey = 'calllogs_flight_' . (session()->getId() ?: $request->ip());
+    $flight = \Illuminate\Support\Facades\Cache::lock($flightKey, 120);
+    if (!$flight->block(0)) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Permintaan sebelumnya masih diproses. Tunggu sebentar.',
+        ], 429);
+    }
+
+    try {
     $query = Cdr::select([
         'uniqueid','calldate', 'src', 'dst', 'duration', 
         'billsec', 'disposition', 'recordingfile', 'cnam', 'cnum', 'sip_code', 'terminated_by','notes'
     ]);
 
+    // Kumpulkan kondisi extension sebagai SET (src∈S ∨ dst∈S). Bila hanya ada
+    // SATU set dan tanpa LIKE-search, OR dipecah jadi 2 cabang disjoint yang
+    // masing-masing index-friendly (tanpa filesort ratusan ribu baris):
+    //   A: src ∈ S   |   B: dst ∈ S ∧ src ∉ S
+    // (LIKE-search / multi-set tetap jalur single-query lama.)
+    $extSets = [];
+    $noRows = false;
+    $likeSearch = false;
+
     if (session()->has('supervisor_extension')) {
         $spv = Agent::where('extension', session('supervisor_extension'))->first();
         if ($spv) {
-            $managedExtensions = $spv->agents()->pluck('extension')->merge([$spv->extension])->unique()->toArray();
-            $query->where(function($q) use ($managedExtensions) {
-                $q->whereIn('src', $managedExtensions)->orWhereIn('dst', $managedExtensions);
-            });
+            $extSets[] = $spv->agents()->pluck('extension')->merge([$spv->extension])->unique()->values()->toArray();
         } else {
-            $query->whereRaw('1 = 0');
+            $noRows = true;
         }
     } elseif (session()->has('agent_extension')) {
-        $ext = session('agent_extension');
-        $query->where(function($q) use ($ext) {
-            $q->where('src', $ext)->orWhere('dst', $ext);
-        });
+        $extSets[] = [session('agent_extension')];
     }
 
     if ($request->filled('agent_extension')) {
-        $extFilter = $request->agent_extension;
-        $query->where(function($q) use ($extFilter) {
-            $q->where('src', $extFilter)->orWhere('dst', $extFilter);
-        });
+        $extSets[] = [$request->agent_extension];
     }
 
+    // Sederhanakan set: identik -> satu; bila ada singleton {e} yang termuat
+    // di set besar S, maka S redundan ((src=e∨dst=e) ∧ (src∈S∨dst∈S) ≡ src=e∨dst=e).
+    // Hasil umum: SPV + filter agen anggotanya = 1 set → jalur UNION cepat.
+    $uniqSets = [];
+    foreach ($extSets as $s) {
+        $s = array_values(array_unique($s));
+        $uniqSets[json_encode($s)] = $s;
+    }
+    $extSets = array_values($uniqSets);
+    $singles = [];
+    foreach ($extSets as $s) {
+        if (count($s) === 1) {
+            $singles[] = $s[0];
+        }
+    }
+    if (!empty($singles)) {
+        $extSets = array_values(array_filter($extSets, function ($s) use ($singles) {
+            if (count($s) === 1) {
+                return true;
+            }
+            foreach ($singles as $e) {
+                if (in_array($e, $s, true)) {
+                    return false;
+                }
+            }
+            return true;
+        }));
+    }
+
+    $keyword = null;
     if ($request->filled('search')) {
         $keyword = trim((string) $request->search);
         $digits = preg_replace('/\D/', '', $keyword);
@@ -361,16 +404,9 @@ class SupervisorMonitoringController extends Controller
             } elseif (str_starts_with($digits, '0')) {
                 $variants[] = '62' . substr($digits, 1);
             }
-            $query->where(function($q) use ($variants) {
-                $q->whereIn('src', $variants)->orWhereIn('dst', $variants);
-            });
+            $extSets[] = $variants;
         } else {
-            $query->where(function($q) use ($keyword) {
-                $q->where('src', 'like', "%{$keyword}%")
-                  ->orWhere('dst', 'like', "%{$keyword}%")
-                  ->orWhere('cnam', 'like', "%{$keyword}%")
-                  ->orWhere('cnum', 'like', "%{$keyword}%");
-            });
+            $likeSearch = true;
         }
     }
 
@@ -380,6 +416,16 @@ class SupervisorMonitoringController extends Controller
     }
     if ($request->filled('end_date')) {
         $query->whereDate('calldate', '<=', $request->end_date);
+    }
+
+    // LIKE-search (nama/teks pendek) tetap ditempel di query apa pun jalurnya
+    if ($likeSearch && $keyword !== null) {
+        $query->where(function($q) use ($keyword) {
+            $q->where('src', 'like', "%{$keyword}%")
+              ->orWhere('dst', 'like', "%{$keyword}%")
+              ->orWhere('cnam', 'like', "%{$keyword}%")
+              ->orWhere('cnum', 'like', "%{$keyword}%");
+        });
     }
 
     // Tentukan Sorting (kolom + arah; arah bisa dibalik untuk trik ambil-dari-ujung)
@@ -394,9 +440,9 @@ class SupervisorMonitoringController extends Controller
 
     $perPage = $request->query('per_page', 15);
     $page = max(1, (int) $request->query('page', 1));
+    $offset = ($page - 1) * $perPage;
 
-    // 1. Total di-cache 60 detik per kombinasi filter (COUNT di jutaan baris
-    // itu 1-2 detik sendiri; filter jarang berubah dalam semenit).
+    // 1. Total di-cache 60 detik per kombinasi filter.
     $countKey = 'calllogs_count_' . md5(json_encode([
         'spv' => session('supervisor_extension'),
         'agent' => session('agent_extension'),
@@ -405,6 +451,79 @@ class SupervisorMonitoringController extends Controller
         'start_date' => $request->input('start_date'),
         'end_date' => $request->input('end_date'),
     ]));
+
+    // Jalur UNION: tepat 1 ext-set tanpa LIKE → 2 cabang disjoint index-murni.
+    $useUnion = !$noRows && !$likeSearch && count($extSets) === 1;
+
+    if ($noRows) {
+        $total = 0;
+        $logsCollection = collect();
+    } elseif ($useUnion) {
+        $set = array_values(array_unique($extSets[0]));
+        $branchA = function () use ($query, $set) {
+            return (clone $query)->whereIn('src', $set);
+        };
+        $branchB = function () use ($query, $set) {
+            return (clone $query)->whereIn('dst', $set)->whereNotIn('src', $set);
+        };
+        $total = \Illuminate\Support\Facades\Cache::remember($countKey, 60, function () use ($branchA, $branchB) {
+            return $branchA()->count() + $branchB()->count();
+        });
+
+        // Ambil offset+limit per cabang (index walk, tanpa filesort), gabung
+        // 2 aliran terurut di PHP, potong jendela. Guard memori: jendela
+        // raksasa (>50 rb) fallback ke jalur single-query.
+        $need = $offset + $perPage;
+        if ($need > 50000) {
+            $fallback = clone $query;
+            $fallback->where(function ($q) use ($set) {
+                $q->whereIn('src', $set)->orWhereIn('dst', $set);
+            });
+            $logsCollection = (clone $fallback)
+                ->orderBy($sortCol, $sortDir)
+                ->orderBy('id', $sortDir)
+                ->offset($offset)
+                ->limit($perPage)
+                ->get();
+        } else {
+            $aRows = $branchA()->orderBy($sortCol, $sortDir)->orderBy('id', $sortDir)->limit($need)->get();
+            $bRows = $branchB()->orderBy($sortCol, $sortDir)->orderBy('id', $sortDir)->limit($need)->get();
+            $desc = $sortDir === 'desc';
+            $cmp = function ($a, $b) use ($sortCol, $desc) {
+                $av = $a->{$sortCol};
+                $bv = $b->{$sortCol};
+                $c = (is_numeric($av) && is_numeric($bv)) ? ($av <=> $bv) : strcmp((string) $av, (string) $bv);
+                if ($c === 0) {
+                    $c = $a->id <=> $b->id;
+                }
+                return $desc ? -$c : $c;
+            };
+            $merged = [];
+            $ia = 0;
+            $ib = 0;
+            $na = $aRows->count();
+            $nb = $bRows->count();
+            $take = min($need, $na + $nb);
+            for ($i = 0; $i < $take; $i++) {
+                if ($ib >= $nb || ($ia < $na && $cmp($aRows[$ia], $bRows[$ib]) <= 0)) {
+                    $merged[] = $aRows[$ia++];
+                } else {
+                    $merged[] = $bRows[$ib++];
+                }
+            }
+            $logsCollection = collect(array_slice($merged, $offset, $perPage));
+        }
+    } else {
+    // 1. Total di-cache 60 detik per kombinasi filter (COUNT di jutaan baris
+    // itu 1-2 detik sendiri; filter jarang berubah dalam semenit).
+    // Multi-set: terapkan OR-OR seperti semula.
+    if (!$likeSearch) {
+        foreach ($extSets as $set) {
+            $query->where(function ($q) use ($set) {
+                $q->whereIn('src', $set)->orWhereIn('dst', $set);
+            });
+        }
+    }
     $total = \Illuminate\Support\Facades\Cache::remember($countKey, 60, function () use ($query) {
         return (clone $query)->count();
     });
@@ -439,6 +558,7 @@ class SupervisorMonitoringController extends Controller
             ->limit($perPage)
             ->get();
     }
+    } // end else: jalur single-query (tanpa filter ext / multi-set / LIKE)
 
     // 4. Bungkus ke Paginator
     $paginatedLogs = new \Illuminate\Pagination\LengthAwarePaginator(
@@ -478,6 +598,9 @@ class SupervisorMonitoringController extends Controller
         'status' => 'success',
         'data'   => $paginatedLogs
     ]);
+    } finally {
+        $flight->release();
+    }
 }
 
     public function updateStatus(Request $request, $extension)
@@ -574,7 +697,9 @@ class SupervisorMonitoringController extends Controller
         if ($disk->exists($path) && $disk->size($path) > 0) {
             return response()->json([
                 'ready' => true,
-                'url' => asset('storage/' . $path)
+                // Path relatif agar ikut host yang sedang dipakai browser
+                // (asset() mengunci ke APP_URL yang bisa localhost).
+                'url' => '/storage/' . $path,
             ]);
         }
 
