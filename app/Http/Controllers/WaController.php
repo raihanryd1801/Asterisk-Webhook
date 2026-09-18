@@ -396,6 +396,20 @@ class WaController extends Controller
             $sessionId, $phone, $server, $customerId
         );
 
+        // Kontak yang sudah migrasi LID: kirim via @lid (bukan nomor biasa).
+        // Kirim via PN ke kontak LID = sesi enkripsi rusak ("Closing session",
+        // pesan "Waiting" / gagal kirim di sisi penerima).
+        // DB tetap simpan nomor kanonis agar thread tidak pecah.
+        $sendPhone = $phone;
+        $sendServer = $server;
+        if ($server !== 'lid') {
+            $knownLid = \App\Models\WaLidMap::lookupLid($sessionId, $phone);
+            if ($knownLid) {
+                $sendPhone = $knownLid;
+                $sendServer = 'lid';
+            }
+        }
+
         // Audit pengirim (level sesi, tanpa batasan assign customer).
         $agent = $this->currentAgent();
         $repliedByAgentId = null;
@@ -433,7 +447,7 @@ class WaController extends Controller
             ];
         }
 
-        $result = $gateway->send($sessionId, $phone, $request->message ?? '', $server, $mediaPayload, true);
+        $result = $gateway->send($sessionId, $sendPhone, $request->message ?? '', $sendServer, $mediaPayload, true);
         if (!$result['ok']) {
             // Bersihkan file yang sudah terlanjur disimpan bila kirim gagal
             if ($mediaPath) {
@@ -525,7 +539,15 @@ class WaController extends Controller
             'message' => 'nullable|string',
             'media' => 'nullable|file|max:8192',
             'media_kind' => 'nullable|string|max:20',
+            'message_id' => 'nullable|string|max:128',
         ]);
+
+        // Dedupe: Baileys bisa meneruskan pesan yang sama 2x (retry dekripsi
+        // yang akhirnya sukses, reconnect/history sync). Tanpa ini chat dobel.
+        if ($request->message_id && \App\Models\WaMessage::where('session_id', $request->session_id)
+                ->where('external_id', $request->message_id)->exists()) {
+            return response()->json(['status' => 'success', 'deduped' => true]);
+        }
 
         $server = $request->input('remote_server') === 'lid' ? 'lid' : 's.whatsapp.net';
         $rawId = preg_replace('/@.*$/', '', (string) $request->input('remote_jid', ''));

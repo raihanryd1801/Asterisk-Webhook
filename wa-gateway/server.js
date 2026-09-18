@@ -515,7 +515,10 @@ app.post('/sessions/:id/send', async (req, res) => {
 
     let sentId = null;
     const fast = req.body.fast === true;
-    s.queue = s.queue.then(async () => {
+    // Rantai antre SELALU direset dari kegagalan sebelumnya — kalau tidak,
+    // satu kiriman gagal meracuni s.queue selamanya dan semua kiriman
+    // berikutnya ikut 502 sampai gateway restart.
+    const run = s.queue.catch(() => {}).then(async () => {
         if (!fast) {
             await sleep(randDelay());
         }
@@ -540,9 +543,10 @@ app.post('/sessions/:id/send', async (req, res) => {
             });
         }
     });
+    s.queue = run.catch(() => {});
 
     try {
-        await s.queue;
+        await run;
         res.json({ ok: true, to, jid, id: sentId });
     } catch (e) {
         res.status(502).json({ ok: false, to, message: e.message || 'Gagal kirim' });

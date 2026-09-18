@@ -30,4 +30,13 @@ class WaLidMap extends Model
         }
         return static::where('session_id', $sessionId)->where('lid', $lid)->value('phone');
     }
+
+    /** Cari LID dari nomor (untuk kirim via @lid bila kontak sudah migrasi). */
+    public static function lookupLid(string $sessionId, string $phone): ?string
+    {
+        if ($phone === '') {
+            return null;
+        }
+        return static::where('session_id', $sessionId)->where('phone', $phone)->latest('id')->value('lid');
+    }
 }

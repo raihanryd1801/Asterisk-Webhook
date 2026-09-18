@@ -323,7 +323,12 @@ class SupervisorMonitoringController extends Controller
     // menumpuk di MySQL. Frontend menampilkan toast "tunggu sebentar".
     $flightKey = 'calllogs_flight_' . (session()->getId() ?: $request->ip());
     $flight = \Illuminate\Support\Facades\Cache::lock($flightKey, 120);
-    if (!$flight->block(0)) {
+    try {
+        $acquired = $flight->get();
+    } catch (\Throwable $e) {
+        $acquired = false;
+    }
+    if (!$acquired) {
         return response()->json([
             'status' => 'error',
             'message' => 'Permintaan sebelumnya masih diproses. Tunggu sebentar.',
