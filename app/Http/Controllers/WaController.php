@@ -201,7 +201,7 @@ class WaController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data' => $rows->map(function ($m) use ($linkedByPhone, $phonesByCustomer) {
+            'data' => $rows->map(function ($m) use ($linkedByPhone, $phonesByCustomer, $unreads) {
                 $cid = $m->customer_id ?? ($linkedByPhone[$m->phone] ?? null);
                 return [
                 'phone' => $m->phone,
@@ -241,6 +241,14 @@ class WaController extends Controller
         if ($denied = $this->assertThreadAccess($sessionId, $phone)) {
             return response()->json($denied, 403);
         }
+
+        // Tandai divider "pesan baru": id + jumlah inbound belum dibaca SEBELUM ditandai.
+        $unreadScope = \App\Models\WaMessage::where('session_id', $sessionId)
+            ->where('phone', $phone)
+            ->where('direction', 'in')
+            ->whereNull('read_at');
+        $unreadBefore = (clone $unreadScope)->count();
+        $firstUnreadId = (clone $unreadScope)->orderBy('id')->value('id');
 
         // Ambil ID pesan yang akan ditandai DULU (untuk read receipt ke WA),
         // baru update DB.
@@ -326,6 +334,8 @@ class WaController extends Controller
             'customer_id' => $customerId,
             'customer_phone' => $customerPhone,
             'messages' => $messages,
+            'unread_before' => $unreadBefore,
+            'first_unread_id' => $firstUnreadId,
         ]);
     }
 

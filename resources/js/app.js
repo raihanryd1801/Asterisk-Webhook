@@ -11,6 +11,8 @@ import './call-history';
 import './crm-customer.js';
 // 🚀 TAMBAHKAN BARIS INI
 import './crm-charts.js';
+// Factory Alpine workspace agent (harus persisten antar navigasi Turbo)
+import './agent-workspace.js';
 
 import JsSIP from 'jssip';
 

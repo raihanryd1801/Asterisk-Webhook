@@ -92,11 +92,16 @@ chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
 chmod -R 775 storage bootstrap/cache 2>/dev/null || true
 
 echo "==> [4/6] Buat user MySQL '$MYSQL_USER' (akses semua IP, semua DB)..."
-systemctl enable --now mysql
-# Buka bind agar bisa diakses dari segala IP (sesuai permintaan)
-mkdir -p /etc/mysql/mysql.conf.d
-printf '[mysqld]\nbind-address = 0.0.0.0\nmysqlx-bind-address = 0.0.0.0\n' > /etc/mysql/mysql.conf.d/99-remote-access.cnf
-systemctl restart mysql
+systemctl enable --now mysql 2>/dev/null || systemctl enable --now mariadb
+# Buka bind agar bisa diakses dari segala IP (sesuai permintaan).
+# Lokasi conf beda tiap distro: MySQL (mysql.conf.d) vs MariaDB (mariadb.conf.d).
+MYSQL_CNF_DIR=/etc/mysql/mysql.conf.d
+[ -d /etc/mysql/mariadb.conf.d ] && MYSQL_CNF_DIR=/etc/mysql/mariadb.conf.d
+mkdir -p "$MYSQL_CNF_DIR"
+printf '[mysqld]\nbind-address = 0.0.0.0\nmysqlx-bind-address = 0.0.0.0\n' > "$MYSQL_CNF_DIR/99-remote-access.cnf"
+# Buffer pool 2G (butuh untuk tabel >1GB; sesuaikan 50-70% RAM bila RAM beda)
+printf '[mysqld]\ninnodb_buffer_pool_size = 2G\ninnodb_buffer_pool_instances = 2\n' > "$MYSQL_CNF_DIR/99-noc-tuning.cnf"
+systemctl restart mysql 2>/dev/null || systemctl restart mariadb
 # NOTE: root di Ubuntu/MariaDB umumnya auth_socket -> bisa login tanpa password sebagai root OS
 mysql -uroot -e "CREATE USER IF NOT EXISTS '${MYSQL_USER}'@'%' IDENTIFIED BY '${MYSQL_PASS}';"
 mysql -uroot -e "GRANT ALL PRIVILEGES ON *.* TO '${MYSQL_USER}'@'%'; FLUSH PRIVILEGES;"

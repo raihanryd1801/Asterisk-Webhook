@@ -308,7 +308,9 @@ class ProcessZipChunk implements ShouldQueue
         $state = Cache::get($this->stateKey(), []);
         Cache::put($this->stateKey(), array_merge($state, [
             'ready' => true,
-            'url' => asset('storage/exports/' . $this->filename),
+            // Path relatif (bukan asset() yang mengunci APP_URL=localhost):
+            // frontend menggabungkan dengan host yang sedang dipakai.
+            'url' => '/storage/exports/' . $this->filename,
         ]), now()->addMinutes(30));
     }
 

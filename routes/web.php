@@ -30,7 +30,9 @@ Route::get('/', function () {
 // ==========================================
 // 2. DASHBOARD AREA
 // ==========================================
-Route::prefix('dashboard')->group(function () {
+// DbQueryTimeout: bunuh SELECT >30 detik agar query raksasa tidak menumpuk
+// sampai CPU jebol (direset otomatis tiap request selesai).
+Route::prefix('dashboard')->middleware([\App\Http\Middleware\DbQueryTimeout::class])->group(function () {
 
     // 1. Overview Dashboard (SUPER FAST CACHED + AJAX READY)
     Route::get('/overview', function (Illuminate\Http\Request $request) {
@@ -400,7 +402,7 @@ Route::prefix('dashboard')->group(function () {
     // 6. API / AJAX Endpoints (Termasuk Chat Bimbingan TL & Agent)
     Route::get('/api/live-agents', [SupervisorMonitoringController::class, 'agentsList']);
     Route::post('/api/spy', [SupervisorMonitoringController::class, 'spyAction']);
-    Route::get('/api/call-logs', [SupervisorMonitoringController::class, 'callLogs']);
+    Route::get('/api/call-logs', [SupervisorMonitoringController::class, 'callLogs'])->middleware('throttle:120,1');
     Route::get('/api/call-logs/export', [SupervisorMonitoringController::class, 'exportExcel']);
     Route::get('/api/call-logs/export-status', [SupervisorMonitoringController::class, 'checkExportStatus']);
     Route::get('/api/play-recording', [SupervisorMonitoringController::class, 'playRecording']);

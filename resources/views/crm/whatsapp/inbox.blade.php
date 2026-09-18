@@ -38,7 +38,7 @@
         </div>
 
         <!-- Thread -->
-        <div class="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden hidden sm:flex flex-col" id="wa-thread-pane">
+        <div class="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden hidden sm:flex flex-col relative" id="wa-thread-pane">
             <div class="p-4 border-b border-slate-100 flex items-center justify-between gap-2 bg-gradient-to-r from-brand-50 to-white" id="wa-thread-head" style="display: none;">
                 <div class="flex items-center gap-3 min-w-0">
                     <div class="w-10 h-10 rounded-full bg-brand-600 text-white flex items-center justify-center shrink-0 shadow-sm">
@@ -59,7 +59,12 @@
                 </div>
             </div>
             <div class="flex-1 overflow-y-auto p-4 space-y-3" id="wa-messages"
-                 style="background-color:#f4f7f5; background-image: radial-gradient(circle, rgba(15,23,42,0.05) 1px, transparent 1px); background-size: 18px 18px;"></div>
+                  style="background-color:#f4f7f5; background-image: radial-gradient(circle, rgba(15,23,42,0.05) 1px, transparent 1px); background-size: 18px 18px;"></div>
+            <div class="absolute left-0 right-0 bottom-20 justify-center pointer-events-none" id="wa-jump-latest" style="display: none;">
+                <button onclick="window.WAInbox.jumpLatest()" class="pointer-events-auto mx-auto flex items-center gap-1.5 bg-slate-900/90 hover:bg-slate-900 text-white text-xs font-medium px-3.5 py-1.5 rounded-full shadow-lg transition">
+                    <i class="fa-solid fa-arrow-down"></i> Pesan terbaru
+                </button>
+            </div>
             <div id="wa-attach-preview" class="px-3 pt-2 bg-white" style="display: none;">
                 <div class="flex items-center gap-2 text-xs bg-slate-100 border border-slate-200 rounded-xl px-3 py-2">
                     <i class="fa-solid fa-paperclip text-slate-500"></i>
@@ -312,6 +317,9 @@ window.WAInbox = window.WAInbox || {
 
     async open(phone) {
         this.active = phone;
+        window.WAInbox._threadSeen = false;
+        const pill = document.getElementById('wa-jump-latest');
+        if (pill) pill.style.display = 'none';
         document.getElementById('wa-thread-pane').classList.remove('hidden');
         document.getElementById('wa-thread-pane').classList.add('flex');
         document.getElementById('wa-conv-list').classList.add('hidden', 'sm:flex');
@@ -324,6 +332,13 @@ window.WAInbox = window.WAInbox || {
         document.getElementById('wa-thread-pane').classList.add('hidden');
         document.getElementById('wa-thread-pane').classList.remove('flex');
         document.getElementById('wa-conv-list').classList.remove('hidden');
+    },
+
+    jumpLatest() {
+        const box = document.getElementById('wa-messages');
+        if (box) box.scrollTop = box.scrollHeight;
+        const pill = document.getElementById('wa-jump-latest');
+        if (pill) pill.style.display = 'none';
     },
 
     async loadThread(silent = true) {
@@ -347,9 +362,22 @@ window.WAInbox = window.WAInbox || {
             }
             window.WAInbox.threadCustomerId = data.customer_id || null;
             const box = document.getElementById('wa-messages');
+            // Scroll cerdas: ikut ke bawah HANYA bila user memang sedang di
+            // bawah (<=120px dari dasar) atau baru buka thread. Kalau user
+            // sedang baca atas, jangan dirampas — tampilkan pil lompat.
+            const firstOpen = !window.WAInbox._threadSeen;
+            window.WAInbox._threadSeen = true;
+            // Divider "pesan baru" ala WA: hanya saat pertama buka thread yang
+            // memang punya unread (refresh diam-diam berikutnya tidak tampil).
+            const showDivider = firstOpen && (data.unread_before || 0) > 0 && data.first_unread_id;
+            const nearBottom = firstOpen ||
+                (box.scrollHeight - box.scrollTop - box.clientHeight < 120);
             box.innerHTML = data.messages.length === 0
                 ? '<div class="text-center text-slate-400 text-sm py-8">Belum ada pesan.</div>'
                 : data.messages.map(m => {
+                    const divider = (showDivider && m.id === data.first_unread_id)
+                        ? `<div class="flex items-center gap-2 my-1"><div class="flex-1 h-px bg-brand-200"></div><span class="text-[10px] font-bold text-brand-700 bg-brand-50 border border-brand-200 rounded-full px-2.5 py-0.5">${data.unread_before} pesan baru</span><div class="flex-1 h-px bg-brand-200"></div></div>`
+                        : '';
                     const media = this.mediaHtml(m);
                     const side = m.direction === 'out';
                     const wrap = side
@@ -361,9 +389,15 @@ window.WAInbox = window.WAInbox || {
                     const stamp = side ? 'text-brand-100' : 'text-slate-400';
                     const tick = side ? this.tickHtml(m.tick) : '';
                     const by = side && m.replied_by ? `<p class="text-[10px] ${stamp} opacity-80 mb-1">↩ ${this.esc(m.replied_by)}</p>` : '';
-                    return `<div class="${wrap}"><div class="${bubble}">${by}${media}<p class="break-words">${this.esc(m.message)}</p><p class="text-[10px] ${stamp} text-right mt-1">${this.esc(m.at || '')} ${tick}</p></div></div>`;
+                    return `${divider}<div class="${wrap}"><div class="${bubble}">${by}${media}<p class="break-words">${this.esc(m.message)}</p><p class="text-[10px] ${stamp} text-right mt-1">${this.esc(m.at || '')} ${tick}</p></div></div>`;
                 }).join('');
-            box.scrollTop = box.scrollHeight;
+            const jumpPill = document.getElementById('wa-jump-latest');
+            if (nearBottom) {
+                box.scrollTop = box.scrollHeight;
+                if (jumpPill) jumpPill.style.display = 'none';
+            } else if (jumpPill) {
+                jumpPill.style.display = 'flex';
+            }
         } catch (e) {
             if (!silent) console.error(e);
         }
@@ -661,7 +695,18 @@ function waInboxInit() {
         if (!window.WAInbox['_bound_' + evt]) {
             window.WAInbox['_bound_' + evt] = true;
             window.addEventListener(evt, () => {
-                window.WAInbox.loadConvs();
+    window.WAInbox.loadConvs();
+    const box = document.getElementById('wa-messages');
+    if (box && !box.dataset.scrollBound) {
+        box.dataset.scrollBound = '1';
+        box.addEventListener('scroll', () => {
+            const pill = document.getElementById('wa-jump-latest');
+            if (!pill || pill.style.display === 'none') return;
+            if (box.scrollHeight - box.scrollTop - box.clientHeight < 120) {
+                pill.style.display = 'none';
+            }
+        }, { passive: true });
+    }
                 if (window.WAInbox.active) window.WAInbox.loadThread();
             });
         }

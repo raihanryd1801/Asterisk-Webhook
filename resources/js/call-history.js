@@ -132,7 +132,14 @@ window.callHistoryPage = function() {
             }
 
             fetch(`/dashboard/api/call-logs?${cacheKey}`, { headers: { 'Accept': 'application/json' } })
-            .then(res => res.json())
+            .then(res => {
+                if (res.status === 429) {
+                    // Single-flight backend menolak: request sebelumnya masih jalan
+                    alert('Sabar bang, request sebelumnya masih diproses. Tunggu sebentar.');
+                    throw new Error('RATE_LIMITED');
+                }
+                return res.json();
+            })
             .then(response => {
                 if (response.status === 'success') {
                     this.logs = response.data.data;
