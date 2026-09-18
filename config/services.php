@@ -39,6 +39,8 @@ return [
         'host' => env('FREEPBX_SSH_HOST', '127.0.0.1'),
         'user' => env('FREEPBX_SSH_USER', 'root'),
         'pass' => env('FREEPBX_SSH_PASS'), // 🚀 Kosongkan parameter kedua agar password mentah tidak terekspos
+        // Folder rekaman di server FreePBX (pola URL /monitor/YYYY/MM/DD/namafile)
+        'monitor_path' => env('FREEPBX_MONITOR_PATH', '/var/spool/asterisk/monitor'),
     ],
 
     'pds' => [

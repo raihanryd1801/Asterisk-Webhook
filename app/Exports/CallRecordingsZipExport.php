@@ -14,10 +14,6 @@ class CallRecordingsZipExport
     protected $filters;
     protected $filename;
 
-    // Batas wajar: tiap file = 1 request HTTP ke FreePBX. Tanpa cap, jutaan
-    // baris = jutaan request = worker gantung berjam-jam.
-    public const MAX_FILES = 2000;
-
     public function __construct(array $filters)
     {
         $this->filters = $filters;
@@ -80,22 +76,12 @@ class CallRecordingsZipExport
             $query->where('calldate', '<=', $this->filters['end_date'] . ' 23:59:59');
         }
 
-        // Rem otomatis 30 hari bila tanpa filter tanggal (samakan perilaku export Excel)
-        if (empty($this->filters['start_date']) && empty($this->filters['end_date'])) {
-            $query->where('calldate', '>=', date('Y-m-d 00:00:00', strtotime('-30 days')));
-        }
-
         $total = (clone $query)->count();
-        $truncated = $total > self::MAX_FILES;
-        if ($truncated) {
-            $query->limit(self::MAX_FILES);
-        }
-        $target = min($total, self::MAX_FILES);
 
         \Illuminate\Support\Facades\Cache::put(
             $this->statusKey(),
-            ['ready' => false, 'done' => 0, 'total' => $target, 'truncated' => $truncated],
-            now()->addMinutes(30)
+            ['ready' => false, 'done' => 0, 'total' => $total, 'truncated' => false],
+            now()->addMinutes(180)
         );
 
         // 2. Siapkan file ZIP lokal di server web sementara
@@ -112,6 +98,8 @@ class CallRecordingsZipExport
         }
 
        // 🚀 Siapkan Client HTTP Guzzle (Turbo Downloader)
+        // 150 koneksi serentak: hasil ukur box FreePBX ~14 file/detik @100 conc.
+        // Jangan lebih agresif (risiko fail2ban di FreePBX menganggap flood).
         $client = new Client([
             'timeout' => 10, // Max 10 detik nunggu per file
             'connect_timeout' => 3, // Max 3 detik buka koneksi (server mati langsung skip)
@@ -121,9 +109,10 @@ class CallRecordingsZipExport
 
         $statusKey = $this->statusKey();
         $doneFiles = 0;
+        $okFiles = 0;
 
-        // Gunakan Chunk 100 (Artinya 100 file didownload serentak dalam 1 kloter)
-        $query->chunk(100, function ($rows) use ($zip, $client, $statusKey, &$doneFiles, $target) {
+        // Kloter 150: menyeimbangkan progres mulus vs ronde settle.
+        $query->chunkById(150, function ($rows) use ($zip, $client, $statusKey, &$doneFiles, &$okFiles, $total) {
             $promises = [];
             $fileMapping = [];
 
@@ -151,9 +140,12 @@ class CallRecordingsZipExport
             }
 
             // 🚀 TEMBAK SEMUA REQUEST BERSAMAAN! (Network Multi-Threading)
+            $tBatch = microtime(true);
             $responses = Utils::settle($promises)->wait();
+            $batchSecs = round(microtime(true) - $tBatch, 1);
 
             // Masukkan hasil yang sukses ke dalam ZIP
+            $okBatch = 0;
             foreach ($responses as $index => $response) {
                 // Pastikan status HTTP 200 (File ada)
                 if ($response['state'] === 'fulfilled' && $response['value']->getStatusCode() === 200) {
@@ -166,14 +158,20 @@ class CallRecordingsZipExport
                     // 🚀 JURUS 2: Matikan kompresi CPU! (Hanya bungkus, jangan dipadatkan)
                     // Menghemat waktu pembuatan ZIP hingga 90%
                     $zip->setCompressionName($zipName, ZipArchive::CM_STORE);
+                    $okBatch++;
                 }
             }
 
             $doneFiles += count($rows);
+            $okFiles += $okBatch;
+            \Illuminate\Support\Facades\Log::info(sprintf(
+                'ZIP %s: kloter %d file (%d ok) dalam %s dtk',
+                $this->filename, count($rows), $okBatch, $batchSecs
+            ));
             \Illuminate\Support\Facades\Cache::put(
                 $statusKey,
-                ['ready' => false, 'done' => min($doneFiles, $target), 'total' => $target],
-                now()->addMinutes(30)
+                ['ready' => false, 'done' => min($doneFiles, $total), 'total' => $total, 'found' => $okFiles],
+                now()->addMinutes(180)
             );
         });
 

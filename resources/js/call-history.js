@@ -218,6 +218,13 @@ window.callHistoryPage = function() {
                     window.location.href = status.url; // Otomatis download file .zip
                     this.isExportingZip = false;
                     this.zipProgress = '';
+                } else if (status.error) {
+                    clearInterval(checkInterval);
+                    this.isExportingZip = false;
+                    this.zipProgress = '';
+                    alert('Export ZIP gagal: ' + status.error);
+                } else if (status.assembling) {
+                    this.zipProgress = 'merakit ZIP...';
                 } else if (status.total > 0) {
                     const pct = Math.min(99, Math.round((status.done || 0) / status.total * 100));
                     this.zipProgress = `${pct}% (${status.done || 0}/${status.total}${status.truncated ? ', dibatasi' : ''})`;

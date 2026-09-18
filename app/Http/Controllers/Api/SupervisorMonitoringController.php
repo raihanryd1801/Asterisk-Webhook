@@ -348,13 +348,30 @@ class SupervisorMonitoringController extends Controller
     }
 
     if ($request->filled('search')) {
-        $keyword = $request->search;
-        $query->where(function($q) use ($keyword) {
-            $q->where('src', 'like', "%{$keyword}%")
-              ->orWhere('dst', 'like', "%{$keyword}%")
-              ->orWhere('cnam', 'like', "%{$keyword}%")
-              ->orWhere('cnum', 'like', "%{$keyword}%");
-        });
+        $keyword = trim((string) $request->search);
+        $digits = preg_replace('/\D/', '', $keyword);
+        if ($digits !== '' && strlen($digits) >= 6 && preg_match('/^[\d\s\+\-\(\)]+$/', $keyword)) {
+            // Pencarian nomor: exact match (pakai index src/dst = milidetik).
+            // Dicoba juga varian 08xx <-> 62xx agar format beda tetap ketemu.
+            // LIKE '%...%' lama dihapus untuk kasus ini karena memaksa full
+            // table scan (20 menit di jutaan baris).
+            $variants = array_values(array_unique(array_filter([$keyword, $digits])));
+            if (str_starts_with($digits, '62')) {
+                $variants[] = '0' . substr($digits, 2);
+            } elseif (str_starts_with($digits, '0')) {
+                $variants[] = '62' . substr($digits, 1);
+            }
+            $query->where(function($q) use ($variants) {
+                $q->whereIn('src', $variants)->orWhereIn('dst', $variants);
+            });
+        } else {
+            $query->where(function($q) use ($keyword) {
+                $q->where('src', 'like', "%{$keyword}%")
+                  ->orWhere('dst', 'like', "%{$keyword}%")
+                  ->orWhere('cnam', 'like', "%{$keyword}%")
+                  ->orWhere('cnum', 'like', "%{$keyword}%");
+            });
+        }
     }
 
     // Filter Tanggal
@@ -741,19 +758,23 @@ public function exportZip(Request $request)
     {
         try {
             $filters = $request->all();
-            $exporter = new CallRecordingsZipExport($filters);
-            $filename = $exporter->getFilename();
+            $filename = 'recordings-' . date('Y-m-d_H-i-s') . '.zip';
 
-            Cache::put('zip_status_' . $filename, ['ready' => false], now()->addMinutes(10));
+            // Hitung total dulu (untuk progres). Bisa beberapa detik di jutaan baris.
+            $countQuery = \App\Jobs\ProcessZipChunk::countQuery($filters);
+            $total = (clone $countQuery)->count();
 
-            dispatch(function () use ($exporter, $filename) {
-                try {
-                    $exporter->generate();
-                    Cache::put('zip_status_' . $filename, ['ready' => true, 'url' => asset('storage/exports/' . $filename)], now()->addMinutes(30));
-                } catch (\Throwable $e) {
-                    \Log::error("ZIP Generation Background Error: " . $e->getMessage());
-                }
-            })->afterResponse();
+            \Illuminate\Support\Facades\Cache::put('zip_status_' . $filename, [
+                'ready' => false,
+                'done' => 0,
+                'found' => 0,
+                'total' => $total,
+                'last_id' => 0,
+            ], now()->addHours(12));
+
+            // Potongan pertama; potongan berikut berantai otomatis dari job.
+            // Tiap potong < timeout worker sehingga export sebesar apa pun selesai.
+            \App\Jobs\ProcessZipChunk::dispatch($filename, $filters, 0);
 
             return response()->json([
                 'status' => 'success',

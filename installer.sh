@@ -150,11 +150,11 @@ stdout_logfile=$APP_DIR/storage/logs/supervisor-asterisk.log
 
 [program:laravel-worker]
 process_name=%(program_name)s_%(process_num)01d
-command=php $APP_DIR/artisan queue:work --daemon --sleep=3 --tries=3
+command=php $APP_DIR/artisan queue:work --daemon --sleep=3 --tries=2 --timeout=3600 --memory=1024
 autostart=true
 autorestart=true
 user=root
-numprocs=1
+numprocs=3
 redirect_stderr=true
 stdout_logfile=$APP_DIR/storage/logs/worker.log
 stopwaitsecs=3600
