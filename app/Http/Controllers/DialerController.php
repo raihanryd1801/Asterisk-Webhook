@@ -50,6 +50,7 @@ class DialerController extends Controller
             'lines_per_agent' => 'required|integer|min:1|max:5',
             'max_attempts' => 'required|integer|min:1|max:10',
             'note' => 'nullable|string|max:2000',
+            'loop' => 'nullable|boolean',
         ]);
 
         $config = [];
@@ -69,6 +70,7 @@ class DialerController extends Controller
             'buckets_config' => $config,
             'lines_per_agent' => $request->lines_per_agent,
             'max_attempts' => $request->max_attempts,
+            'loop' => (bool) $request->boolean('loop'),
             'status' => 'draft',
             'note' => $request->note,
             'created_by' => $this->getCurrentUserId(),
@@ -162,6 +164,19 @@ class DialerController extends Controller
         $job->update(['status' => 'stopped', 'finished_at' => now()]);
 
         return response()->json(['status' => 'success', 'message' => 'Job dihentikan.']);
+    }
+
+    /** Nyalakan/matikan Loop:ON (antrean habis = dibangun ulang otomatis). */
+    public function toggleLoop(Request $request, DialJob $job)
+    {
+        $request->validate(['loop' => 'required|boolean']);
+        $job->update(['loop' => (bool) $request->loop]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => $job->loop ? "Loop:ON — '{$job->name}' akan mengulang antrean sampai di-Stop." : 'Loop:OFF.',
+            'job' => $job->fresh(),
+        ]);
     }
 
     public function repeat(DialJob $job)
@@ -299,7 +314,38 @@ class DialerController extends Controller
             'entries' => $entries,
             'abandoned_today' => $abandonedToday,
             'answered_unbridged' => $answeredUnbridged,
+            'dial_queue' => $this->dialQueueSnapshot(),
         ]);
+    }
+
+    /**
+     * Antrean NOMOR (menunggu didial) dari job yang running. Relevan di semua
+     * mode (termasuk agent_first) — beda dengan antrean Asterisk di atas yang
+     * hanya terisi di mode customer_first.
+     */
+    protected function dialQueueSnapshot(): array
+    {
+        $runningIds = \App\Models\DialJob::where('status', 'running')->pluck('id');
+        if ($runningIds->isEmpty()) {
+            return ['queued' => 0, 'dialing' => 0, 'items' => []];
+        }
+        $base = \App\Models\DialQueueItem::whereIn('job_id', $runningIds);
+        return [
+            'queued' => (clone $base)->where('status', 'queued')->count(),
+            'dialing' => (clone $base)->where('status', 'dialing')->count(),
+            'items' => (clone $base)->with(['customer:id,name', 'job:id,name'])
+                ->where('status', 'queued')
+                ->orderBy('id')
+                ->limit(30)
+                ->get()
+                ->map(fn($it) => [
+                    'phone' => $it->phone,
+                    'customer' => $it->customer?->name,
+                    'job' => $it->job?->name,
+                    'bucket' => $it->bucket,
+                    'attempts' => $it->attempts,
+                ]),
+        ];
     }
 
     // ============ ROTATION MILIK AGENT (session agent, di luar premium gate) ============

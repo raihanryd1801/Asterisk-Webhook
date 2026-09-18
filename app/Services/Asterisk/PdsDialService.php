@@ -147,6 +147,22 @@ class PdsDialService
         // 1. Rekonsiliasi item dialing yang sudah selesai di Asterisk
         $this->reconcile($job);
 
+        // 2. Loop:ON = antrean habis dibangun ulang (attempt di-reset).
+        // Dijalankan SEBELUM gate agent agar putaran baru siap walau agent
+        // sedang offline semua; job tidak pernah completed kecuali di-Stop.
+        $remaining = $job->items()->whereIn('status', ['queued', 'dialing'])->count();
+        if ($remaining === 0 && $job->loop && $job->items()->count() > 0) {
+            $job->items()->update([
+                'status' => 'queued',
+                'attempts' => 0,
+                'agent_extension' => null,
+                'last_attempt_at' => null,
+                'note' => null,
+            ]);
+            $remaining = $job->items()->count();
+            Log::info("PDS job {$job->id}: loop putaran baru ({$remaining} nomor).");
+        }
+
         $idle = $this->idleRotationAgents();
 
         if (empty($idle)) {
@@ -221,7 +237,9 @@ class PdsDialService
         }
 
         $remaining = $job->items()->whereIn('status', ['queued', 'dialing'])->count();
-        $completed = $remaining === 0;
+        // Loop:ON tidak pernah completed (reset antrean terjadi di awal tick
+        // berikutnya); tanpa loop, antrean habis = selesai.
+        $completed = $remaining === 0 && !($job->loop && $job->items()->count() > 0);
 
         if ($completed) {
             $job->update(['status' => 'completed', 'finished_at' => now()]);
@@ -232,6 +250,8 @@ class PdsDialService
 
     /**
      * Item dialing yang agent-nya sudah tidak ada di active call = selesai.
+     * Hasil akhir dicari di CDR (disposition asli) agar SPV bisa audit kenapa
+     * gagal — sebelumnya item langsung done tanpa jejak.
      * Item dialing yang terlalu lama = nyangkut -> failed.
      */
     protected function reconcile(DialJob $job): void
@@ -249,9 +269,21 @@ class PdsDialService
             }
 
             if ($ext && !Cache::get('active_call_' . $ext)) {
-                $item->update(['status' => 'done']);
-                Cache::forget('pds_call_' . $ext);
-                Log::info("PDS job {$job->id}: item #{$item->id} ({$item->phone}) done.");
+                $cdr = $this->findCdr($item);
+                if ($cdr) {
+                    $item->update(['status' => 'done', 'note' => 'CDR: ' . $cdr->disposition]);
+                    Log::info("PDS job {$job->id}: item #{$item->id} ({$item->phone}) done ({$cdr->disposition}).");
+                } elseif ($item->last_attempt_at && $item->last_attempt_at->lt(now()->subMinutes($this->stuckMinutes))) {
+                    // Tidak ada jejak CDR sama sekali setelah 10 menit =
+                    // agent tidak mengangkat sehingga kaki customer tak jalan.
+                    $item->update(['status' => 'failed', 'note' => 'Agent tidak mengangkat — kaki customer tidak jalan']);
+                    Log::warning("PDS job {$job->id}: item #{$item->id} ({$item->phone}) failed (tanpa CDR).");
+                }
+                // < 10 menit tanpa CDR: biarkan dialing dulu (tunggu sinkron CDR),
+                // grace 30 detik di atas mencegah vonis prematur tiap tick.
+                if ($ext) {
+                    Cache::forget('pds_call_' . $ext);
+                }
                 continue;
             }
 
@@ -262,6 +294,25 @@ class PdsDialService
                 }
                 Log::warning("PDS job {$job->id}: item #{$item->id} ({$item->phone}) stuck -> failed.");
             }
+        }
+    }
+
+    /**
+     * Cari jejak CDR kaki customer: dst = nomor item, sekitar waktu attempt,
+     * terbaru dulu. Return null bila belum tersinkron / tidak pernah jalan.
+     */
+    protected function findCdr(DialQueueItem $item): ?object
+    {
+        try {
+            return DB::table('cdr_live')
+                ->select('disposition', 'billsec', 'calldate')
+                ->where('dst', $item->phone)
+                ->where('calldate', '>=', $item->last_attempt_at->copy()->subMinute()->toDateTimeString())
+                ->orderByDesc('calldate')
+                ->limit(1)
+                ->first();
+        } catch (\Throwable $e) {
+            return null;
         }
     }
 

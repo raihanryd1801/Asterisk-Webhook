@@ -385,6 +385,7 @@ Route::prefix('dashboard')->middleware([\App\Http\Middleware\DbQueryTimeout::cla
         Route::post('/crm/dialer/jobs/{job}/start', [\App\Http\Controllers\DialerController::class, 'start'])->name('crm.dialer.start');
         Route::post('/crm/dialer/jobs/{job}/pause', [\App\Http\Controllers\DialerController::class, 'pause'])->name('crm.dialer.pause');
         Route::post('/crm/dialer/jobs/{job}/stop', [\App\Http\Controllers\DialerController::class, 'stop'])->name('crm.dialer.stop');
+        Route::post('/crm/dialer/jobs/{job}/loop', [\App\Http\Controllers\DialerController::class, 'toggleLoop'])->name('crm.dialer.loop');
         Route::post('/crm/dialer/jobs/{job}/repeat', [\App\Http\Controllers\DialerController::class, 'repeat'])->name('crm.dialer.repeat');
         Route::delete('/crm/dialer/jobs/{job}', [\App\Http\Controllers\DialerController::class, 'destroy'])->name('crm.dialer.destroy');
         Route::get('/crm/dialer/rotation', [\App\Http\Controllers\DialerController::class, 'rotationList'])->name('crm.dialer.rotation');

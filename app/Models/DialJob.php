@@ -10,7 +10,7 @@ class DialJob extends Model
     use HasFactory;
 
     protected $fillable = [
-        'name', 'buckets_config', 'lines_per_agent', 'max_attempts',
+        'name', 'buckets_config', 'lines_per_agent', 'max_attempts', 'loop',
         'status', 'note', 'created_by', 'started_at', 'finished_at',
     ];
 
@@ -18,6 +18,7 @@ class DialJob extends Model
         'buckets_config' => 'array',
         'started_at' => 'datetime',
         'finished_at' => 'datetime',
+        'loop' => 'boolean',
     ];
 
     public function items()

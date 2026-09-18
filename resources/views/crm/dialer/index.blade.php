@@ -112,6 +112,27 @@
                     </div>
                 </div>
             </template>
+            <template x-if="queue && queue.dial_queue && (queue.dial_queue.queued > 0 || queue.dial_queue.dialing > 0)">
+                <div class="mt-3 pt-3 border-t border-slate-100">
+                    <p class="text-[11px] font-bold text-slate-500 uppercase mb-2">
+                        Antrean nomor <span class="font-mono normal-case">(<span x-text="queue.dial_queue.queued"></span> menunggu • <span x-text="queue.dial_queue.dialing"></span> didial)</span>
+                    </p>
+                    <div class="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                        <template x-for="(n, idx) in queue.dial_queue.items" :key="idx + '-' + n.phone">
+                            <div class="flex items-center gap-2 text-xs text-slate-600">
+                                <span class="w-5 h-5 rounded-full bg-brand-100 text-brand-700 font-bold flex items-center justify-center shrink-0" x-text="idx + 1"></span>
+                                <span class="font-mono font-semibold text-slate-800" x-text="n.phone"></span>
+                                <span x-text="n.customer ? '• ' + n.customer : ''" class="truncate"></span>
+                                <span class="text-slate-400" x-text="n.job ? '• ' + n.job : ''"></span>
+                                <span class="ml-auto text-slate-400 font-mono shrink-0" x-text="n.bucket || ''"></span>
+                            </div>
+                        </template>
+                        <template x-if="queue.dial_queue.queued > queue.dial_queue.items.length">
+                            <p class="text-[11px] text-slate-400 italic" x-text="'+ ' + (queue.dial_queue.queued - queue.dial_queue.items.length) + ' nomor lainnya...'"></p>
+                        </template>
+                    </div>
+                </div>
+            </template>
         </div>
     </div>
 
@@ -135,6 +156,11 @@
                             <td class="px-4 py-3">
                                 <div class="font-medium text-slate-900" x-text="job.name"></div>
                                 <div class="text-[11px] text-slate-400" x-text="'#' + job.id + (job.note ? ' • ' + job.note : '')"></div>
+                                <template x-if="job.loop">
+                                    <span class="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-50 text-violet-700 border border-violet-200" title="Antrean habis = ulang otomatis sampai di-Stop">
+                                        <i class="fa-solid fa-repeat"></i> LOOP:ON
+                                    </span>
+                                </template>
                             </td>
                             <td class="px-4 py-3">
                                 <template x-for="(limit, bucket) in (job.buckets_config || {})" :key="bucket">
@@ -180,6 +206,9 @@
                                             <i class="fa-solid fa-rotate-right text-sm"></i>
                                         </button>
                                     </template>
+                                    <button @click="toggleLoop(job)" class="p-1.5 rounded transition-colors" :class="job.loop ? 'text-violet-600 hover:text-violet-800 hover:bg-violet-50' : 'text-slate-400 hover:text-violet-600 hover:bg-violet-50'" :title="job.loop ? 'Matikan Loop (berhenti saat antrean habis)' : 'Nyalakan Loop (antrean habis = ulang otomatis)'">
+                                        <i class="fa-solid fa-repeat text-sm"></i>
+                                    </button>
                                     <template x-if="job.status !== 'running'">
                                         <button @click="deleteJob(job.id)" class="text-red-600 hover:text-red-800 p-1.5 rounded hover:bg-red-50 transition-colors" title="Delete">
                                             <i class="fa-solid fa-trash text-sm"></i>
@@ -260,6 +289,10 @@
                     <label class="block text-sm font-medium text-slate-700 mb-1">Catatan</label>
                     <input type="text" x-model="form.note" class="w-full border border-slate-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent">
                 </div>
+                <label class="flex items-start gap-2.5 border border-violet-200 bg-violet-50/50 rounded-xl px-3 py-2.5 cursor-pointer">
+                    <input type="checkbox" x-model="form.loop" class="mt-0.5 rounded border-slate-300 text-violet-600 focus:ring-violet-500">
+                    <span class="text-xs text-slate-600"><strong class="text-violet-700">Loop:ON</strong> — antrean habis dibangun ulang otomatis, job jalan terus sampai di-Stop manual.</span>
+                </label>
                 <div class="flex justify-end gap-3 pt-4 border-t border-slate-200">
                     <button type="button" @click="closeModal()" class="px-4 py-2 border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition-colors">Batal</button>
                     <button type="submit" :disabled="submitting" class="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm hover:bg-brand-700 transition-colors disabled:opacity-50">
@@ -298,6 +331,7 @@
                                 <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase">Status</th>
                                 <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase">Attempt</th>
                                 <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase">Agent</th>
+                                <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase">Keterangan</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-200">
@@ -311,6 +345,7 @@
                                     </td>
                                     <td class="px-3 py-2 font-mono" x-text="item.attempts"></td>
                                     <td class="px-3 py-2 font-mono" x-text="item.agent_extension || '-'"></td>
+                                    <td class="px-3 py-2 text-xs text-slate-500 max-w-[220px] truncate" :title="item.note || ''" x-text="item.note || '-'"></td>
                                 </tr>
                             </template>
                         </tbody>
@@ -347,7 +382,7 @@ window.dialerManager = function() {
         allBuckets: @json($buckets),
         showModal: false,
         submitting: false,
-        form: { name: '', buckets: {}, lines_per_agent: 2, max_attempts: 3, note: '' },
+        form: { name: '', buckets: {}, lines_per_agent: 2, max_attempts: 3, note: '', loop: false },
         showDetail: false,
         detailJob: null,
         detailItems: [],
@@ -405,7 +440,7 @@ window.dialerManager = function() {
         openCreateModal() {
             const buckets = {};
             this.allBuckets.forEach(b => { buckets[b] = 0; });
-            this.form = { name: '', buckets: buckets, lines_per_agent: 2, max_attempts: 3, note: '' };
+            this.form = { name: '', buckets: buckets, lines_per_agent: 2, max_attempts: 3, note: '', loop: false };
             this.showModal = true;
         },
 
@@ -429,6 +464,7 @@ window.dialerManager = function() {
                         lines_per_agent: this.form.lines_per_agent,
                         max_attempts: this.form.max_attempts,
                         note: this.form.note || null,
+                        loop: !!this.form.loop,
                     })
                 });
                 const data = await response.json();
@@ -459,6 +495,29 @@ window.dialerManager = function() {
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
                         'X-Requested-With': 'XMLHttpRequest'
                     },
+                });
+                const data = await response.json();
+                alert(data.message || (data.status === 'success' ? 'OK' : 'Gagal'));
+                this.fetchAll();
+            } catch (e) {
+                console.error(e);
+                alert('Terjadi kesalahan jaringan/server.');
+            }
+        },
+
+        async toggleLoop(job) {
+            const target = !job.loop;
+            if (!confirm(`${target ? 'Nyalakan LOOP' : 'Matikan LOOP'} untuk job "${job.name}"?`)) return;
+            try {
+                const response = await fetch(`{{ url('/dashboard/crm/dialer/jobs') }}/${job.id}/loop`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({ loop: target }),
                 });
                 const data = await response.json();
                 alert(data.message || (data.status === 'success' ? 'OK' : 'Gagal'));
