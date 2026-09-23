@@ -290,6 +290,11 @@ class ProcessZipChunk implements ShouldQueue
         }
         $files = glob($this->stagingDir() . '/*') ?: [];
         sort($files);
+        if (empty($files)) {
+            // ZipArchive tidak menulis file sama sekali bila tanpa entry
+            // (jadinya ready-tapi-404). Selipkan file info agar valid.
+            $zip->addFromString('INFO.txt', "Tidak ada file rekaman yang ditemukan untuk filter ini.\r\n");
+        }
         foreach ($files as $file) {
             if (!is_file($file)) {
                 continue;

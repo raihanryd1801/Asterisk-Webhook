@@ -149,9 +149,12 @@ Route::prefix('dashboard')->middleware([\App\Http\Middleware\DbQueryTimeout::cla
             };
 
             // 1. STATISTIK RINGKAS
-            $sqToday = $sumBase();
-            $todayRow = (clone $sqToday)->where('date', $todayDate)
-                ->selectRaw("SUM(calls) as today_calls, SUM(CASE WHEN disposition = 'ANSWERED' THEN calls ELSE 0 END) as today_answered")
+            // Blok "today" baca LIVE (1 hari saja = cepat) agar tidak lag 5 menit
+            // mengikuti scheduler ringkasan + scope-nya persis (src OR dst).
+            // Blok "total" baca ringkasan (rentang panjang = murah).
+            $todayStart = now()->startOfDay()->format('Y-m-d H:i:s');
+            $todayRow = (clone $query)->where('calldate', '>=', $todayStart)
+                ->selectRaw("COUNT(*) as today_calls, SUM(CASE WHEN disposition = 'ANSWERED' THEN 1 ELSE 0 END) as today_answered")
                 ->first();
             $sqTotal = $sumBase();
             $totalRow = (clone $sqTotal)

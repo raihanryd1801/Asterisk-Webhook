@@ -664,20 +664,59 @@ class SupervisorMonitoringController extends Controller
         }
     }
 
+    /** Label rentang tanggal untuk nama file export (Y-m-d_sd_Y-m-d). */
+    protected function exportDateLabel(array $filters): string
+    {
+        $fmt = function ($d) {
+            $d = (string) ($d ?? '');
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) {
+                return null;
+            }
+            [$y, $m, $dd] = explode('-', $d);
+            return checkdate((int) $m, (int) $dd, (int) $y) ? $d : null;
+        };
+        $from = $fmt($filters['start_date'] ?? null);
+        $to = $fmt($filters['end_date'] ?? null);
+        if ($from && $to) {
+            return $from . '_sd_' . $to;
+        }
+        if ($from) {
+            return $from . '_sd_sekarang';
+        }
+        if ($to) {
+            return 'awal_sd_' . $to;
+        }
+        return now()->subDays(30)->toDateString() . '_sd_' . now()->toDateString();
+    }
+
     public function exportExcel(Request $request)
     {
+        // Single-flight: 1 export per sesi dalam satu waktu. Klik ganda bikin
+        // 2 job raksasa berebut file + CPU (pernah: rename gagal karena tabrakan).
+        $flightKey = 'export_running_' . (session()->getId() ?: $request->ip());
+        if (\Illuminate\Support\Facades\Cache::get($flightKey)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Export sebelumnya masih berjalan. Tunggu selesai dulu.',
+            ], 429);
+        }
+        \Illuminate\Support\Facades\Cache::put($flightKey, true, now()->addHours(6));
+
         // 🚀 Tangkap format dari frontend (.xlsx atau .csv)
         $format = $request->query('format', 'xlsx');
         if (!in_array($format, ['xlsx', 'csv'])) {
             $format = 'xlsx';
         }
 
-        // Terapkan format ke nama file
-        $filename = 'call-history-' . date('Y-m-d_H-i-s') . '.' . $format;
+        // Terapkan format ke nama file (uniqid anti tabrakan klik ganda)
+        // cth: call-history-2026-08-01_sd_2026-08-31-20260923_103751-abc123.xlsx
+        $filename = 'call-history-' . $this->exportDateLabel($filters) . '-' . date('Y-m-d_H-i-s') . '-' . uniqid() . '.' . $format;
         $filePath = 'exports/' . $filename;
 
         $filters = $request->only(['agent_extension', 'search', 'start_date', 'end_date']);
         $filters['supervisor_extension'] = session('supervisor_extension');
+        // Job melepas flag saat selesai/gagal (finally di handle()).
+        $filters['_flight_key'] = $flightKey;
 
         // Lempar ke Job FastExcel
         ProcessCallLogExport::dispatch($filters, $filePath);
@@ -888,7 +927,8 @@ public function exportZip(Request $request)
     {
         try {
             $filters = $request->all();
-            $filename = 'recordings-' . date('Y-m-d_H-i-s') . '.zip';
+            // cth: recordings-2026-08-01_sd_2026-08-31-20260923_103751.zip
+            $filename = 'recordings-' . $this->exportDateLabel($filters) . '-' . date('Y-m-d_H-i-s') . '.zip';
 
             // Hitung total dulu (untuk progres). Bisa beberapa detik di jutaan baris.
             $countQuery = \App\Jobs\ProcessZipChunk::countQuery($filters);
@@ -925,6 +965,13 @@ public function exportZip(Request $request)
     {
         $filename = $request->query('filename');
         $status = Cache::get('zip_status_' . $filename, ['ready' => false]);
+
+        // Gembok: klaim ready tapi file tidak ada (mis. run lama yang gagal
+        // di tengah) jangan sampai mengarah ke 403 misterius.
+        if (!empty($status['ready']) && !is_file(storage_path('app/public/exports/' . basename((string) $filename)))) {
+            $status['ready'] = false;
+            $status['error'] = 'File hasil tidak ditemukan (ekspor gagal di tengah jalan?). Silakan ulangi export.';
+        }
 
         return response()->json($status);
     }

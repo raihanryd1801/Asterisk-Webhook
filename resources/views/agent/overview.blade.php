@@ -345,10 +345,15 @@
         btnElement.classList.add('bg-gray-900', 'text-white');
 
         // 2. Ambil dari sessionStorage browser (Aman saat pindah menu).
+        // KECUALI range today: selalu fetch fresh (datanya bergerak tiap detik,
+        // cache 5 menit bikin statistik kelihatan macet seperti grafik hidup).
         // Kunci berversi + kedaluwarsa 5 menit (selaras cache backend) agar
         // data basi (mis. tersimpan saat tabel ringkasan kosong) tidak menempel selamanya.
         let storageKey = 'overview_cache_v2_' + range;
-        let cachedRaw = sessionStorage.getItem(storageKey);
+        let cachedRaw = null;
+        if (range !== 'today') {
+            cachedRaw = sessionStorage.getItem(storageKey);
+        }
         if (cachedRaw) {
             try {
                 let cached = JSON.parse(cachedRaw);

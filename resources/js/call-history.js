@@ -259,6 +259,13 @@ window.callHistoryPage = function() {
                 let url = `/dashboard/api/call-logs/export?${params}&format=${this.exportFormat}`;
                 let response = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
                 
+                if (response.status === 429) {
+                    const d = await response.json().catch(() => null);
+                    alert(d?.message || 'Export sebelumnya masih berjalan. Tunggu selesai dulu.');
+                    this.isExporting = false;
+                    this.exportProgress = '';
+                    return;
+                }
                 if (!response.ok) throw new Error('Gagal memicu export di server.');
                 
                 let data = await response.json();

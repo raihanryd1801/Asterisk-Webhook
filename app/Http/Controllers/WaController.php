@@ -281,11 +281,12 @@ class WaController extends Controller
         } catch (\Throwable $e) {
         }
 
+        // Tanpa limit: seluruh isi thread dikirim (sesuai permintaan).
+        // Konsekuensi: thread belasan ribu pesan akan berat dibuka.
         $messages = \App\Models\WaMessage::where('session_id', $sessionId)
             ->where('phone', $phone)
             ->orderBy('occurred_at')
             ->orderBy('id')
-            ->limit(200)
             ->get()
             ->map(fn($m) => [
                 'id' => $m->id,

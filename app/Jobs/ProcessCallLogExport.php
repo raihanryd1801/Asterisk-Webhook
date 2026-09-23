@@ -139,6 +139,18 @@ class ProcessCallLogExport implements ShouldQueue
 
     public function handle()
     {
+        try {
+            $this->handleExport();
+        } finally {
+            // Lepas flag single-flight apapun hasilnya (sukses/gagal).
+            if (!empty($this->filters['_flight_key'])) {
+                \Illuminate\Support\Facades\Cache::forget($this->filters['_flight_key']);
+            }
+        }
+    }
+
+    protected function handleExport()
+    {
         // 🚀 1. REM OTOMATIS: Jika tanggal kosong, paksa ke 30 Hari Terakhir
         if (empty($this->filters['start_date']) && empty($this->filters['end_date'])) {
             $this->filters['start_date'] = date('Y-m-d', strtotime('-30 days'));
@@ -160,7 +172,9 @@ class ProcessCallLogExport implements ShouldQueue
         );
 
       $finalPath = \Illuminate\Support\Facades\Storage::disk('public')->path($this->filePath);
-        $tmpPath = $finalPath . '.tmp'; // 🚀 Ini file sementaranya
+        // Tmp unik per proses: dua job dengan nama file sama (klik ganda di detik
+        // yang sama / retry) tidak saling timpa atau berebut file .tmp.
+        $tmpPath = $finalPath . '.' . getmypid() . '.tmp';
 
         $directory = dirname($finalPath);
         if (!file_exists($directory)) {
@@ -234,6 +248,11 @@ class ProcessCallLogExport implements ShouldQueue
                 $prev = \Illuminate\Support\Facades\Cache::get($progressKey, []);
                 $prev['done'] = $done;
                 \Illuminate\Support\Facades\Cache::put($progressKey, $prev, now()->addMinutes(180));
+                // Perpanjang flag single-flight selama masih ada progres
+                // (mati total >6 jam tanpa progres = flag kedaluwarsa sendiri).
+                if (!empty($this->filters['_flight_key'])) {
+                    \Illuminate\Support\Facades\Cache::put($this->filters['_flight_key'], true, now()->addHours(6));
+                }
             }
         }
         $writer->close();
