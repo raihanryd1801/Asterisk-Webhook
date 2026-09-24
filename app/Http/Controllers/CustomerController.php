@@ -212,6 +212,9 @@ class CustomerController extends Controller
             'gender' => 'nullable|in:L,P',
             'email' => 'nullable|email|max:255',
             'company' => 'nullable|string|max:255',
+            'address' => 'nullable|string|max:2000',
+            'latitude' => 'nullable|numeric|between:-90,90',
+            'longitude' => 'nullable|numeric|between:-180,180',
             'status' => 'required|in:new,contacted,qualified,proposal,closed_won,closed_lost',
             'notes' => 'nullable|string',
             'assigned_agent_id' => 'nullable|exists:agents,id',
@@ -233,7 +236,12 @@ class CustomerController extends Controller
             'gender' => $request->gender,
             'email' => $request->email,
             'company' => $request->company,
-            'status' => $request->status,
+            'address' => $request->address,
+            // Titik manual (copy dari Google Maps) lebih dipercaya dari hasil
+            // geocode otomatis — tandai labelnya agar jejak audit jelas.
+            'latitude' => $request->latitude,
+            'longitude' => $request->longitude,
+            'geocode_label' => ($request->filled('latitude') && $request->filled('longitude')) ? 'Manual' : null,
             'notes' => $request->notes,
             'assigned_agent_id' => $request->assigned_agent_id,
             'created_by' => $this->getCurrentUserId(),
@@ -264,6 +272,41 @@ class CustomerController extends Controller
         return response()->json($customer);
     }
 
+    /** Titik peta: semua customer berkoordinat (ringan, untuk Leaflet). */
+    public function mapPoints()
+    {
+        $this->authorizeAccess();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => Customer::whereNotNull('latitude')->whereNotNull('longitude')
+                ->orderBy('id')
+                ->limit(2000)
+                ->get(['id', 'name', 'phone', 'address', 'latitude', 'longitude', 'geocode_label', 'bucket', 'payment_status', 'collector_id']),
+        ]);
+    }
+
+    /** Jadwalkan sinkronisasi koordinat (tombol di UI, background). */
+    public function geocodeSync()
+    {
+        $this->authorizeAccess();
+
+        $pending = Customer::whereNotNull('address')->where('address', '!=', '')
+            ->where(function ($q) {
+                $q->whereNull('latitude')->orWhereNull('longitude');
+            })->count();
+
+        \App\Jobs\GeocodeSyncJob::dispatch(20);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => $pending > 0
+                ? "Sinkronisasi dijadwalkan untuk ±{$pending} alamat (maks 20 per jalan, background). Buka panel peta lagi 1-2 menit lagi."
+                : 'Semua alamat sudah berkoordinat. Tidak ada yang disinkron.',
+            'pending' => $pending,
+        ]);
+    }
+
     public function update(Request $request, Customer $customer)
     {
         $this->authorizeAccess();
@@ -276,6 +319,9 @@ class CustomerController extends Controller
             'gender' => 'nullable|in:L,P',
             'email' => 'nullable|email|max:255',
             'company' => 'nullable|string|max:255',
+            'address' => 'nullable|string|max:2000',
+            'latitude' => 'nullable|numeric|between:-90,90',
+            'longitude' => 'nullable|numeric|between:-180,180',
             'status' => 'required|in:new,contacted,qualified,proposal,closed_won,closed_lost',
             'notes' => 'nullable|string',
             'assigned_agent_id' => 'nullable|exists:agents,id',
@@ -292,6 +338,21 @@ class CustomerController extends Controller
         $oldStatus = $customer->status;
         $newStatus = $request->status;
 
+        // Prioritas koordinat: (1) titik manual dari form selalu menang dan
+        // mengunci (geocode otomatis hanya menyentuh yang masih null);
+        // (2) alamat berubah tanpa titik manual -> reset agar ikut antre geocode.
+        $manualCoords = $request->filled('latitude') && $request->filled('longitude');
+        $addressChanged = trim((string) $request->address) !== trim((string) $customer->address);
+        if ($manualCoords) {
+            $coordReset = [
+                'latitude' => $request->latitude,
+                'longitude' => $request->longitude,
+                'geocode_label' => 'Manual',
+            ];
+        } else {
+            $coordReset = $addressChanged ? ['latitude' => null, 'longitude' => null, 'geocode_label' => null] : [];
+        }
+
         $customer->update([
             'name' => $request->name,
             'phone' => $request->phone,
@@ -300,6 +361,7 @@ class CustomerController extends Controller
             'gender' => $request->gender,
             'email' => $request->email,
             'company' => $request->company,
+            'address' => $request->address,
             'status' => $newStatus,
             'notes' => $request->notes,
             'assigned_agent_id' => $request->assigned_agent_id,
@@ -312,7 +374,7 @@ class CustomerController extends Controller
             'due_date' => $request->filled('due_date') ? $request->due_date : $customer->due_date,
             'collector_id' => $request->has('collector_id') ? ($request->collector_id ?: null) : $customer->collector_id,
             'risk_level' => $request->risk_level ?? $customer->risk_level,
-        ]);
+        ] + $coordReset);
 
         // Auto-update payment status based on amounts
         $customer->refresh();
@@ -377,7 +439,7 @@ class CustomerController extends Controller
         $customers = Customer::where('assigned_agent_id', $agent->id)
             ->whereIn('status', ['new', 'contacted', 'qualified', 'proposal'])
             ->latest()
-            ->get(['id', 'name', 'phone', 'office_phone', 'emergency_phone', 'gender', 'email', 'company', 'status', 'notes', 'last_contacted_at', 'total_amount', 'paid_amount', 'discount_amount', 'payment_status', 'payment_notes', 'last_payment_date', 'due_date', 'days_past_due', 'bucket', 'risk_level', 'promise_to_pay']);
+            ->get(['id', 'name', 'phone', 'office_phone', 'emergency_phone', 'gender', 'email', 'company', 'address', 'status', 'notes', 'last_contacted_at', 'total_amount', 'paid_amount', 'discount_amount', 'payment_status', 'payment_notes', 'last_payment_date', 'due_date', 'days_past_due', 'bucket', 'risk_level', 'promise_to_pay']);
 
         return response()->json([
             'status' => 'success',
@@ -1054,6 +1116,7 @@ class CustomerController extends Controller
                 'gender' => $c->gender,
                 'email' => $c->email,
                 'company' => $c->company,
+                'address' => $c->address,
                 'bucket' => $c->bucket,
                 'days_past_due' => $c->days_past_due,
                 'due_date' => $c->due_date?->toDateString(),
@@ -1277,6 +1340,7 @@ class CustomerController extends Controller
                 'gender' => $c->gender,
                 'email' => $c->email,
                 'company' => $c->company,
+                'address' => $c->address,
                 'status' => $c->status,
                 'bucket' => $c->bucket,
                 'days_past_due' => $c->days_past_due,
@@ -1375,6 +1439,7 @@ class CustomerController extends Controller
                     'name' => $name,
                     'email' => $norm['email'] ?? null,
                     'company' => $norm['company'] ?? null,
+                    'address' => $norm['address'] ?? null,
                     'gender' => $gender,
                     'office_phone' => $norm['office_phone'] ?? null,
                     'emergency_phone' => $norm['emergency_phone'] ?? null,

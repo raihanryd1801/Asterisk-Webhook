@@ -88,6 +88,12 @@
                                     <button @click="openEditModal(collector)" class="text-brand-600 hover:text-brand-800 p-1.5 rounded hover:bg-brand-50 transition-colors" title="Edit">
                                         <i class="fa-solid fa-pen text-sm"></i>
                                     </button>
+                                    <button @click="generatePin(collector)" class="text-amber-600 hover:text-amber-800 p-1.5 rounded hover:bg-amber-50 transition-colors" :title="collector.has_pin ? 'Buat ulang PIN login HP (PIN lama langsung mati)' : 'Buat PIN login HP'">
+                                        <i class="fa-solid fa-key text-sm"></i>
+                                    </button>
+                                    <template x-if="collector.has_pin">
+                                        <span class="text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-full px-1.5 py-0.5" title="Sudah punya PIN login HP">PIN</span>
+                                    </template>
                                     <button @click="deleteCollector(collector.id)" class="text-red-600 hover:text-red-800 p-1.5 rounded hover:bg-red-50 transition-colors" title="Delete">
                                         <i class="fa-solid fa-trash text-sm"></i>
                                     </button>
@@ -171,6 +177,26 @@
         </div>
     </div>
 </div>
+<!-- Modal tampil PIN sekali (tidak disimpan di mana pun) -->
+<div x-show="showPinModal" class="fixed inset-0 z-50 overflow-y-auto" style="display: none;" x-cloak>
+    <div class="flex min-h-full items-center justify-center p-4">
+        <div class="fixed inset-0 bg-black/50" @click="closePinModal()"></div>
+        <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 text-center">
+            <div class="w-12 h-12 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mx-auto mb-3">
+                <i class="fa-solid fa-key text-xl"></i>
+            </div>
+            <h3 class="font-semibold text-slate-900">PIN Login HP Baru</h3>
+            <p class="text-xs text-slate-500 mt-1" x-text="'Untuk ' + pinCollectorName + ' — hanya tampil sekali, PIN lama langsung mati.'"></p>
+            <p class="font-mono font-bold text-4xl tracking-[0.3em] text-slate-900 my-4 select-all" x-text="pinResult"></p>
+            <div class="flex gap-2 justify-center">
+                <button @click="copyPin()" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm font-medium transition flex items-center gap-2">
+                    <i class="fa-solid fa-copy"></i> Salin
+                </button>
+                <button @click="closePinModal()" class="px-4 py-2 border border-slate-300 rounded-xl text-sm text-slate-700 hover:bg-slate-50 transition">Tutup</button>
+            </div>
+        </div>
+    </div>
+</div>
 </div>
 @endsection
 
@@ -200,6 +226,9 @@ window.collectorManager = function() {
         modalTitle: '',
         form: { id: '', name: '', phone: '', type: 'field', area: '', notes: '', is_active: true },
         submitting: false,
+        showPinModal: false,
+        pinResult: '',
+        pinCollectorName: '',
 
         async fetchCollectors(page = 1) {
             const params = new URLSearchParams();
@@ -300,8 +329,44 @@ window.collectorManager = function() {
             }
         },
 
-        async deleteCollector(id) {
-            if (!confirm('Yakin ingin menghapus collector ini? Case terkait jadi Tanpa Collector.')) return;
+        async generatePin(collector) {
+            const msg = collector.has_pin
+                ? `Buat ulang PIN login HP untuk ${collector.name}? PIN lama langsung mati dan HP yang sedang login ikut keluar.`
+                : `Buat PIN login HP untuk ${collector.name}?`;
+            if (!confirm(msg)) return;
+            try {
+                const response = await fetch(`{{ route('crm.collectors.index') }}/${collector.id}/pin`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content, 'Accept': 'application/json' },
+                });
+                const data = await response.json();
+                if (data.status === 'success') {
+                    this.pinCollectorName = collector.name;
+                    this.pinResult = data.pin;
+                    this.showPinModal = true;
+                    this.fetchCollectors(this.pagination.current_page);
+                } else {
+                    alert(data.message || 'Gagal membuat PIN.');
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Terjadi kesalahan jaringan.');
+            }
+        },
+
+        closePinModal() {
+            this.showPinModal = false;
+            this.pinResult = '';
+            this.pinCollectorName = '';
+        },
+
+        copyPin() {
+            try {
+                navigator.clipboard.writeText(this.pinResult);
+            } catch (e) {}
+        },
+
+        async deleteCollector(id) {            if (!confirm('Yakin ingin menghapus collector ini? Case terkait jadi Tanpa Collector.')) return;
             try {
                 const response = await fetch(`{{ route('crm.collectors.index') }}/${id}`, {
                     method: 'POST',

@@ -112,4 +112,20 @@ class DebtCollectorController extends Controller
             'message' => "Debt collector {$name} dihapus. Case terkait jadi Tanpa Collector.",
         ]);
     }
+
+    /**
+     * Buat PIN login HP baru (acak 6 digit). PIN lama langsung mati.
+     * PIN plain hanya tampil sekali di respons — di DB tersimpan hash.
+     */
+    public function setPin(DebtCollector $collector)
+    {
+        $pin = (string) random_int(100000, 999999);
+        $collector->update(['pin' => \Illuminate\Support\Facades\Hash::make($pin)]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "PIN login baru untuk {$collector->name} dibuat.",
+            'pin' => $pin,
+        ]);
+    }
 }

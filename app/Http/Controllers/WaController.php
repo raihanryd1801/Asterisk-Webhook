@@ -526,6 +526,129 @@ class WaController extends Controller
         ]);
     }
 
+    // ============ HAPUS PESAN & PERCAKAPAN (DB selalu ikut terhapus) ============
+    // Pesan KELUAR = revoke: ikut terhapus di HP lawan bicara.
+    // Pesan MASUK = hanya terhapus di inbox + perangkat sendiri (pesan orang
+    // lain memang tidak bisa ditarik). Kegagalan sisi WA tidak menggagalkan
+    // hapus DB — DB adalah sumber tampilnya inbox.
+
+    /** Kandidat alamat kirim untuk revoke (kanonis + LID bila terpetakan). */
+    protected function deleteTargets(string $sessionId, \App\Models\WaMessage $msg): array
+    {
+        $targets = [[$msg->phone, $msg->jid_server ?: 's.whatsapp.net']];
+        try {
+            $lid = \App\Models\WaLidMap::lookupLid($sessionId, $msg->phone);
+            if ($lid && $lid !== $msg->phone) {
+                $targets[] = [$lid, 'lid'];
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return $targets;
+    }
+
+    public function deleteMessage(Request $request, WhatsAppGateway $gateway, $id)
+    {
+        $sessionId = $this->currentSessionId();
+        if (!$sessionId) {
+            return response()->json(['status' => 'error', 'message' => 'Silakan login dulu.'], 401);
+        }
+
+        $msg = \App\Models\WaMessage::where('session_id', $sessionId)->find($id);
+        if (!$msg) {
+            return response()->json(['status' => 'error', 'message' => 'Pesan tidak ditemukan.'], 404);
+        }
+
+        $fromMe = $msg->direction === 'out';
+        $waOk = true;
+
+        // Best-effort sisi WA (coba semua kandidat alamat kirim).
+        if ($msg->external_id) {
+            $waOk = false;
+            foreach ($this->deleteTargets($sessionId, $msg) as [$to, $server]) {
+                $r = $gateway->deleteMessage($sessionId, $to, $server, $msg->external_id, $fromMe);
+                if ($r['ok']) {
+                    $waOk = true;
+                    break;
+                }
+            }
+        }
+
+        // File lampiran ikut dibersihkan dari storage.
+        if ($msg->media_path) {
+            try {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($msg->media_path);
+            } catch (\Throwable $e) {
+            }
+        }
+        $msg->delete();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => $fromMe
+                ? ($waOk ? 'Pesan ditarik & dihapus.' : 'Pesan dihapus dari database. Tarik di HP gagal (mungkin sesi WA putus / pesan terlalu lama) — coba dari HP langsung.')
+                : 'Pesan dihapus dari inbox & database.',
+            'wa_ok' => $waOk,
+        ]);
+    }
+
+    public function clearConversation(Request $request, WhatsAppGateway $gateway)
+    {
+        $sessionId = $this->currentSessionId();
+        if (!$sessionId) {
+            return response()->json(['status' => 'error', 'message' => 'Silakan login dulu.'], 401);
+        }
+
+        $request->validate(['phone' => 'required|string|max:32']);
+        $phone = \App\Models\WaMessage::normalizePhone($request->phone);
+
+        $scope = \App\Models\WaMessage::where('session_id', $sessionId)->where('phone', $phone);
+        $total = (clone $scope)->count();
+        if ($total === 0) {
+            return response()->json(['status' => 'error', 'message' => 'Percakapan tidak ditemukan.'], 404);
+        }
+
+        // Best-effort: hilangkan chat dari perangkat WA tertaut.
+        $latest = (clone $scope)->latest('id')->first(['phone', 'jid_server', 'external_id', 'direction']);
+        $waOk = false;
+        $server = $latest->jid_server ?: 's.whatsapp.net';
+        $candidates = [[$latest->phone, $server]];
+        try {
+            $lid = \App\Models\WaLidMap::lookupLid($sessionId, $latest->phone);
+            if ($lid && $lid !== $latest->phone) {
+                $candidates[] = [$lid, 'lid'];
+            }
+        } catch (\Throwable $e) {
+        }
+        foreach ($candidates as [$to, $srv]) {
+            if ($gateway->deleteChat($sessionId, $to, $srv, $latest->external_id)) {
+                $waOk = true;
+                break;
+            }
+        }
+
+        // Hapus file lampiran thread ini (bertahap agar hemat memori).
+        (clone $scope)->whereNotNull('media_path')->chunkById(200, function ($rows) {
+            $paths = $rows->pluck('media_path')->filter()->toArray();
+            if ($paths) {
+                try {
+                    \Illuminate\Support\Facades\Storage::disk('public')->delete($paths);
+                } catch (\Throwable $e) {
+                }
+            }
+        });
+        (clone $scope)->delete();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => $waOk
+                ? "Percakapan dihapus ({$total} pesan)."
+                : "Percakapan dihapus dari database ({$total} pesan). Chat di HP/ WA gagal dihapus (sesi putus?) — hapus manual dari HP bila perlu.",
+            'deleted' => $total,
+            'wa_ok' => $waOk,
+        ]);
+    }
+
     // ============ WEBHOOK dari sidecar (token gateway, tanpa session login) ============
 
     public function inbound(Request $request)

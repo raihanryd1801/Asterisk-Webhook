@@ -56,8 +56,9 @@ class PremiumAccess
         return match (true) {
             // Buckets ikut flag CRM (bukan Collection)
             str_starts_with($routeName, 'crm.collection.buckets') || str_contains($path, 'crm/collection/buckets') => 'crm',
-            // Debt Collectors ikut flag Collection
-            str_starts_with($routeName, 'crm.collectors') || str_contains($path, 'crm/collectors') => 'collection',
+            // Debt Collectors + Live Tracking = modul premium sendiri
+            str_starts_with($routeName, 'crm.collectors') || str_contains($path, 'crm/collectors') => 'collector',
+            str_starts_with($routeName, 'crm.tracking') || str_contains($path, 'crm/tracking') => 'collector',
             str_starts_with($routeName, 'crm.collection') || str_contains($path, 'crm/collection') => 'collection',
             str_starts_with($routeName, 'crm.dialer') || str_contains($path, 'crm/dialer') => 'dialer',
             str_starts_with($routeName, 'crm.') || str_contains($path, 'crm/customers') || str_contains($path, 'crm/dashboard') || str_contains($path, 'crm/whatsapp') => 'crm',
@@ -73,6 +74,7 @@ class PremiumAccess
         return match (true) {
             str_starts_with($routeName, 'crm.collection.buckets') || str_contains($path, 'crm/collection/buckets') => 'Buckets',
             str_starts_with($routeName, 'crm.collectors') || str_contains($path, 'crm/collectors') => 'Debt Collectors',
+            str_starts_with($routeName, 'crm.tracking') || str_contains($path, 'crm/tracking') => 'Live Tracking',
             str_starts_with($routeName, 'crm.collection') || str_contains($path, 'crm/collection') => 'Collection',
             str_starts_with($routeName, 'crm.dialer') || str_contains($path, 'crm/dialer') => 'Auto-Dialer',
             str_starts_with($routeName, 'crm.customers') || str_contains($path, 'crm/customers') => 'Customers',

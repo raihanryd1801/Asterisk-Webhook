@@ -11,7 +11,7 @@ class Customer extends Model
 
     protected $fillable = [
         'name', 'phone', 'office_phone', 'emergency_phone',
-        'gender', 'email', 'company', 'status', 'notes',
+        'gender', 'email', 'company', 'address', 'latitude', 'longitude', 'geocode_label', 'status', 'notes',
         'assigned_agent_id', 'created_by', 'last_contacted_at',
         'total_amount', 'paid_amount', 'discount_amount',
         'payment_status', 'payment_notes', 'last_payment_date', 'payment_proof',
@@ -33,6 +33,16 @@ class Customer extends Model
     public function assignedAgent()
     {
         return $this->belongsTo(Agent::class, 'assigned_agent_id');
+    }
+
+    /** Link Google Maps universal (tanpa API key) untuk alamat customer. */
+    public function getMapsUrlAttribute(): ?string
+    {
+        $addr = trim((string) ($this->address ?? ''));
+        if ($addr === '') {
+            return null;
+        }
+        return 'https://www.google.com/maps/search/?api=1&query=' . urlencode($addr);
     }
 
     public function collector()
@@ -104,7 +114,8 @@ class Customer extends Model
               ->orWhere('office_phone', 'like', "%{$search}%")
               ->orWhere('emergency_phone', 'like', "%{$search}%")
               ->orWhere('email', 'like', "%{$search}%")
-              ->orWhere('company', 'like', "%{$search}%");
+              ->orWhere('company', 'like', "%{$search}%")
+              ->orWhere('address', 'like', "%{$search}%");
         });
     }
 

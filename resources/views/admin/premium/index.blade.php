@@ -17,7 +17,7 @@
     </div>
 
     <!-- Toggle Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <template x-for="(label, key) in modules" :key="key">
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div class="p-5 border-b border-slate-100 flex items-center justify-between gap-3"
@@ -65,13 +65,14 @@
 <script>
 window.premiumManager = function(initialStates) {
     return {
-        states: initialStates || { crm: false, collection: false, dialer: false },
+        states: initialStates || { crm: false, collection: false, dialer: false, collector: false },
         loading: null,
         modules: @json(\App\Models\FeatureFlag::MODULES),
         descriptions: {
             crm: 'Dashboard Agent + Customers + Buckets + WhatsApp Saya: kelola debtor, tagihan, bucket, dan sesi WA.',
-            collection: 'Collection Dashboard, PTP Management, Debt Collectors: risiko, janji bayar, dan handover.',
+            collection: 'Collection Dashboard, PTP Management: risiko, janji bayar, dan handover.',
             dialer: 'Auto-Dialer (PDS): dial otomatis bucket ke agent rotation.',
+            collector: 'Debt Collectors + Live Tracking: tim lapangan, posisi real-time, dan kolom Collector di Customers.',
         },
 
         async toggle(key) {

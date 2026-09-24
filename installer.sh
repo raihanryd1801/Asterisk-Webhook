@@ -3,10 +3,12 @@
 # installer.sh — Setup server baru untuk Asterisk-Webhook (NOC System)
 #
 # Isi:
-#   1. Install package sistem (PHP 8.3 + ext, Composer, Node.js 20, MySQL, Supervisor, Swoole)
+#   1. Install package sistem (PHP 8.3 + ext, Composer, Node.js 20, MySQL/MariaDB, Supervisor, Swoole, cron)
 #   2. Install library aplikasi (composer + npm + wa-gateway)
-#   3. Buat user MySQL (akses semua IP, semua DB)
-#   4. Tulis /etc/supervisor/conf.d/noc-system.conf + reload supervisor
+#   3. Siapkan .env (copy example, samakan DB_*, key:generate, storage:link)
+#   4. Buat database + user MySQL, lalu migrate --force
+#   5. Ambil/generate token WA gateway
+#   6. Tulis /etc/supervisor/conf.d/noc-system.conf + cron schedule:run + reload supervisor
 #
 # Cara pakai (sebagai root):
 #   chmod +x installer.sh
@@ -23,6 +25,8 @@ PHP_VER="${PHP_VER:-8.3}"
 NODE_MAJOR="${NODE_MAJOR:-20}"
 MYSQL_USER="${MYSQL_USER:-}"
 MYSQL_PASS="${MYSQL_PASS:-}"
+DB_NAME="${DB_NAME:-crm_asterisk}"
+APP_PORT="${APP_PORT:-8020}"
 # ================================================================
 
 if [[ $EUID -ne 0 ]]; then
@@ -53,11 +57,11 @@ echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.co
 apt-get update -y
 apt-get install -y \
   php${PHP_VER} php${PHP_VER}-cli php${PHP_VER}-fpm \
-  php${PHP_VER}-mysql php${PHP_VER}-mbstring php${PHP_VER}-xml \
+  php${PHP_VER}-mysql php${PHP_VER}-sqlite3 php${PHP_VER}-mbstring php${PHP_VER}-xml \
   php${PHP_VER}-curl php${PHP_VER}-zip php${PHP_VER}-bcmath \
   php${PHP_VER}-gd php${PHP_VER}-pcntl php${PHP_VER}-redis \
   php${PHP_VER}-dev php-pear \
-  nodejs supervisor
+  nodejs supervisor cron
 # MySQL 8 (Ubuntu <= 22.04) atau MariaDB 10.6+ (Ubuntu 24.04 tidak lagi menyediakan paket mysql-server)
 if apt-cache show mysql-server >/dev/null 2>&1; then
   apt-get install -y mysql-server
@@ -91,6 +95,29 @@ mkdir -p storage/logs
 chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
 chmod -R 775 storage bootstrap/cache 2>/dev/null || true
 
+echo "==> [3b/6] Siapkan .env + app key + storage link + migrate..."
+[ -f .env ] || cp .env.example .env
+# Samakan kredensial DB dengan user yang dibuat di langkah [4/6].
+# Di sini hanya tulis file (tanpa koneksi DB); migrate jalan di [4b/6]
+# setelah database & user benar-benar ada.
+set_env() { # set_env KEY VALUE (tambah bila belum ada)
+  local key="$1" val="$2" f="$APP_DIR/.env"
+  # Amankan untuk sed: escape backslash, & dan delimiter |
+  val="$(printf '%s' "$val" | sed -e 's/\\/\\\\/g' -e 's/&/\\&/g' -e 's/|/\\|/g')"
+  if grep -qE "^${key}=" "$f"; then
+    sed -i "s|^${key}=.*|${key}=${val}|" "$f"
+  else
+    echo "${key}=${val}" >> "$f"
+  fi
+}
+set_env DB_HOST 127.0.0.1
+set_env DB_PORT 3306
+set_env DB_DATABASE "$DB_NAME"
+set_env DB_USERNAME "$MYSQL_USER"
+set_env DB_PASSWORD "$MYSQL_PASS"
+php artisan key:generate --force
+php artisan storage:link || true
+
 echo "==> [4/6] Buat user MySQL '$MYSQL_USER' (akses semua IP, semua DB)..."
 systemctl enable --now mysql 2>/dev/null || systemctl enable --now mariadb
 # Buka bind agar bisa diakses dari segala IP (sesuai permintaan).
@@ -103,10 +130,15 @@ printf '[mysqld]\nbind-address = 0.0.0.0\nmysqlx-bind-address = 0.0.0.0\n' > "$M
 printf '[mysqld]\ninnodb_buffer_pool_size = 2G\ninnodb_buffer_pool_instances = 2\n' > "$MYSQL_CNF_DIR/99-noc-tuning.cnf"
 systemctl restart mysql 2>/dev/null || systemctl restart mariadb
 # NOTE: root di Ubuntu/MariaDB umumnya auth_socket -> bisa login tanpa password sebagai root OS
+mysql -uroot -e "CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 mysql -uroot -e "CREATE USER IF NOT EXISTS '${MYSQL_USER}'@'%' IDENTIFIED BY '${MYSQL_PASS}';"
 mysql -uroot -e "GRANT ALL PRIVILEGES ON *.* TO '${MYSQL_USER}'@'%'; FLUSH PRIVILEGES;"
-echo "User MySQL '$MYSQL_USER'@'%' siap."
+echo "Database '${DB_NAME}' + user '$MYSQL_USER'@'%' siap."
 echo "PENTING: buka port 3306 di firewall/security-group bila diakses dari server lain."
+
+echo "==> [4b/6] Migrate database..."
+cd "$APP_DIR"
+php artisan migrate --force
 
 echo "==> [5/6] Ambil token WA gateway dari .env (atau generate)..."
 WA_TOKEN="$(grep -E '^WA_GATEWAY_TOKEN=' "$APP_DIR/.env" 2>/dev/null | cut -d= -f2- | tr -d '\"' || true)"
@@ -120,7 +152,7 @@ echo "==> [6/6] Tulis /etc/supervisor/conf.d/noc-system.conf + reload..."
 cat > /etc/supervisor/conf.d/noc-system.conf << EOF
 [program:noc-web]
 process_name=%(program_name)s_%(process_num)02d
-command=php $APP_DIR/artisan octane:start --server=swoole --host=0.0.0.0 --port=8020
+command=php $APP_DIR/artisan octane:start --server=swoole --host=0.0.0.0 --port=$APP_PORT
 autostart=true
 autorestart=true
 user=root
@@ -189,7 +221,7 @@ command=/usr/bin/node server.js
 autostart=true
 autorestart=true
 user=root
-environment=WA_PORT="3001",WA_GATEWAY_TOKEN="$WA_TOKEN",WA_MIN_DELAY_MS="3000",WA_MAX_DELAY_MS="7000"
+environment=WA_PORT="3001",WA_GATEWAY_TOKEN="$WA_TOKEN",WA_MIN_DELAY_MS="3000",WA_MAX_DELAY_MS="7000",LARAVEL_URL="http://127.0.0.1:$APP_PORT"
 redirect_stderr=true
 stdout_logfile=$APP_DIR/storage/logs/supervisor-wa.log
 EOF
@@ -198,7 +230,10 @@ supervisorctl reread
 supervisorctl update
 supervisorctl status || true
 
-# Cron scheduler Laravel (cdr:sync tiap menit, cdr:summarize tiap 5 menit, dll)
+# Cron scheduler Laravel (cdr:sync, cdr:summarize, customers:geocode,
+# collectors:prune-positions, ...). PENTING SPLIT-SERVER: cron ini hanya boleh
+# aktif di SATU server (server aplikasi). Kalau server lama masih jalan,
+# matikan cron di sana agar job tidak dobel: `crontab -r` (cek dulu isinya!).
 CRON_LINE="* * * * * cd $APP_DIR && php artisan schedule:run >> /dev/null 2>&1"
 if ! crontab -l 2>/dev/null | grep -q "artisan schedule:run"; then
   (crontab -l 2>/dev/null; echo "$CRON_LINE") | crontab -
@@ -209,7 +244,10 @@ fi
 
 echo
 echo "SELESAI. Langkah manual tersisa:"
-echo "  1. Isi $APP_DIR/.env (DB_*, WA_*, AMI, PDS_*, dsb) bila belum."
-echo "  2. php artisan key:generate && php artisan migrate --force && php artisan storage:link"
-echo "  3. Scan ulang QR WA di menu WhatsApp Saya."
-echo "  4. Cek: supervisorctl status"
+echo "  1. Sesuaikan $APP_DIR/.env: APP_URL (IP:port publik server ini), DB_CDR_* (Asterisk lama),"
+echo "     AMI_* / PDS_* (bila voice tetap di server lama), REVERB_HOST/PORT, VITE_*."
+echo "     Catatan: DB_* lokal + WA_GATEWAY_TOKEN sudah diisi otomatis oleh installer."
+echo "  2. Scan ulang QR WA di menu WhatsApp Saya."
+echo "  3. Cek: supervisorctl status"
+echo "  4. SPLIT-SERVER: matikan cron schedule:run + service Laravel di server LAMA"
+echo "     agar tidak dobel dengan server ini."

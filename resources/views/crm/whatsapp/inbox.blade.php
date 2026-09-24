@@ -55,6 +55,10 @@
                         class="px-3 py-1.5 border border-brand-200 bg-brand-50 text-brand-700 rounded-xl text-xs font-medium hover:bg-brand-100 transition flex items-center gap-1.5">
                         <i class="fa-solid fa-link"></i><span class="hidden sm:inline">Customer</span>
                     </button>
+                    <button onclick="window.WAInbox.clearConversation()" title="Hapus seluruh percakapan ini (database ikut terhapus)"
+                        class="px-3 py-1.5 border border-rose-200 bg-rose-50 text-rose-700 rounded-xl text-xs font-medium hover:bg-rose-100 transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-trash"></i><span class="hidden sm:inline">Hapus</span>
+                    </button>
                     <button onclick="waBack()" class="sm:hidden px-3 py-1.5 border border-slate-300 rounded-xl text-xs font-medium hover:bg-slate-50 transition">← Kembali</button>
                 </div>
             </div>
@@ -389,7 +393,11 @@ window.WAInbox = window.WAInbox || {
                     const stamp = side ? 'text-brand-100' : 'text-slate-400';
                     const tick = side ? this.tickHtml(m.tick) : '';
                     const by = side && m.replied_by ? `<p class="text-[10px] ${stamp} opacity-80 mb-1">↩ ${this.esc(m.replied_by)}</p>` : '';
-                    return `${divider}<div class="${wrap}"><div class="${bubble}">${by}${media}<p class="break-words">${this.esc(m.message)}</p><p class="text-[10px] ${stamp} text-right mt-1">${this.esc(m.at || '')} ${tick}</p></div></div>`;
+                    const delTitle = side ? 'Hapus pesan ini (tarik dari HP customer juga)' : 'Hapus pesan ini dari inbox';
+                    const delBtn = `<button onclick="event.stopPropagation();window.WAInbox.deleteMessage(${m.id},'${m.direction}')" title="${delTitle}"
+                        class="opacity-0 group-hover:opacity-100 transition shrink-0 w-7 h-7 rounded-full ${side ? 'text-slate-400 hover:text-rose-500 hover:bg-white/70' : 'text-slate-300 hover:text-rose-500 hover:bg-rose-50'} flex items-center justify-center text-xs">
+                        <i class="fa-solid fa-trash"></i></button>`;
+                    return `${divider}<div class="${wrap} group items-center gap-1">${side ? delBtn : ''}<div class="${bubble}">${by}${media}<p class="break-words">${this.esc(m.message)}</p><p class="text-[10px] ${stamp} text-right mt-1">${this.esc(m.at || '')} ${tick}</p></div>${side ? '' : delBtn}</div>`;
                 }).join('');
             const jumpPill = document.getElementById('wa-jump-latest');
             if (nearBottom) {
@@ -631,6 +639,58 @@ window.WAInbox = window.WAInbox || {
                 this.loadConvs();
             } else {
                 alert(data.message || 'Gagal memutuskan.');
+            }
+        } catch (e) {
+            alert('Terjadi kesalahan jaringan.');
+        }
+    },
+
+    async deleteMessage(id, direction) {
+        const isOut = direction === 'out';
+        if (!confirm(isOut
+            ? 'Hapus pesan ini? Pesan akan ditarik dari HP customer ("pesan ini telah dihapus") dan dihapus dari database.'
+            : 'Hapus pesan masuk ini dari inbox + database? (Pesan orang lain tidak bisa ditarik dari HP pengirim.)')) return;
+        try {
+            const token = await this.freshToken();
+            const res = await fetch(`{{ url('/dashboard/crm/whatsapp/message') }}/${id}`, {
+                method: 'DELETE',
+                headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': token || this.csrfToken() },
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+                await this.loadThread();
+                this.loadConvs();
+            } else {
+                alert(data.message || 'Gagal menghapus.');
+            }
+        } catch (e) {
+            alert('Terjadi kesalahan jaringan.');
+        }
+    },
+
+    async clearConversation() {
+        if (!this.active) return;
+        if (!confirm('Hapus SELURUH percakapan ini? Chat hilang dari perangkat WA + semua pesan & file di database ikut terhapus. Tidak bisa dibatalkan!')) return;
+        try {
+            const token = await this.freshToken();
+            const res = await fetch('{{ route('crm.whatsapp.conversation.clear') }}', {
+                method: 'DELETE',
+                headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': token || this.csrfToken() },
+                body: JSON.stringify({ phone: this.active }),
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+                this.active = null;
+                document.getElementById('wa-thread-head').style.display = 'none';
+                document.getElementById('wa-reply-form').style.display = 'none';
+                document.getElementById('wa-empty').style.display = 'flex';
+                document.getElementById('wa-messages').innerHTML = '';
+                document.getElementById('wa-thread-pane').classList.add('hidden');
+                document.getElementById('wa-thread-pane').classList.remove('flex');
+                document.getElementById('wa-conv-list').classList.remove('hidden');
+                this.loadConvs();
+            } else {
+                alert(data.message || 'Gagal menghapus percakapan.');
             }
         } catch (e) {
             alert('Terjadi kesalahan jaringan.');

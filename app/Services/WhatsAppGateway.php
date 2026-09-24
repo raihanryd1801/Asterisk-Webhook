@@ -172,6 +172,57 @@ class WhatsAppGateway
         }
     }
 
+    /**
+     * Hapus 1 pesan di WA (best-effort).
+     * fromMe=true (pesan keluar) = revoke, ikut terhapus di HP lawan bicara.
+     * fromMe=false (pesan masuk) = hanya terhapus di perangkat tertaut sendiri
+     * (pesan orang lain tidak bisa ditarik).
+     * Return ['ok'=>bool, 'revoked'=>bool, 'message'=>?string].
+     */
+    public function deleteMessage(string $sessionId, string $to, string $server = 's.whatsapp.net', string $messageId = '', bool $fromMe = true): array
+    {
+        try {
+            $res = $this->client()->post("/sessions/{$sessionId}/delete", [
+                'to' => $to,
+                'server' => $server === 'lid' ? 'lid' : 's.whatsapp.net',
+                'id' => $messageId,
+                'fromMe' => $fromMe,
+            ]);
+            $data = $res->json() ?? [];
+
+            return [
+                'ok' => $res->ok() && ($data['ok'] ?? false),
+                'revoked' => (bool) ($data['revoked'] ?? false),
+                'message' => $data['message'] ?? null,
+            ];
+        } catch (\Throwable $e) {
+            Log::warning('WA gateway deleteMessage gagal: ' . $e->getMessage());
+
+            return ['ok' => false, 'revoked' => false, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Hapus SELURUH percakapan di perangkat tertaut (best-effort).
+     * $lastId = stanza ID pesan terakhir yang diketahui (opsional).
+     */
+    public function deleteChat(string $sessionId, string $to, string $server = 's.whatsapp.net', ?string $lastId = null): bool
+    {
+        try {
+            $res = $this->client()->post("/sessions/{$sessionId}/chat-delete", [
+                'to' => $to,
+                'server' => $server === 'lid' ? 'lid' : 's.whatsapp.net',
+                'lastId' => $lastId,
+            ]);
+
+            return $res->ok() && ($res->json('ok') === true);
+        } catch (\Throwable $e) {
+            Log::warning('WA gateway deleteChat gagal: ' . $e->getMessage());
+
+            return false;
+        }
+    }
+
     public function reachable(): bool
     {
         try {

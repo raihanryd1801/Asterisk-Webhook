@@ -17,6 +17,7 @@ return Application::configure(basePath: dirname(__DIR__))
         /// 🚀 DAFTARKAN ALIAS DI SINI
         $middleware->alias([
             'role' => \App\Http\Middleware\CheckRole::class,
+            'collector.token' => \App\Http\Middleware\CollectorToken::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

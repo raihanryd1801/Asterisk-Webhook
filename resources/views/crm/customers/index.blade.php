@@ -75,6 +75,26 @@
         </div>
 
         <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <button @click="openMapPanel()" class="w-full p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                <span class="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                    <i class="fa-solid fa-map-location-dot text-brand-600"></i> Peta Sebaran Customer
+                    <span class="text-[11px] font-medium text-slate-400 normal-case" id="map-count"></span>
+                </span>
+                <span class="flex items-center gap-2">
+                    <span onclick="event.stopPropagation(); window.syncMapPoints(this)" title="Sinkronkan koordinat alamat yang belum terpetakan (background)"
+                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-brand-600 text-white hover:bg-brand-700 transition-colors cursor-pointer">
+                        <i class="fa-solid fa-rotate"></i> Sinkronkan
+                    </span>
+                    <i class="fa-solid text-slate-400 text-xs transition-transform" :class="mapOpen ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                </span>
+            </button>
+            <div x-show="mapOpen" x-cloak>
+                <div id="customer-map" class="w-full h-96 z-0"></div>
+                <p class="px-4 py-2 text-[11px] text-slate-400 border-t border-slate-100">© OpenStreetMap contributors • Klik marker untuk detail + rute</p>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
             <div class="p-4 border-b border-slate-200 flex flex-col sm:flex-row gap-4">
                 <div class="flex-1 max-w-md">
                     <input 
@@ -201,7 +221,7 @@
         <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Status Bayar</th>
         <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Jumlah Tagihan</th> <!-- Kolom Baru -->
         <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Jatuh Tempo</th>
-        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Collector</th>
+        <template x-if="!hideCollector"><th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Collector</th></template>
         <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Terakhir Bayar</th>
         <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Assigned Agent</th>
         <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Last Contact</th>
@@ -220,6 +240,12 @@
                 <div class="text-sm text-slate-500" x-text="customer.company || '-'"></div>
                 <template x-if="customer.email">
                     <div class="text-xs text-slate-500" x-text="customer.email"></div>
+                </template>
+                <template x-if="customer.address">
+                    <div class="text-xs text-slate-500 truncate max-w-[220px] flex items-center gap-1" :title="customer.address">
+                        <i class="fa-solid fa-location-dot text-[10px] text-rose-500 shrink-0"></i>
+                        <span class="truncate" x-text="customer.address"></span>
+                    </div>
                 </template>
             </td>
 
@@ -309,7 +335,8 @@
                 </template>
             </td>
 
-            <!-- Kolom Collector -->
+            <!-- Kolom Collector (disembunyikan bila modul premium collector terkunci) -->
+            <template x-if="!hideCollector">
             <td class="px-4 py-3">
                 <template x-if="customer.collector">
                     <div class="text-xs text-slate-600" x-text="customer.collector.name + (customer.collector.type === 'field' ? ' (Lapangan)' : ' (Desk)')"></div>
@@ -328,6 +355,7 @@
                     </div>
                 </template>
             </td>
+            </template>
 
             <!-- Kolom Terakhir Bayar -->
             <td class="px-4 py-3 text-sm text-slate-500">
@@ -365,6 +393,11 @@
             <!-- Kolom Actions -->
             <td class="px-4 py-3">
                 <div class="flex items-center gap-1">
+                    <template x-if="customer.address">
+                        <a :href="'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(customer.address)" target="_blank" rel="noopener" class="text-rose-600 hover:text-rose-800 p-1.5 rounded hover:bg-rose-50 transition-colors" title="Buka alamat di Google Maps">
+                            <i class="fa-solid fa-location-dot text-sm"></i>
+                        </a>
+                    </template>
                     <button @click="openPayModal(customer)" class="text-emerald-600 hover:text-emerald-800 p-1.5 rounded hover:bg-emerald-50 transition-colors" title="Catat Pembayaran / Riwayat">
                         <i class="fa-solid fa-money-bill-wave text-sm"></i>
                     </button>
@@ -385,7 +418,7 @@
     <!-- Pastikan colspan disesuaikan menjadi 15 karena ada penambahan kolom -->
     <template x-if="customers.length === 0">
         <tr>
-            <td colspan="15" class="px-4 py-12 text-center text-slate-500">
+            <td :colspan="hideCollector ? 14 : 15" class="px-4 py-12 text-center text-slate-500">
                 <i class="fa-solid fa-users text-3xl mb-2 block text-slate-300"></i>
                 Belum ada data customer
             </td>
@@ -470,6 +503,20 @@
                     <div>
                         <label class="block text-sm font-medium text-slate-700 mb-1">Company</label>
                         <input type="text" name="company" x-model="form.company" class="w-full border border-slate-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Alamat <span class="text-slate-400 font-normal">(untuk kunjungan collector + buka map)</span></label>
+                        <textarea name="address" x-model="form.address" rows="2" placeholder="cth: Jl. Slamet Riyadi No. 10, Kanigaran, Kanigaran, Probolinggo — tanpa singkatan Kec./Kel./Kab." class="w-full border border-slate-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-brand-500 focus:border-transparent"></textarea>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Titik Manual <span class="text-slate-400 font-normal">(opsional — paling akurat, dari Google Maps)</span></label>
+                        <div class="grid grid-cols-2 gap-3">
+                            <input type="text" inputmode="decimal" name="latitude" x-model="form.latitude" placeholder="Latitude, cth: -7.76878" class="w-full border border-slate-300 rounded-lg px-4 py-2 font-mono focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+                            <input type="text" inputmode="decimal" name="longitude" x-model="form.longitude" placeholder="Longitude, cth: 113.21327" class="w-full border border-slate-300 rounded-lg px-4 py-2 font-mono focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-1">Cara ambil: buka alamat di Google Maps → klik kanan titik persisnya → klik koordinat (tersalin) → tempel di sini. Titik manual mengunci pin (tidak diobrak-abrik sinkronisasi otomatis) dan ikut muncul di peta.</p>
                     </div>
                     
                     <div>
@@ -656,7 +703,7 @@
                     </button>
                 </div>
                 <form @submit.prevent="submitImport()" class="p-4 space-y-4">
-                    <p class="text-xs text-slate-500">Format kolom: <span class="font-mono">name, phone, gender (L/P), office_phone, emergency_phone, email, company, status, total_amount, paid_amount, discount_amount, payment_status, due_date (YYYY-MM-DD), notes</span>. Baris dengan phone yang sudah ada akan di-update.</p>
+                    <p class="text-xs text-slate-500">Format kolom: <span class="font-mono">name, phone, gender (L/P), office_phone, emergency_phone, email, company, address, status, total_amount, paid_amount, discount_amount, payment_status, due_date (YYYY-MM-DD), notes</span>. Baris dengan phone yang sudah ada akan di-update.</p>
                     <input type="file" x-ref="importFile" accept=".xlsx,.xls,.csv" class="w-full border border-slate-300 rounded-lg px-4 py-2 text-sm" required>
                     <div x-show="importResult" class="text-xs rounded-lg p-3" :class="importResult?.failed > 0 ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'" x-text="importResult ? ('Import selesai: ' + importResult.imported + ' baru, ' + importResult.updated + ' update, ' + importResult.failed + ' gagal.') : ''"></div>
                     <div class="flex justify-end gap-3 pt-4 border-t border-slate-200">
@@ -923,6 +970,7 @@
         agents: @json($agents),
         statuses: @json($statuses),
         collectors: @json($collectors ?? []),
+        hideCollector: @json(\App\Models\FeatureFlag::lockedForCurrentUser('collector')),
         indexUrl: '{{ route('crm.customers.index') }}',
         bulkAssignUrl: '{{ url('/dashboard/crm/collection/bulk-assign-collector') }}',
         bulkAssignAgentUrl: '{{ url('/dashboard/crm/customers/bulk-assign-agent') }}',
@@ -936,5 +984,120 @@
         handoverRecallUrl: '{{ url('/dashboard/crm/collection/handover-recall') }}',
         handoverExportUrl: '{{ url('/dashboard/crm/collection/handover/export') }}'
     };
+</script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// Peta sebaran customer (Leaflet + OSM, tanpa API key). Guard window agar
+// eksekusi ulang oleh Turbo tidak crash/duplikat map.
+window._custMapEsc = window._custMapEsc || function (s) {
+    return String(s ?? '').replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+};
+window.custMapReload = window.custMapReload || function () {
+    try { if (window._custMap) window._custMap.remove(); } catch (e) {}
+    window._custMap = null;
+    window._custMarkers = [];
+    var el = document.getElementById('customer-map');
+    if (el) el.innerHTML = '';
+    window.custMapInit(true);
+};
+window.custMapLoadPoints = window.custMapLoadPoints || function () {
+    var map = window._custMap;
+    if (!map) return;
+    fetch('{{ route('crm.customers.map-points') }}', { headers: { 'Accept': 'application/json' } })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            var pts = (d && d.data) || [];
+            var cnt = document.getElementById('map-count');
+            if (cnt) cnt.textContent = pts.length ? pts.length + ' titik' : 'belum ada titik';
+            (window._custMarkers || []).forEach(function (m) { try { map.removeLayer(m); } catch (e) {} });
+            window._custMarkers = [];
+            if (!pts.length) return;
+            var bounds = [];
+            var esc = window._custMapEsc;
+            pts.forEach(function (p) {
+                var lat = parseFloat(p.latitude), lng = parseFloat(p.longitude);
+                if (isNaN(lat) || isNaN(lng)) return;
+                var m = L.marker([lat, lng]).addTo(map);
+                window._custMarkers.push(m);
+                var gmaps = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(lat + ',' + lng);
+                m.bindPopup('<strong>' + esc(p.name || '-') + '</strong><br>' +
+                    esc(p.address || '') + '<br>' +
+                    '<span>' + esc(p.phone || '') + (p.bucket ? ' • ' + esc(p.bucket) : '') + '</span><br>' +
+                    (p.geocode_label ? '<span style="color:#94a3b8;font-size:11px">📍 ' + esc(p.geocode_label === 'Manual' ? 'Titik manual (Google Maps)' : p.geocode_label.split(',').slice(0, 3).join(',')) + '</span><br>' : '') +
+                    '<a href="' + gmaps + '" target="_blank" rel="noopener">Rute →</a>');
+                bounds.push([lat, lng]);
+            });
+            if (bounds.length) map.fitBounds(bounds, { padding: [30, 30] });
+        })
+        .catch(function () {});
+};
+window.syncMapPoints = window.syncMapPoints || async function (btn) {
+    if (!confirm('Sinkronkan koordinat untuk alamat yang belum terpetakan? Berjalan di background.')) return;
+    var orig = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Menjadwalkan...';
+    try {
+        const tokenRes = await fetch('{{ route('crm.whatsapp.csrf') }}', { headers: { 'Accept': 'application/json' } });
+        const tokenData = await tokenRes.json().catch(() => ({}));
+        const res = await fetch('{{ route('crm.customers.geocode-sync') }}', {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': tokenData.csrf || (document.querySelector('meta[name="csrf-token"]') || {}).content || '',
+            },
+        });
+        const data = await res.json();
+        alert(data.message || data.status);
+        // Poll peta 4x tiap 30 detik agar hasil background terlihat tanpa reload.
+        // (±20 alamat ≈ 25-60 detik via Nominatim 1,2 dtk/query).
+        let tries = 0;
+        const poll = setInterval(function () {
+            tries++;
+            window.custMapLoadPoints();
+            if (tries >= 4) clearInterval(poll);
+        }, 30000);
+    } catch (e) {
+        alert('Gagal menjadwalkan sinkronisasi.');
+    } finally {
+        btn.innerHTML = orig;
+    }
+};
+window.custMapInit = window.custMapInit || function (force) {
+    var el = document.getElementById('customer-map');
+    if (!el || typeof L === 'undefined') return;
+    // Sama seperti peta tracking: Turbo mengganti <body> tapi window hidup —
+    // map lama menempel ke container yang sudah dibuang. Buang & buat ulang.
+    if (window._custMap && window._custMap.getContainer() !== el) {
+        try { window._custMap.remove(); } catch (e) {}
+        window._custMap = null;
+        window._custMarkers = [];
+    }
+    // Jangan init saat panel hidden (ukurannya 0) kecuali dipaksa dari openMapPanel.
+    if (!force && el.offsetParent === null) return;
+    try {
+        if (window._custMap) {
+            // Panel dibuka-tutup: refresh ukuran (wajib karena init saat hidden)
+            setTimeout(function () {
+                try { window._custMap.invalidateSize(); } catch (e) {}
+                window.custMapLoadPoints();
+            }, 80);
+            return;
+        }
+        var map = L.map('customer-map').setView([-2.5, 118], 5);
+        window._custMap = map;
+        window._custMarkers = [];
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        }).addTo(map);
+        setTimeout(function () { try { map.invalidateSize(); } catch (e) {} }, 80);
+        window.custMapLoadPoints();
+    } catch (e) {}
+};
+document.addEventListener('DOMContentLoaded', function () { window.custMapInit(); });
+document.addEventListener('turbo:load', function () { window.custMapInit(); });
 </script>
 @endsection

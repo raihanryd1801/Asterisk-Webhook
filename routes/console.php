@@ -10,3 +10,5 @@ Artisan::command('inspire', function () {
 
 Schedule::command('cdr:sync')->everyMinute()->withoutOverlapping();
 Schedule::command('cdr:summarize')->everyFiveMinutes()->withoutOverlapping();
+Schedule::command('customers:geocode --limit=50')->daily()->withoutOverlapping();
+Schedule::command('collectors:prune-positions --days=14')->daily()->withoutOverlapping();

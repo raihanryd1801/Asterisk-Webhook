@@ -20,8 +20,10 @@ window.crmCustomers = function () {
         bulkLoading: false,
         bulkAgentId: '',
         bulkAgentLoading: false,
+        hideCollector: window.crmCustomerData?.hideCollector || false,
         showAutoAssignAgentModal: false,
         autoAssignAgentIds: [],
+        mapOpen: false,
         autoAssignBuckets: [],
         autoAssignOnlyUnassigned: true,
         autoAssignLoading: false,
@@ -35,7 +37,7 @@ window.crmCustomers = function () {
         payForm: { amount: '', paid_at: new Date().toISOString().split('T')[0], method: 'transfer', notes: '' },
         recalcLoading: false,
         modalTitle: '',
-        form: { id: '', name: '', phone: '', office_phone: '', emergency_phone: '', gender: '', email: '', company: '', status: 'new', assigned_agent_id: '', notes: '', total_amount: '', paid_amount: '', discount_amount: '', payment_status: 'unpaid', payment_notes: '', due_date: '', collector_id: '', risk_level: 'low' },
+        form: { id: '', name: '', phone: '', office_phone: '', emergency_phone: '', gender: '', email: '', company: '', address: '', latitude: '', longitude: '', status: 'new', assigned_agent_id: '', notes: '', total_amount: '', paid_amount: '', discount_amount: '', payment_status: 'unpaid', payment_notes: '', due_date: '', collector_id: '', risk_level: 'low' },
         selectedCustomer: null,
         paymentStatusFilter: '',
         bucketFilter: '',
@@ -118,7 +120,7 @@ window.crmCustomers = function () {
 
         openCreateModal() {
             this.modalTitle = 'Tambah Customer';
-            this.form = { id: '', name: '', phone: '', office_phone: '', emergency_phone: '', gender: '', email: '', company: '', status: 'new', assigned_agent_id: '', notes: '', total_amount: '', paid_amount: '', discount_amount: '', payment_status: 'unpaid', payment_notes: '', due_date: '', collector_id: '', risk_level: 'low' };
+            this.form = { id: '', name: '', phone: '', office_phone: '', emergency_phone: '', gender: '', email: '', company: '', address: '', latitude: '', longitude: '', status: 'new', assigned_agent_id: '', notes: '', total_amount: '', paid_amount: '', discount_amount: '', payment_status: 'unpaid', payment_notes: '', due_date: '', collector_id: '', risk_level: 'low' };
             this.showModal = true;
         },
 
@@ -133,6 +135,12 @@ window.crmCustomers = function () {
                 gender: customer.gender || '',
                 email: customer.email || '',
                 company: customer.company || '',
+                address: customer.address || '',
+                // Hanya isi koordinat bila pin-nya manual — kalau diisi dari
+                // hasil geocode otomatis, biarkan kosong agar tidak terkunci
+                // sebagai "Manual" saat form disimpan tanpa disentuh.
+                latitude: customer.geocode_label === 'Manual' ? (customer.latitude ?? '') : '',
+                longitude: customer.geocode_label === 'Manual' ? (customer.longitude ?? '') : '',
                 status: customer.status,
                 assigned_agent_id: customer.assigned_agent_id || '',
                 notes: customer.notes || '',
@@ -150,7 +158,7 @@ window.crmCustomers = function () {
 
         closeModal() {
             this.showModal = false;
-            this.form = { id: '', name: '', phone: '', office_phone: '', emergency_phone: '', gender: '', email: '', company: '', status: 'new', assigned_agent_id: '', notes: '', total_amount: '', paid_amount: '', discount_amount: '', payment_status: 'unpaid', payment_notes: '', due_date: '', collector_id: '', risk_level: 'low' };
+            this.form = { id: '', name: '', phone: '', office_phone: '', emergency_phone: '', gender: '', email: '', company: '', address: '', latitude: '', longitude: '', status: 'new', assigned_agent_id: '', notes: '', total_amount: '', paid_amount: '', discount_amount: '', payment_status: 'unpaid', payment_notes: '', due_date: '', collector_id: '', risk_level: 'low' };
         },
 
         async submitForm() {
@@ -375,6 +383,15 @@ window.crmCustomers = function () {
                 alert('Terjadi kesalahan');
             } finally {
                 this.autoAssignLoading = false;
+            }
+        },
+
+        openMapPanel() {
+            this.mapOpen = !this.mapOpen;
+            if (this.mapOpen) {
+                this.$nextTick(() => {
+                    if (window.custMapInit) window.custMapInit(true);
+                });
             }
         },
 

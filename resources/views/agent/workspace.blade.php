@@ -227,7 +227,15 @@
                                     <template x-if="customer.company">
                                         <span class="flex items-center gap-1 text-slate-400" x-text="customer.company"></span>
                                     </template>
+                                    <template x-if="customer.address">
+                                        <a :href="'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(customer.address)" target="_blank" rel="noopener" class="flex items-center gap-1 text-rose-600 hover:text-rose-800 font-medium" :title="customer.address">
+                                            <i class="fa-solid fa-location-dot"></i><span>Buka Map</span>
+                                        </a>
+                                    </template>
                                 </div>
+                                <template x-if="customer.address">
+                                    <div class="mt-1.5 text-[11px] text-slate-500 line-clamp-2" x-text="customer.address"></div>
+                                </template>
                                 <template x-if="customer.notes">
                                     <div class="mt-2 text-[11px] text-slate-500 bg-slate-50 p-2 rounded border border-slate-100 line-clamp-2" x-text="customer.notes"></div>
                                 </template>

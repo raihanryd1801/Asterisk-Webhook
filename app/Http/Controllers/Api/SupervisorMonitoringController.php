@@ -708,18 +708,28 @@ class SupervisorMonitoringController extends Controller
             $format = 'xlsx';
         }
 
-        // Terapkan format ke nama file (uniqid anti tabrakan klik ganda)
-        // cth: call-history-2026-08-01_sd_2026-08-31-20260923_103751-abc123.xlsx
-        $filename = 'call-history-' . $this->exportDateLabel($filters) . '-' . date('Y-m-d_H-i-s') . '-' . uniqid() . '.' . $format;
-        $filePath = 'exports/' . $filename;
-
+        // Filter dulu (dipakai untuk nama file DAN job) — JANGAN di bawah
+        // pemakaian $filters, dulu pernah undefined variable di sini yang
+        // bikin export 500 TAPI flag single-flight sudah terlanjur diset,
+        // akibatnya semua klik berikutnya nyangkut 429 selama 6 jam.
         $filters = $request->only(['agent_extension', 'search', 'start_date', 'end_date']);
         $filters['supervisor_extension'] = session('supervisor_extension');
         // Job melepas flag saat selesai/gagal (finally di handle()).
         $filters['_flight_key'] = $flightKey;
 
-        // Lempar ke Job FastExcel
-        ProcessCallLogExport::dispatch($filters, $filePath);
+        // Terapkan format ke nama file (uniqid anti tabrakan klik ganda)
+        // cth: call-history-2026-08-01_sd_2026-08-31-20260923_103751-abc123.xlsx
+        $filename = 'call-history-' . $this->exportDateLabel($filters) . '-' . date('Y-m-d_H-i-s') . '-' . uniqid() . '.' . $format;
+        $filePath = 'exports/' . $filename;
+
+        // Lempar ke Job. Kalau dispatch-nya sendiri gagal (cth. queue down),
+        // lepas flag langsung agar user tidak nyangkut 429.
+        try {
+            ProcessCallLogExport::dispatch($filters, $filePath);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Cache::forget($flightKey);
+            throw $e;
+        }
 
         return response()->json([
             'status' => 'processing',

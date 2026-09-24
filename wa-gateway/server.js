@@ -583,6 +583,75 @@ app.post('/sessions/:id/read', async (req, res) => {
     }
 });
 
+// Hapus 1 pesan. Pesan KELUAR (fromMe) = revoke: ikut terhapus di HP lawan
+// bicara ("pesan ini telah dihapus"). Pesan MASUK (fromMe=false) tidak bisa
+// di-revoke (hanya pengirim yang bisa) -> dihapus dari perangkat tertaut
+// sendiri (deleteForMe). Body: { to, server?, id, fromMe? }.
+app.post('/sessions/:id/delete', async (req, res) => {
+    const id = req.params.id;
+    const s = sessions.get(id);
+    if (!s || s.status !== 'connected' || !s.sock) {
+        return res.status(409).json({ ok: false, message: 'Sesi belum terhubung.' });
+    }
+    const server = req.body.server === 'lid' ? 'lid' : 's.whatsapp.net';
+    const to = server === 'lid'
+        ? String(req.body.to || '').replace(/\D/g, '')
+        : normalizePhone(req.body.to);
+    const msgId = String(req.body.id || '');
+    if (!/^\d{9,16}$/.test(to) || !msgId) {
+        return res.status(422).json({ ok: false, message: 'Nomor / ID pesan tidak valid' });
+    }
+    const jid = `${to}@${server}`;
+    const fromMe = req.body.fromMe !== false;
+    try {
+        if (fromMe) {
+            await s.sock.sendMessage(jid, {
+                delete: { remoteJid: jid, id: msgId, fromMe: true },
+            });
+        } else {
+            await s.sock.chatModify({
+                deleteForMe: {
+                    deleteMedia: false,
+                    key: { remoteJid: jid, id: msgId, fromMe: false },
+                    timestamp: Math.floor(Date.now() / 1000),
+                },
+            }, jid);
+        }
+        res.json({ ok: true, revoked: fromMe });
+    } catch (e) {
+        res.status(502).json({ ok: false, message: e.message || 'Gagal hapus pesan' });
+    }
+});
+
+// Hapus SELURUH percakapan di perangkat tertaut (chat hilang dari daftar
+// chat). Body: { to, server?, lastId? } — lastId = stanza ID pesan terakhir
+// yang diketahui (opsional, untuk sinkronisasi penghapusan).
+app.post('/sessions/:id/chat-delete', async (req, res) => {
+    const id = req.params.id;
+    const s = sessions.get(id);
+    if (!s || s.status !== 'connected' || !s.sock) {
+        return res.status(409).json({ ok: false, message: 'Sesi belum terhubung.' });
+    }
+    const server = req.body.server === 'lid' ? 'lid' : 's.whatsapp.net';
+    const to = server === 'lid'
+        ? String(req.body.to || '').replace(/\D/g, '')
+        : normalizePhone(req.body.to);
+    if (!/^\d{9,16}$/.test(to)) {
+        return res.status(422).json({ ok: false, message: 'Nomor tujuan tidak valid' });
+    }
+    const jid = `${to}@${server}`;
+    try {
+        const lastId = String(req.body.lastId || '');
+        const lastMessages = lastId
+            ? [{ key: { remoteJid: jid, id: lastId, fromMe: false }, messageTimestamp: Math.floor(Date.now() / 1000) }]
+            : [];
+        await s.sock.chatModify({ delete: true, lastMessages }, jid);
+        res.json({ ok: true });
+    } catch (e) {
+        res.status(502).json({ ok: false, message: e.message || 'Gagal hapus percakapan' });
+    }
+});
+
 app.listen(PORT, '127.0.0.1', () => {
     console.log(`WA gateway listening on 127.0.0.1:${PORT}`);
     // Pulihkan sesi yang pernah terhubung agar tidak perlu scan ulang tiap restart

@@ -336,12 +336,16 @@ Route::prefix('dashboard')->middleware([\App\Http\Middleware\DbQueryTimeout::cla
         Route::post('/crm/whatsapp/reply', [\App\Http\Controllers\WaController::class, 'reply'])->name('crm.whatsapp.reply');
         Route::get('/crm/whatsapp/unread', [\App\Http\Controllers\WaController::class, 'unreadCount'])->name('crm.whatsapp.unread');
         Route::post('/crm/whatsapp/link', [\App\Http\Controllers\WaController::class, 'linkCustomer'])->name('crm.whatsapp.link');
+        Route::delete('/crm/whatsapp/message/{id}', [\App\Http\Controllers\WaController::class, 'deleteMessage'])->name('crm.whatsapp.message.delete');
+        Route::delete('/crm/whatsapp/conversation', [\App\Http\Controllers\WaController::class, 'clearConversation'])->name('crm.whatsapp.conversation.clear');
 
         // CRM Dashboard
         Route::get('/crm/dashboard', [CustomerController::class, 'dashboard'])->name('crm.dashboard');
         
         // Customer Management
         Route::get('/crm/customers', [CustomerController::class, 'index'])->name('crm.customers.index');
+        Route::get('/crm/customers/map-points', [CustomerController::class, 'mapPoints'])->name('crm.customers.map-points');
+        Route::post('/crm/customers/geocode-sync', [CustomerController::class, 'geocodeSync'])->name('crm.customers.geocode-sync');
         Route::get('/crm/customers/export', [CustomerController::class, 'exportCustomers'])->name('crm.customers.export');
         Route::post('/crm/customers/import', [CustomerController::class, 'importCustomers'])->name('crm.customers.import');
         Route::post('/crm/customers', [CustomerController::class, 'store'])->name('crm.customers.store');
@@ -380,6 +384,12 @@ Route::prefix('dashboard')->middleware([\App\Http\Middleware\DbQueryTimeout::cla
         Route::get('/crm/collectors/{collector}', [\App\Http\Controllers\DebtCollectorController::class, 'show'])->name('crm.collectors.show');
         Route::put('/crm/collectors/{collector}', [\App\Http\Controllers\DebtCollectorController::class, 'update'])->name('crm.collectors.update');
         Route::delete('/crm/collectors/{collector}', [\App\Http\Controllers\DebtCollectorController::class, 'destroy'])->name('crm.collectors.destroy');
+        Route::post('/crm/collectors/{collector}/pin', [\App\Http\Controllers\DebtCollectorController::class, 'setPin'])->name('crm.collectors.pin');
+
+        // Live tracking collector lapangan
+        Route::get('/crm/tracking', [\App\Http\Controllers\TrackingController::class, 'index'])->name('crm.tracking');
+        Route::get('/crm/tracking/live', [\App\Http\Controllers\TrackingController::class, 'live'])->name('crm.tracking.live');
+        Route::get('/crm/tracking/trail/{collector}', [\App\Http\Controllers\TrackingController::class, 'trail'])->name('crm.tracking.trail');
 
         // Auto-Dialer (PDS)
         Route::get('/crm/dialer', [\App\Http\Controllers\DialerController::class, 'index'])->name('crm.dialer.index');

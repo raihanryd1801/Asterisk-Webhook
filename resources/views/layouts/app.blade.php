@@ -78,9 +78,10 @@
 
         // Status gembok per modul premium (diatur superadmin di halaman Premium/Lisensi)
         $premiumStates = \App\Models\FeatureFlag::states();
-        $crmLocked = !$isSuperadmin && empty($premiumStates['crm']);
-        $collectionLocked = !$isSuperadmin && empty($premiumStates['collection']);
-        $dialerLocked = !$isSuperadmin && empty($premiumStates['dialer']);
+        $crmLocked = \App\Models\FeatureFlag::lockedForCurrentUser('crm');
+        $collectionLocked = \App\Models\FeatureFlag::lockedForCurrentUser('collection');
+        $dialerLocked = \App\Models\FeatureFlag::lockedForCurrentUser('dialer');
+        $collectorLocked = \App\Models\FeatureFlag::lockedForCurrentUser('collector');
     @endphp
 
     <aside class="w-[260px] bg-slate-900 text-white flex flex-col shrink-0 hidden md:flex relative z-20 transition-all duration-300 shadow-xl">
@@ -174,7 +175,11 @@
                 </a>
                 <a href="{{ route('crm.collectors.index', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('crm.collectors.*') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
                     <i class="fa-solid fa-user-shield w-5 text-center"></i> Debt Collectors
-                    @if($collectionLocked)<i class="fa-solid fa-lock ml-auto text-[10px] text-slate-500" title="Premium Feature"></i>@endif
+                    @if($collectorLocked)<i class="fa-solid fa-lock ml-auto text-[10px] text-slate-500" title="Premium Feature"></i>@endif
+                </a>
+                <a href="{{ route('crm.tracking', [], false) }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 {{ request()->routeIs('crm.tracking*') ? 'bg-slate-800/50 text-brand-500 border-l-2 border-brand-500 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent border-l-2' }}">
+                    <i class="fa-solid fa-location-crosshairs w-5 text-center"></i> Live Tracking
+                    @if($collectorLocked)<i class="fa-solid fa-lock ml-auto text-[10px] text-slate-500" title="Premium Feature"></i>@endif
                 </a>
 
                 <p class="px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-3 mt-6">Dialer</p>

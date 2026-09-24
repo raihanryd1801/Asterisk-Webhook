@@ -11,6 +11,7 @@ class FeatureFlag extends Model
         'crm' => 'CRM (Dashboard + Customers)',
         'collection' => 'Collection Banking',
         'dialer' => 'Auto-Dialer (PDS)',
+        'collector' => 'Debt Collector (Tim Lapangan + Live Tracking)',
     ];
 
     protected $fillable = ['key', 'label', 'is_enabled', 'updated_by'];
@@ -52,5 +53,16 @@ class FeatureFlag extends Model
             $out[$key] = (bool) ($rows[$key] ?? false);
         }
         return $out;
+    }
+
+    /**
+     * Apakah modul terkunci untuk user saat ini?
+     * Superadmin (tabel users) selalu lolos; admin/supervisor ikut toggle.
+     */
+    public static function lockedForCurrentUser(string $key): bool
+    {
+        $isSuperadmin = auth()->check() && ((auth()->user()->role ?? '') === 'superadmin');
+
+        return !$isSuperadmin && empty(static::states()[$key]);
     }
 }
