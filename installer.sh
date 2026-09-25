@@ -53,47 +53,68 @@ echo "==> [1/6] Install package sistem..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
 apt-get install -y software-properties-common curl git unzip ca-certificates lsb-release gnupg dirmngr build-essential autoconf
-# Repo PHP: versi sudah dipilih otomatis di atas (8.4 > 8.3) bila ada di repo
-# bawaan. Blok ini hanya jalan bila versi terpilih tak ada di repo bawaan
-# (cth. Ubuntu 22.04) -> tambah PPA ondrej. add-apt-repository butuh akses
-# ke API Launchpad; bila timeout (jaringan dibatasi), tulis manual tanpa API.
+# Repo PHP, urutan pilihan:
+#   1. PHP 8.4/8.3 dari repo bawaan (paling aman).
+#   2. PPA ondrej — HANYA bila seri Ubuntu ini didukung PPA (dicek via HTTPS;
+#      cth. Ubuntu 26.04 "resolute" belum didukung -> 404 -> lewati, jangan
+#      tulis repo rusak yang bikin apt-get update gagal total).
+#   3. Fallback terakhir: PHP bawaan lebih baru (8.5+). Berisiko Swoole belum
+#      bisa compile — pantau langkah [2/6].
 . /etc/os-release
-if [[ -z "$PHP_VER" ]]; then
+# Bersihkan sisa PPA rusak dari percobaan sebelumnya (bikin apt update gagal).
+rm -f /etc/apt/sources.list.d/ondrej-php.list /etc/apt/sources.list.d/ondrej-ubuntu-php-*.list
+pick_native8384() {
   for v in 8.4 8.3; do
+    if apt-cache show php${v}-cli >/dev/null 2>&1; then echo "$v"; return 0; fi
+  done
+  return 1
+}
+if [[ -z "$PHP_VER" ]]; then
+  PHP_VER="$(pick_native8384 || true)"
+  [[ -n "$PHP_VER" ]] && echo "php${PHP_VER} tersedia di repo bawaan (${PRETTY_NAME}) — PPA dilewati."
+fi
+if [[ -z "$PHP_VER" ]]; then
+  if curl -fsSI -m 15 "https://ppa.launchpadcontent.net/ondrej/php/ubuntu/dists/${VERSION_CODENAME}/Release" >/dev/null 2>&1; then
+    echo "PPA ondrej mendukung ${VERSION_CODENAME} — tambah repo..."
+    if ! add-apt-repository -y ppa:ondrej/php; then
+      echo "WARNING: add-apt-repository gagal (API Launchpad tak terjangkau). Tulis manual..."
+      echo "deb https://ppa.launchpadcontent.net/ondrej/php/ubuntu ${VERSION_CODENAME} main" \
+        > /etc/apt/sources.list.d/ondrej-php.list
+      # Kunci GPG PPA (3 jalur: keyserver via dirmngr hkps, hkp port 80,
+      # unduhan HTTPS langsung). Butuh SALAH SATU yang tembus.
+      mkdir -p /root/.gnupg /etc/apt/keyrings
+      chmod 700 /root/.gnupg
+      KEYRING=/etc/apt/keyrings/ondrej-php.gpg
+      rm -f "$KEYRING"
+      (gpg --batch --no-tty --no-default-keyring --keyring "$KEYRING" --keyserver hkps://keyserver.ubuntu.com \
+        --recv-keys 4F4EA0AAE5267A6C 2>/dev/null \
+      || gpg --batch --no-tty --no-default-keyring --keyring "$KEYRING" --keyserver hkp://keyserver.ubuntu.com:80 \
+        --recv-keys 4F4EA0AAE5267A6C 2>/dev/null \
+      || curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x4F4EA0AAE5267A6C" \
+        | gpg --batch --no-tty --dearmor -o "$KEYRING" 2>/dev/null) \
+      || { echo "ERROR: kunci GPG ondrej tidak bisa diambil (keyserver.ubuntu.com 443/80 diblokir?). Buka aksesnya lalu ulangi." >&2; exit 1; }
+      gpg --batch --no-tty --no-default-keyring --keyring "$KEYRING" --list-keys 4F4EA0AAE5267A6C >/dev/null \
+      || { echo "ERROR: keyring GPG kosong/rusak." >&2; exit 1; }
+      echo "deb [signed-by=${KEYRING}] https://ppa.launchpadcontent.net/ondrej/php/ubuntu ${VERSION_CODENAME} main" \
+        > /etc/apt/sources.list.d/ondrej-php.list
+      echo "Repo ondrej + kunci GPG siap."
+    fi
+    apt-get update -y
+    PHP_VER="$(pick_native8384 || true)"
+  else
+    echo "WARNING: PPA ondrej belum mendukung ${VERSION_CODENAME} — PPA dilewati."
+  fi
+fi
+if [[ -z "$PHP_VER" ]]; then
+  for v in 8.5 8.6 8.7; do
     if apt-cache show php${v}-cli >/dev/null 2>&1; then PHP_VER="$v"; break; fi
   done
+  if [[ -n "$PHP_VER" ]]; then
+    echo "WARNING: hanya PHP ${PHP_VER} bawaan yang tersedia — dipakai, tapi Swoole/Octane bisa gagal compile. Pantau langkah [2/6]."
+  fi
 fi
 PHP_VER="${PHP_VER:-8.3}"
 echo "PHP yang dipakai: $PHP_VER"
-if ! apt-cache show php${PHP_VER}-cli >/dev/null 2>&1; then
-  if ! add-apt-repository -y ppa:ondrej/php; then
-    echo "WARNING: add-apt-repository gagal (Launchpad tak terjangkau). Tulis manual..."
-    echo "deb https://ppa.launchpadcontent.net/ondrej/php/ubuntu ${VERSION_CODENAME} main" \
-      > /etc/apt/sources.list.d/ondrej-php.list
-    # Kunci GPG PPA (3 jalur: keyserver via dirmngr hkps, hkp port 80,
-    # unduhan HTTPS langsung). Butuh SALAH SATU yang tembus.
-    mkdir -p /root/.gnupg /etc/apt/keyrings
-    chmod 700 /root/.gnupg
-    KEYRING=/etc/apt/keyrings/ondrej-php.gpg
-    rm -f "$KEYRING"
-    (gpg --batch --no-tty --no-default-keyring --keyring "$KEYRING" --keyserver hkps://keyserver.ubuntu.com \
-      --recv-keys 4F4EA0AAE5267A6C 2>/dev/null \
-    || gpg --batch --no-tty --no-default-keyring --keyring "$KEYRING" --keyserver hkp://keyserver.ubuntu.com:80 \
-      --recv-keys 4F4EA0AAE5267A6C 2>/dev/null \
-    || curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x4F4EA0AAE5267A6C" \
-      | gpg --batch --no-tty --dearmor -o "$KEYRING" 2>/dev/null) \
-    || { echo "ERROR: kunci GPG ondrej tidak bisa diambil (keyserver.ubuntu.com 443/80 diblokir?). Buka aksesnya lalu ulangi." >&2; exit 1; }
-    gpg --batch --no-tty --no-default-keyring --keyring "$KEYRING" --list-keys 4F4EA0AAE5267A6C >/dev/null \
-    || { echo "ERROR: keyring GPG kosong/rusak." >&2; exit 1; }
-    echo "deb [signed-by=${KEYRING}] https://ppa.launchpadcontent.net/ondrej/php/ubuntu ${VERSION_CODENAME} main" \
-      > /etc/apt/sources.list.d/ondrej-php.list
-    echo "Repo ondrej + kunci GPG siap."
-    echo "deb [signed-by=/etc/apt/keyrings/ondrej-php.gpg] https://ppa.launchpadcontent.net/ondrej/php/ubuntu ${VERSION_CODENAME} main" \
-      > /etc/apt/sources.list.d/ondrej-php.list
-  fi
-else
-  echo "php${PHP_VER} tersedia di repo bawaan (${PRETTY_NAME}) — PPA dilewati."
-fi
 mkdir -p /etc/apt/keyrings
 curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
 echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_MAJOR}.x nodistro main" > /etc/apt/sources.list.d/nodesource.list
