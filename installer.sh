@@ -50,7 +50,28 @@ echo "==> [1/6] Install package sistem..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
 apt-get install -y software-properties-common curl git unzip ca-certificates lsb-release gnupg build-essential autoconf
-add-apt-repository -y ppa:ondrej/php
+# PHP 8.3: Ubuntu 24.04+ sudah bawa di repo bawaan -> PPA tidak perlu.
+# Ubuntu 22.04 perlu PPA ondrej. add-apt-repository butuh akses ke API
+# Launchpad; bila timeout (jaringan dibatasi), tulis manual tanpa API.
+. /etc/os-release
+if ! apt-cache show php${PHP_VER} >/dev/null 2>&1; then
+  if ! add-apt-repository -y ppa:ondrej/php; then
+    echo "WARNING: add-apt-repository gagal (Launchpad tak terjangkau). Tulis manual..."
+    echo "deb https://ppa.launchpadcontent.net/ondrej/php/ubuntu ${VERSION_CODENAME} main" \
+      > /etc/apt/sources.list.d/ondrej-php.list
+    # Kunci GPG PPA via keyserver Ubuntu (coba hkps lalu hkp port 80)
+    mkdir -p /etc/apt/keyrings
+    gpg --no-default-keyring --keyring /etc/apt/keyrings/ondrej-php.gpg --keyserver hkps://keyserver.ubuntu.com \
+      --recv-keys 4F4EA0AAE5267A6C 2>/dev/null \
+    || gpg --no-default-keyring --keyring /etc/apt/keyrings/ondrej-php.gpg --keyserver hkp://keyserver.ubuntu.com:80 \
+      --recv-keys 4F4EA0AAE5267A6C \
+    || { echo "ERROR: kunci GPG ondrej tidak bisa diambil. Buka akses ke keyserver.ubuntu.com (443/80) lalu ulangi." >&2; exit 1; }
+    echo "deb [signed-by=/etc/apt/keyrings/ondrej-php.gpg] https://ppa.launchpadcontent.net/ondrej/php/ubuntu ${VERSION_CODENAME} main" \
+      > /etc/apt/sources.list.d/ondrej-php.list
+  fi
+else
+  echo "php${PHP_VER} tersedia di repo bawaan (${PRETTY_NAME}) — PPA dilewati."
+fi
 mkdir -p /etc/apt/keyrings
 curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
 echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_MAJOR}.x nodistro main" > /etc/apt/sources.list.d/nodesource.list
