@@ -190,7 +190,8 @@
             <p class="font-mono font-bold text-4xl tracking-[0.3em] text-slate-900 my-4 select-all" x-text="pinResult"></p>
             <div class="flex gap-2 justify-center">
                 <button @click="copyPin()" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm font-medium transition flex items-center gap-2">
-                    <i class="fa-solid fa-copy"></i> Salin
+                    <i class="fa-solid" :class="pinCopied ? 'fa-check' : 'fa-copy'"></i>
+                    <span x-text="pinCopied ? 'Tersalin!' : 'Salin'"></span>
                 </button>
                 <button @click="closePinModal()" class="px-4 py-2 border border-slate-300 rounded-xl text-sm text-slate-700 hover:bg-slate-50 transition">Tutup</button>
             </div>
@@ -229,6 +230,7 @@ window.collectorManager = function() {
         showPinModal: false,
         pinResult: '',
         pinCollectorName: '',
+        pinCopied: false,
 
         async fetchCollectors(page = 1) {
             const params = new URLSearchParams();
@@ -358,12 +360,44 @@ window.collectorManager = function() {
             this.showPinModal = false;
             this.pinResult = '';
             this.pinCollectorName = '';
+            this.pinCopied = false;
         },
 
         copyPin() {
+            // navigator.clipboard HANYA ada di HTTPS/localhost — server kita
+            // HTTP, jadi sediakan fallback textarea+execCommand (jalan di mana saja).
+            const markDone = () => {
+                this.pinCopied = true;
+                setTimeout(() => { this.pinCopied = false; }, 2000);
+            };
+            const text = this.pinResult;
+            if (window.isSecureContext && navigator.clipboard) {
+                navigator.clipboard.writeText(text).then(markDone).catch(() => {
+                    if (this.legacyCopy(text)) markDone();
+                    else alert('Gagal menyalin otomatis — blok PIN lalu Ctrl+C manual.');
+                });
+            } else if (this.legacyCopy(text)) {
+                markDone();
+            } else {
+                alert('Gagal menyalin otomatis — blok PIN lalu Ctrl+C manual.');
+            }
+        },
+
+        legacyCopy(text) {
             try {
-                navigator.clipboard.writeText(this.pinResult);
-            } catch (e) {}
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.focus();
+                ta.select();
+                const ok = document.execCommand('copy');
+                ta.remove();
+                return ok;
+            } catch (e) {
+                return false;
+            }
         },
 
         async deleteCollector(id) {            if (!confirm('Yakin ingin menghapus collector ini? Case terkait jadi Tanpa Collector.')) return;
