@@ -52,7 +52,7 @@ fi
 echo "==> [1/6] Install package sistem..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
-apt-get install -y software-properties-common curl git unzip ca-certificates lsb-release gnupg build-essential autoconf
+apt-get install -y software-properties-common curl git unzip ca-certificates lsb-release gnupg dirmngr build-essential autoconf
 # Repo PHP: versi sudah dipilih otomatis di atas (8.4 > 8.3) bila ada di repo
 # bawaan. Blok ini hanya jalan bila versi terpilih tak ada di repo bawaan
 # (cth. Ubuntu 22.04) -> tambah PPA ondrej. add-apt-repository butuh akses
@@ -70,13 +70,24 @@ if ! apt-cache show php${PHP_VER}-cli >/dev/null 2>&1; then
     echo "WARNING: add-apt-repository gagal (Launchpad tak terjangkau). Tulis manual..."
     echo "deb https://ppa.launchpadcontent.net/ondrej/php/ubuntu ${VERSION_CODENAME} main" \
       > /etc/apt/sources.list.d/ondrej-php.list
-    # Kunci GPG PPA via keyserver Ubuntu (coba hkps lalu hkp port 80)
-    mkdir -p /etc/apt/keyrings
-    gpg --no-default-keyring --keyring /etc/apt/keyrings/ondrej-php.gpg --keyserver hkps://keyserver.ubuntu.com \
+    # Kunci GPG PPA (3 jalur: keyserver via dirmngr hkps, hkp port 80,
+    # unduhan HTTPS langsung). Butuh SALAH SATU yang tembus.
+    mkdir -p /root/.gnupg /etc/apt/keyrings
+    chmod 700 /root/.gnupg
+    KEYRING=/etc/apt/keyrings/ondrej-php.gpg
+    rm -f "$KEYRING"
+    (gpg --batch --no-tty --no-default-keyring --keyring "$KEYRING" --keyserver hkps://keyserver.ubuntu.com \
       --recv-keys 4F4EA0AAE5267A6C 2>/dev/null \
-    || gpg --no-default-keyring --keyring /etc/apt/keyrings/ondrej-php.gpg --keyserver hkp://keyserver.ubuntu.com:80 \
-      --recv-keys 4F4EA0AAE5267A6C \
-    || { echo "ERROR: kunci GPG ondrej tidak bisa diambil. Buka akses ke keyserver.ubuntu.com (443/80) lalu ulangi." >&2; exit 1; }
+    || gpg --batch --no-tty --no-default-keyring --keyring "$KEYRING" --keyserver hkp://keyserver.ubuntu.com:80 \
+      --recv-keys 4F4EA0AAE5267A6C 2>/dev/null \
+    || curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x4F4EA0AAE5267A6C" \
+      | gpg --batch --no-tty --dearmor -o "$KEYRING" 2>/dev/null) \
+    || { echo "ERROR: kunci GPG ondrej tidak bisa diambil (keyserver.ubuntu.com 443/80 diblokir?). Buka aksesnya lalu ulangi." >&2; exit 1; }
+    gpg --batch --no-tty --no-default-keyring --keyring "$KEYRING" --list-keys 4F4EA0AAE5267A6C >/dev/null \
+    || { echo "ERROR: keyring GPG kosong/rusak." >&2; exit 1; }
+    echo "deb [signed-by=${KEYRING}] https://ppa.launchpadcontent.net/ondrej/php/ubuntu ${VERSION_CODENAME} main" \
+      > /etc/apt/sources.list.d/ondrej-php.list
+    echo "Repo ondrej + kunci GPG siap."
     echo "deb [signed-by=/etc/apt/keyrings/ondrej-php.gpg] https://ppa.launchpadcontent.net/ondrej/php/ubuntu ${VERSION_CODENAME} main" \
       > /etc/apt/sources.list.d/ondrej-php.list
   fi
