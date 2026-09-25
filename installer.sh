@@ -21,7 +21,10 @@ set -euo pipefail
 
 # ============ KONFIGURASI (ubah di sini bila perlu) ============
 APP_DIR="${APP_DIR:-/var/www/html/Asterisk-Webhook}"
-PHP_VER="${PHP_VER:-8.3}"
+# PHP_VER kosong = otomatis: pilih versi stabil tertinggi di repo bawaan
+# (8.4 > 8.3). PHP 8.5+ sengaja dilewati default — Swoole/Laravel 13 belum
+# tentu siap; paksa manual bila mau coba: PHP_VER=8.5 ./installer.sh
+PHP_VER="${PHP_VER:-}"
 NODE_MAJOR="${NODE_MAJOR:-20}"
 MYSQL_USER="${MYSQL_USER:-}"
 MYSQL_PASS="${MYSQL_PASS:-}"
@@ -50,11 +53,19 @@ echo "==> [1/6] Install package sistem..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
 apt-get install -y software-properties-common curl git unzip ca-certificates lsb-release gnupg build-essential autoconf
-# PHP 8.3: Ubuntu 24.04+ sudah bawa di repo bawaan -> PPA tidak perlu.
-# Ubuntu 22.04 perlu PPA ondrej. add-apt-repository butuh akses ke API
-# Launchpad; bila timeout (jaringan dibatasi), tulis manual tanpa API.
+# Repo PHP: versi sudah dipilih otomatis di atas (8.4 > 8.3) bila ada di repo
+# bawaan. Blok ini hanya jalan bila versi terpilih tak ada di repo bawaan
+# (cth. Ubuntu 22.04) -> tambah PPA ondrej. add-apt-repository butuh akses
+# ke API Launchpad; bila timeout (jaringan dibatasi), tulis manual tanpa API.
 . /etc/os-release
-if ! apt-cache show php${PHP_VER} >/dev/null 2>&1; then
+if [[ -z "$PHP_VER" ]]; then
+  for v in 8.4 8.3; do
+    if apt-cache show php${v}-cli >/dev/null 2>&1; then PHP_VER="$v"; break; fi
+  done
+fi
+PHP_VER="${PHP_VER:-8.3}"
+echo "PHP yang dipakai: $PHP_VER"
+if ! apt-cache show php${PHP_VER}-cli >/dev/null 2>&1; then
   if ! add-apt-repository -y ppa:ondrej/php; then
     echo "WARNING: add-apt-repository gagal (Launchpad tak terjangkau). Tulis manual..."
     echo "deb https://ppa.launchpadcontent.net/ondrej/php/ubuntu ${VERSION_CODENAME} main" \
